@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Input } from './ui/input'
+import { QRCameraScanner } from './qr-camera-scanner'
 
 interface MobileScanUIProps {
   scanHistory: Array<{
@@ -19,6 +20,8 @@ export function MobileScanUI({
   onSwitchCamera 
 }: MobileScanUIProps) {
   const [localQrInput, setLocalQrInput] = useState('')
+  const [useCameraScanner, setUseCameraScanner] = useState(true)
+  const [cameraError, setCameraError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleScan = () => {
@@ -38,35 +41,60 @@ export function MobileScanUI({
     }
   }
 
+  const handleCameraError = (error: string) => {
+    console.error('Camera error:', error)
+    setCameraError(error)
+    setUseCameraScanner(false)
+  }
+
+  const handleCameraScanResult = (qrCode: string) => {
+    onScanResult(qrCode)
+  }
+
+  const toggleScanMode = () => {
+    setUseCameraScanner(!useCameraScanner)
+    setCameraError(null)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
       {/* カメラビュー（画面の60%） */}
       <div className="h-[60vh] bg-slate-800 relative">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-64 h-64 border-2 border-white/50 rounded-lg relative">
-            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white"></div>
-            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white"></div>
-            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white"></div>
-            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-white/60 text-sm">QRコードをここに</span>
+        {useCameraScanner && !cameraError ? (
+          <QRCameraScanner
+            onScanResult={handleCameraScanResult}
+            onError={handleCameraError}
+            isActive={true}
+            className="w-full h-full"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-64 h-64 border-2 border-white/50 rounded-lg relative">
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white"></div>
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white"></div>
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white"></div>
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white"></div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-white/60 text-sm mb-2">
+                  {cameraError ? 'カメラエラー' : '手動入力モード'}
+                </span>
+                {cameraError && (
+                  <span className="text-white/40 text-xs text-center px-4">
+                    {cameraError}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         
-        {/* カメラコントロール */}
-        <div className="absolute bottom-4 left-4 right-4 flex justify-center space-x-4">
+        {/* スキャンモード切り替えボタン */}
+        <div className="absolute top-4 right-4">
           <button 
-            onClick={onToggleTorch}
-            className="bg-white/20 backdrop-blur-xl text-white p-3 rounded-full active:scale-95 transition-transform"
+            onClick={toggleScanMode}
+            className="bg-white/20 backdrop-blur-xl text-white px-3 py-2 rounded-lg text-sm active:scale-95 transition-transform"
           >
-            <span className="text-xl">💡</span>
-          </button>
-          <button 
-            onClick={onSwitchCamera}
-            className="bg-white/20 backdrop-blur-xl text-white p-3 rounded-full active:scale-95 transition-transform"
-          >
-            <span className="text-xl">🔄</span>
+            {useCameraScanner ? '📱→✏️' : '✏️→📱'}
           </button>
         </div>
       </div>

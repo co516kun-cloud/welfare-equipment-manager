@@ -2,6 +2,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ScanActionDialog } from '../components/scan-action-dialog'
 import { MobileScanUI } from '../components/mobile-scan-ui'
+import { QRCameraScanner } from '../components/qr-camera-scanner'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useAuth } from '../hooks/useAuth'
 import { useState, useEffect, useCallback, memo, useRef } from 'react'
@@ -94,6 +95,8 @@ function ScanComponent() {
   const [showActionDialog, setShowActionDialog] = useState(false)
   const [actionType, setActionType] = useState<string>('')
   const [availableOrders, setAvailableOrders] = useState<{order: Order, item: OrderItem, product: Product}[]>([])
+  const [useCameraScanner, setUseCameraScanner] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
   const [qrInput, setQrInput] = useState('') // デスクトップ版用に残す
   
   
@@ -317,6 +320,24 @@ function ScanComponent() {
   const handleMobileScanResult = useCallback((qrCode: string) => {
     handleScanResult(qrCode)
   }, [handleScanResult])
+
+  // デスクトップカメラスキャンの結果処理
+  const handleDesktopCameraScanResult = useCallback((qrCode: string) => {
+    handleScanResult(qrCode)
+  }, [handleScanResult])
+
+  // デスクトップカメラエラーハンドリング
+  const handleDesktopCameraError = (error: string) => {
+    console.error('Desktop camera error:', error)
+    setCameraError(error)
+    setUseCameraScanner(false)
+  }
+
+  // デスクトップカメラモード切り替え
+  const toggleDesktopCameraMode = () => {
+    setUseCameraScanner(!useCameraScanner)
+    setCameraError(null)
+  }
   
   // デスクトップ版UIコンポーネント
   const DesktopScanUI = () => (
@@ -330,6 +351,13 @@ function ScanComponent() {
           >
             <span className="mr-2">🔄</span>
             {continuousMode ? '連続モード' : '単発モード'}
+          </Button>
+          <Button 
+            variant={useCameraScanner ? "default" : "outline"}
+            onClick={toggleDesktopCameraMode}
+          >
+            <span className="mr-2">{useCameraScanner ? '📹' : '📱'}</span>
+            {useCameraScanner ? 'カメラスキャン' : '手動入力'}
           </Button>
           <Button 
             variant="outline"
@@ -346,28 +374,48 @@ function ScanComponent() {
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground mb-4">QRコードをスキャン</h2>
           <div className="aspect-square bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-            <div className="text-center">
-              <div className="text-6xl mb-4">📱</div>
-              <p className="text-muted-foreground mb-4">QRコードを手動で入力してください</p>
-              <div className="space-y-3">
-                <QRInputField
-                  onSubmit={handleQRInputSubmit}
-                />
-                <div className="flex flex-wrap gap-2">
-                  {['WC-001', 'BED-001', 'WK-001', 'CANE-001'].map((sample) => (
-                    <Button
-                      key={sample}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleScanResult(sample)}
-                      className="text-xs"
-                    >
-                      {sample}
-                    </Button>
-                  ))}
+            {useCameraScanner && isScanning && !cameraError ? (
+              <QRCameraScanner
+                onScanResult={handleDesktopCameraScanResult}
+                onError={handleDesktopCameraError}
+                isActive={isScanning}
+                className="w-full h-full rounded-lg"
+              />
+            ) : (
+              <div className="text-center">
+                <div className="text-6xl mb-4">
+                  {cameraError ? '⚠️' : useCameraScanner ? '📹' : '📱'}
                 </div>
+                <p className="text-muted-foreground mb-4">
+                  {cameraError 
+                    ? `カメラエラー: ${cameraError}` 
+                    : useCameraScanner 
+                      ? 'カメラスキャンが停止中です' 
+                      : 'QRコードを手動で入力してください'
+                  }
+                </p>
+                {!useCameraScanner && (
+                  <div className="space-y-3">
+                    <QRInputField
+                      onSubmit={handleQRInputSubmit}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {['WC-001', 'BED-001', 'WK-001', 'CANE-001'].map((sample) => (
+                        <Button
+                          key={sample}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleScanResult(sample)}
+                          className="text-xs"
+                        >
+                          {sample}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
 
