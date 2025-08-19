@@ -11,13 +11,15 @@ interface MobileScanUIProps {
   onScanResult: (qrCode: string) => void
   onToggleTorch: () => void
   onSwitchCamera: () => void
+  continuousMode?: boolean
 }
 
 export function MobileScanUI({ 
   scanHistory, 
   onScanResult, 
   onToggleTorch, 
-  onSwitchCamera 
+  onSwitchCamera,
+  continuousMode = true
 }: MobileScanUIProps) {
   const [localQrInput, setLocalQrInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(true)
@@ -65,6 +67,7 @@ export function MobileScanUI({
             onScanResult={handleCameraScanResult}
             onError={handleCameraError}
             isActive={true}
+            continuousMode={continuousMode}
             className="w-full h-full"
           />
         ) : (

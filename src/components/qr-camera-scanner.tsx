@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import QrScanner from 'qr-scanner'
 import { Button } from './ui/button'
 
@@ -7,20 +7,51 @@ interface QRCameraScannerProps {
   onError?: (error: string) => void
   isActive?: boolean
   className?: string
+  continuousMode?: boolean
 }
 
 export function QRCameraScanner({ 
   onScanResult, 
   onError, 
   isActive = true,
-  className = "" 
+  className = "",
+  continuousMode = true
 }: QRCameraScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const qrScannerRef = useRef<QrScanner | null>(null)
+  const onScanResultRef = useRef(onScanResult)
+  const onErrorRef = useRef(onError)
   const [hasCamera, setHasCamera] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
+
+  // エラー回復機能
+  const resetCamera = useCallback(async () => {
+    setCameraError(null)
+    setIsScanning(false)
+    
+    // 既存のスキャナーをクリーンアップ
+    if (qrScannerRef.current) {
+      qrScannerRef.current.stop()
+      qrScannerRef.current.destroy()
+      qrScannerRef.current = null
+    }
+    
+    // 少し待ってから再初期化
+    setTimeout(() => {
+      if (videoRef.current && hasCamera && isActive) {
+        // useEffectの依存配列を変更して再初期化をトリガー
+        setFacingMode(prev => prev)
+      }
+    }, 500)
+  }, [hasCamera, isActive])
+
+  // コールバック参照を最新に保つ
+  useEffect(() => {
+    onScanResultRef.current = onScanResult
+    onErrorRef.current = onError
+  }, [onScanResult, onError])
 
   // カメラの利用可能性をチェック
   useEffect(() => {
@@ -31,17 +62,17 @@ export function QRCameraScanner({
         
         if (!hasCamera) {
           setCameraError('カメラが見つかりません')
-          onError?.('カメラが見つかりません')
+          onErrorRef.current?.('カメラが見つかりません')
         }
       } catch (error) {
         console.error('Camera check failed:', error)
         setCameraError('カメラの確認に失敗しました')
-        onError?.('カメラの確認に失敗しました')
+        onErrorRef.current?.('カメラの確認に失敗しました')
       }
     }
 
     checkCamera()
-  }, [onError])
+  }, [])
 
   // QRスキャナーの初期化
   useEffect(() => {
@@ -56,7 +87,18 @@ export function QRCameraScanner({
           videoRef.current!,
           (result) => {
             console.log('QR Code detected:', result.data)
-            onScanResult(result.data)
+            
+            // 連続モードでない場合は一時的にスキャンを停止
+            if (!continuousMode) {
+              setIsScanning(false)
+              setTimeout(() => {
+                if (qrScannerRef.current) {
+                  setIsScanning(true)
+                }
+              }, 2000) // 2秒後に再開
+            }
+            
+            onScanResultRef.current(result.data)
           },
           {
             onDecodeError: (error) => {
@@ -78,7 +120,7 @@ export function QRCameraScanner({
         console.error('QR Scanner initialization failed:', error)
         const errorMessage = error instanceof Error ? error.message : 'カメラの初期化に失敗しました'
         setCameraError(errorMessage)
-        onError?.(errorMessage)
+        onErrorRef.current?.(errorMessage)
         setIsScanning(false)
       }
     }
@@ -94,7 +136,7 @@ export function QRCameraScanner({
         setIsScanning(false)
       }
     }
-  }, [hasCamera, isActive, facingMode, onScanResult, onError])
+  }, [hasCamera, isActive, facingMode])
 
   // カメラの切り替え
   const switchCamera = async () => {
@@ -106,7 +148,7 @@ export function QRCameraScanner({
       setFacingMode(newFacingMode)
     } catch (error) {
       console.error('Camera switch failed:', error)
-      onError?.('カメラの切り替えに失敗しました')
+      onErrorRef.current?.('カメラの切り替えに失敗しました')
     }
   }
 
@@ -118,7 +160,7 @@ export function QRCameraScanner({
       await qrScannerRef.current.toggleFlash()
     } catch (error) {
       console.error('Flashlight toggle failed:', error)
-      onError?.('フラッシュライトの制御に失敗しました')
+      onErrorRef.current?.('フラッシュライトの制御に失敗しました')
     }
   }
 
@@ -146,7 +188,7 @@ export function QRCameraScanner({
           <Button 
             variant="outline" 
             size="sm"
-            onClick={() => window.location.reload()}
+            onClick={resetCamera}
             className="text-white border-white/30"
           >
             再試行

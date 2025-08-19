@@ -379,6 +379,7 @@ function ScanComponent() {
                 onScanResult={handleDesktopCameraScanResult}
                 onError={handleDesktopCameraError}
                 isActive={isScanning}
+                continuousMode={continuousMode}
                 className="w-full h-full rounded-lg"
               />
             ) : (
@@ -531,6 +532,7 @@ function ScanComponent() {
           onScanResult={handleMobileScanResult}
           onToggleTorch={toggleTorch}
           onSwitchCamera={switchCamera}
+          continuousMode={continuousMode}
         />
       ) : (
         <DesktopScanUI />
