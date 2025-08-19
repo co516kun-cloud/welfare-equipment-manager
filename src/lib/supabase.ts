@@ -3,30 +3,74 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xbltuzyazsafxbacrzfs.supabase.co'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHR1enlhenNhZnhiYWNyemZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjU5NjMsImV4cCI6MjA2ODkwMTk2M30.RwlAsXQ_sj9k9-5Zxs3aP0pC3seKOVe-NVVi-ioSykw'
 
-console.log('🔧 Supabase Configuration:')
+console.log('🔧 Headers error debugging - Checking environment variables:')
 console.log('URL:', supabaseUrl)
 console.log('Key length:', supabaseAnonKey?.length)
-console.log('Key first 20 chars:', supabaseAnonKey?.substring(0, 20))
-console.log('Environment check:', {
-  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET',
-  VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'
-})
+console.log('URL contains invalid chars:', /[^\w\-.:\/]/.test(supabaseUrl))
+console.log('Key contains invalid chars:', /[^\w\-.]/.test(supabaseAnonKey))
 
-// より安全なクライアント作成
-export const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey,
-  {
-    auth: {
-      persistSession: false // セッション永続化を無効化（テスト用）
-    },
-    realtime: {
-      params: {
-        eventsPerSecond: 10
+// ヘッダー値の検証
+const cleanUrl = supabaseUrl?.trim()
+const cleanKey = supabaseAnonKey?.trim()
+
+console.log('🔍 Clean values validation:')
+console.log('Clean URL length:', cleanUrl?.length)
+console.log('Clean Key length:', cleanKey?.length)
+console.log('URLs match:', supabaseUrl === cleanUrl)
+console.log('Keys match:', supabaseAnonKey === cleanKey)
+
+// より安全なクライアント作成でHeaders エラーを回避
+let supabaseClient: any
+
+try {
+  console.log('🚀 Creating Supabase client...')
+  
+  // 環境変数をクリーンアップ
+  const safeUrl = cleanUrl || 'https://dummy.supabase.co'
+  const safeKey = cleanKey || 'dummy_key'
+  
+  console.log('🔧 Using values:', {
+    url: safeUrl,
+    keyLength: safeKey.length,
+    isDummy: safeUrl.includes('dummy') || safeKey.includes('dummy')
+  })
+  
+  supabaseClient = createClient(
+    safeUrl,
+    safeKey,
+    {
+      auth: {
+        persistSession: false // セッション永続化を無効化
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'welfare-equipment-manager'
+        }
       }
     }
-  }
-)
+  )
+  
+  console.log('✅ Supabase client created successfully')
+} catch (error) {
+  console.error('❌ Error creating Supabase client:', error)
+  
+  // フォールバック: 最小設定でクライアントを作成
+  supabaseClient = createClient(
+    'https://dummy.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDk0MjYyNzAsImV4cCI6MTk2NTAwMjI3MH0.dummy',
+    {
+      auth: { persistSession: false }
+    }
+  )
+  console.log('🔄 Using fallback dummy client')
+}
+
+export const supabase = supabaseClient
 
 // Database types
 export type Database = {
