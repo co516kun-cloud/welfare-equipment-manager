@@ -133,12 +133,12 @@ export function MyPage() {
       
       const weatherData = {
         today: {
-          temperature: Math.round(data.forecast.forecastday[0].day.avgtemp_c),
+          temperature: Math.round(data.forecast.forecastday[0].day.maxtemp_c),
           condition: getWeatherIcon(data.forecast.forecastday[0].day.condition.code),
           description: data.forecast.forecastday[0].day.condition.text
         },
         tomorrow: {
-          temperature: Math.round(data.forecast.forecastday[1].day.avgtemp_c),
+          temperature: Math.round(data.forecast.forecastday[1].day.maxtemp_c),
           condition: getWeatherIcon(data.forecast.forecastday[1].day.condition.code),
           description: data.forecast.forecastday[1].day.condition.text
         }
@@ -968,14 +968,14 @@ export function MyPage() {
                 <div className="flex-1 bg-gradient-to-r from-blue-50 to-sky-50 rounded-lg p-3 border border-blue-200">
                   <div className="text-center">
                     <div className="text-xl mb-1">{weatherData.today.condition}</div>
-                    <div className="text-lg font-bold text-blue-600">{weatherData.today.temperature}°C</div>
+                    <div className="text-lg font-bold text-blue-600">最高{weatherData.today.temperature}°C</div>
                     <div className="text-xs text-blue-600 font-medium">今日</div>
                   </div>
                 </div>
                 <div className="flex-1 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-3 border border-purple-200">
                   <div className="text-center">
                     <div className="text-xl mb-1">{weatherData.tomorrow.condition}</div>
-                    <div className="text-lg font-bold text-purple-600">{weatherData.tomorrow.temperature}°C</div>
+                    <div className="text-lg font-bold text-purple-600">最高{weatherData.tomorrow.temperature}°C</div>
                     <div className="text-xs text-purple-600 font-medium">明日</div>
                   </div>
                 </div>
