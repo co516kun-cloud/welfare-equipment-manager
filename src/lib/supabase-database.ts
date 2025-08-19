@@ -15,9 +15,13 @@ import type {
 
 // Check if we should use mock database (when Supabase is not properly configured)
 const useMockDatabase = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY
-  return !url || !key || url.includes('dummy') || key.includes('dummy')
+  // 一時的にモックデータベースを強制使用（接続問題回避のため）
+  console.log('🔧 Force using mock database due to connection issues')
+  return true
+  
+  // const url = import.meta.env.VITE_SUPABASE_URL
+  // const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+  // return !url || !key || url.includes('dummy') || key.includes('dummy')
 }
 
 export class SupabaseDatabase {

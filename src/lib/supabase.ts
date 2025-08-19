@@ -5,13 +5,28 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIU
 
 console.log('🔧 Supabase Configuration:')
 console.log('URL:', supabaseUrl)
-console.log('Key exists:', !!supabaseAnonKey)
+console.log('Key length:', supabaseAnonKey?.length)
+console.log('Key first 20 chars:', supabaseAnonKey?.substring(0, 20))
 console.log('Environment check:', {
   VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET',
   VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'
 })
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// より安全なクライアント作成
+export const supabase = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: false // セッション永続化を無効化（テスト用）
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    }
+  }
+)
 
 // Database types
 export type Database = {
