@@ -436,16 +436,17 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 }))
 
-// アプリケーション起動時にリアルタイム同期を自動開始
+// アプリケーション起動時にリアルタイム同期を自動開始（一時的に無効化）
 if (typeof window !== 'undefined') {
-  // ページロード完了後にリアルタイム同期を開始
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      const store = useInventoryStore.getState()
-      console.log('🚀 Auto-enabling realtime synchronization...')
-      store.enableRealtime()
-    }, 1000) // 1秒後に開始（初期ロードの完了を待つ）
-  })
+  // リアルタイム同期を一時的に無効化
+  console.log('ℹ️ Realtime synchronization is temporarily disabled')
+  // window.addEventListener('load', () => {
+  //   setTimeout(() => {
+  //     const store = useInventoryStore.getState()
+  //     console.log('🚀 Auto-enabling realtime synchronization...')
+  //     store.enableRealtime()
+  //   }, 1000)
+  // })
   
   // ページを離れる時にリアルタイム同期を停止
   window.addEventListener('beforeunload', () => {
