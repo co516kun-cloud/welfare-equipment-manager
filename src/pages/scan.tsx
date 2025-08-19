@@ -51,7 +51,7 @@ const QRInputField = memo(({ onSubmit }: {
 })
 
 function ScanComponent() {
-  const { loadData, orders, users } = useInventoryStore()
+  const { loadData, orders, users, items, products } = useInventoryStore()
   
   const { user } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
@@ -119,15 +119,26 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
+    console.log('🔍 Scanning QR Code:', qrCode)
+    console.log('📊 Store data available:', {
+      itemsCount: items.length,
+      productsCount: products.length,
+      ordersCount: orders.length
+    })
+    
     // スクロール位置を保存
     const scrollPosition = window.scrollY
     
-    // QRコードからアイテムを検索
-    const items = await supabaseDb.getProductItems()
+    // ストアのitemsデータからアイテムを検索（高速・確実）
     const item = items.find(item => item.qr_code === qrCode)
+    console.log('🔍 Found item:', item)
     
     if (item) {
-      const product = await supabaseDb.getProductById(item.product_id)
+      // ストアのproductsデータから商品情報を取得
+      const product = products.find(p => p.id === item.product_id)
+      console.log('📦 Found product:', product)
+      console.log('🏷️ Item status:', item.status)
+      
       const result: ScanResult = {
         id: `scan-${Date.now()}`,
         qrCode,
@@ -138,7 +149,15 @@ function ScanComponent() {
       }
       
       setScanResults(prev => [result, ...prev.slice(0, 9)]) // 最新10件を保持
-      setSelectedItem({ ...item, product })
+      
+      // selectedItemにproductも含めて設定
+      const selectedItemWithProduct = { ...item, product }
+      setSelectedItem(selectedItemWithProduct)
+      console.log('✅ Selected item set:', selectedItemWithProduct)
+      
+      // 利用可能なアクションをログ出力
+      const availableActions = getAvailableActions(item.status)
+      console.log('🎬 Available actions for status', item.status, ':', availableActions)
       
       // スキャン履歴を更新
       setScanHistory(prev => [{
@@ -147,6 +166,7 @@ function ScanComponent() {
         action: 'スキャン完了'
       }, ...prev.slice(0, 9)])
     } else {
+      console.log('❌ Item not found for QR code:', qrCode)
       const result: ScanResult = {
         id: `scan-${Date.now()}`,
         qrCode,
@@ -171,7 +191,7 @@ function ScanComponent() {
     setTimeout(() => {
       window.scrollTo(0, scrollPosition)
     }, 0)
-  }, [])
+  }, [items, products, orders])
   
   // handleScanResultへの最新参照を保持
   const handleScanResultRef = useRef(handleScanResult)
@@ -211,6 +231,7 @@ function ScanComponent() {
   }
 
   const getAvailableActions = (status: string) => {
+    console.log('🎬 Getting available actions for status:', status)
     const actions = []
     
     switch (status) {
@@ -243,9 +264,15 @@ function ScanComponent() {
         break
       case 'available':
         // 利用可能な商品について、承認済みの発注があるかチェック
+        console.log('📋 Available orders count:', availableOrders.length)
         if (availableOrders.length > 0) {
           actions.push(
             { key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }
+          )
+        } else {
+          // availableの場合でも基本アクションを追加
+          actions.push(
+            { key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }
           )
         }
         break
@@ -254,33 +281,50 @@ function ScanComponent() {
           { key: 'repair', label: '修理完了', nextStatus: 'available' }
         )
         break
+      default:
+        console.log('⚠️ Unknown status:', status)
+        // 不明なステータスでも基本操作を提供
+        actions.push(
+          { key: 'update_status', label: 'ステータス更新', nextStatus: 'available' }
+        )
+        break
     }
     
+    console.log('✅ Available actions:', actions)
     return actions
   }
 
   const handleActionSelect = useCallback(async (action: any) => {
+    console.log('🎯 Action selected:', action)
+    console.log('📱 Selected item:', selectedItem)
+    
     setActionType(action.key)
     
     // 発注に割り当てる場合は、利用可能な発注を取得
     if (action.key === 'assign_to_order' && selectedItem) {
+      console.log('📋 Fetching matching orders for assign_to_order...')
       const approvedOrders = orders.filter(order => order.status === 'approved')
+      console.log('✅ Approved orders found:', approvedOrders.length)
+      
       const matchingOrders: {order: Order, item: OrderItem, product: Product}[] = []
       
       for (const order of approvedOrders) {
         for (const item of order.items) {
-          const product = await supabaseDb.getProductById(item.product_id)
+          // ストアのproductsデータから取得（高速化）
+          const product = products.find(p => p.id === item.product_id)
           if (product?.id === selectedItem.product_id && item.item_processing_status === 'waiting') {
             matchingOrders.push({ order, item, product })
           }
         }
       }
       
+      console.log('🎯 Matching orders found:', matchingOrders.length)
       setAvailableOrders(matchingOrders)
     }
     
+    console.log('🚀 Opening action dialog...')
     setShowActionDialog(true)
-  }, [selectedItem, orders])
+  }, [selectedItem, orders, products])
 
   // アクション処理完了時のコールバック
   const handleActionSuccess = async () => {
