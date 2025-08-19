@@ -6,6 +6,10 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIU
 console.log('🔧 Supabase Configuration:')
 console.log('URL:', supabaseUrl)
 console.log('Key exists:', !!supabaseAnonKey)
+console.log('Environment check:', {
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'SET' : 'NOT SET',
+  VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'SET' : 'NOT SET'
+})
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
