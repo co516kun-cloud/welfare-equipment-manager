@@ -12,6 +12,11 @@ interface MobileScanUIProps {
   onToggleTorch: () => void
   onSwitchCamera: () => void
   continuousMode?: boolean
+  selectedItem?: any
+  onActionSelect?: (action: any) => void
+  getAvailableActions?: (status: string) => any[]
+  getStatusColor?: (status: string) => string
+  getStatusText?: (status: string) => string
 }
 
 export function MobileScanUI({ 
@@ -19,7 +24,12 @@ export function MobileScanUI({
   onScanResult, 
   onToggleTorch, 
   onSwitchCamera,
-  continuousMode = true
+  continuousMode = true,
+  selectedItem,
+  onActionSelect,
+  getAvailableActions,
+  getStatusColor,
+  getStatusText
 }: MobileScanUIProps) {
   const [localQrInput, setLocalQrInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(true)
@@ -127,35 +137,78 @@ export function MobileScanUI({
           </div>
         </div>
 
-        {/* 最近のスキャン履歴 */}
-        <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg">
-          <h2 className="text-lg font-bold text-slate-800 mb-3">最近のスキャン</h2>
-          <div className="space-y-2">
-            {scanHistory.slice(0, 3).map((scan, index) => (
-              <div key={index} className="bg-slate-50 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800 text-sm">{scan.qrCode}</p>
-                    <p className="text-xs text-slate-600">{scan.timestamp}</p>
+        {/* 選択されたアイテムの詳細 */}
+        {selectedItem ? (
+          <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 mb-4 shadow-lg">
+            <h2 className="text-lg font-bold text-slate-800 mb-3">スキャン結果</h2>
+            <div className="space-y-3">
+              <div>
+                <p className="font-medium text-slate-800">{selectedItem.product?.name || 'Unknown Product'}</p>
+                <p className="text-sm text-slate-600">管理番号: {selectedItem.id}</p>
+                <p className="text-sm text-slate-600">QRコード: {selectedItem.qr_code}</p>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-slate-600">ステータス:</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor ? getStatusColor(selectedItem.status) : 'bg-slate-200 text-slate-800'}`}>
+                  {getStatusText ? getStatusText(selectedItem.status) : selectedItem.status}
+                </span>
+              </div>
+              
+              {selectedItem.location && (
+                <p className="text-sm text-slate-600">場所: {selectedItem.location}</p>
+              )}
+              
+              {/* アクションボタン */}
+              {getAvailableActions && onActionSelect && (
+                <div className="pt-3 border-t">
+                  <p className="text-sm font-medium text-slate-700 mb-2">実行可能な操作:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {getAvailableActions(selectedItem.status).map((action) => (
+                      <button
+                        key={action.key}
+                        onClick={() => onActionSelect(action)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-lg transition-colors"
+                      >
+                        {action.label}
+                      </button>
+                    ))}
                   </div>
-                  <span className="text-sm text-slate-500">{scan.action}</span>
                 </div>
-              </div>
-            ))}
-            
-            {scanHistory.length === 0 && (
-              <div className="text-center py-4 text-slate-500">
-                スキャン履歴がありません
-              </div>
-            )}
-            
-            {scanHistory.length > 3 && (
-              <button className="w-full text-center text-blue-500 text-sm py-2">
-                すべて表示 ({scanHistory.length}件)
-              </button>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* 最近のスキャン履歴 */
+          <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg">
+            <h2 className="text-lg font-bold text-slate-800 mb-3">最近のスキャン</h2>
+            <div className="space-y-2">
+              {scanHistory.slice(0, 3).map((scan, index) => (
+                <div key={index} className="bg-slate-50 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-slate-800 text-sm">{scan.qrCode}</p>
+                      <p className="text-xs text-slate-600">{scan.timestamp}</p>
+                    </div>
+                    <span className="text-sm text-slate-500">{scan.action}</span>
+                  </div>
+                </div>
+              ))}
+              
+              {scanHistory.length === 0 && (
+                <div className="text-center py-4 text-slate-500">
+                  スキャン履歴がありません
+                </div>
+              )}
+              
+              {scanHistory.length > 3 && (
+                <button className="w-full text-center text-blue-500 text-sm py-2">
+                  すべて表示 ({scanHistory.length}件)
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

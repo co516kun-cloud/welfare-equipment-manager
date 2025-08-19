@@ -576,10 +576,27 @@ function ScanComponent() {
           onToggleTorch={toggleTorch}
           onSwitchCamera={switchCamera}
           continuousMode={continuousMode}
+          selectedItem={selectedItem}
+          onActionSelect={handleActionSelect}
+          getAvailableActions={getAvailableActions}
+          getStatusColor={getStatusColor}
+          getStatusText={getStatusText}
         />
       ) : (
         <DesktopScanUI />
       )}
+      
+      {/* Action Dialog - モバイル・デスクトップ共通 */}
+      <ScanActionDialog
+        open={showActionDialog}
+        onOpenChange={setShowActionDialog}
+        selectedItem={selectedItem}
+        actionType={actionType}
+        availableOrders={availableOrders}
+        onSuccess={handleActionSuccess}
+        getCurrentUserName={getCurrentUserName}
+        orders={orders}
+      />
     </>
   )
 }
