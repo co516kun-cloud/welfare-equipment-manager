@@ -883,6 +883,62 @@ export class SupabaseDatabase {
     }
   }
 
+  // カテゴリー別初期データ読み込み（1000件制限対応）
+  async loadAllDataByCategory(): Promise<{
+    categories: ProductCategory[]
+    products: Product[]
+    items: ProductItem[]
+    users: User[]
+    orders: Order[]
+  }> {
+    console.log('🚀 Starting category-wise data loading to bypass 1000 item limit...')
+    
+    try {
+      // 基本データを並行取得
+      const [categories, users, orders] = await Promise.all([
+        this.getCategories(),
+        this.getUsers(),
+        this.getOrders()
+      ])
+      
+      console.log(`📊 Loaded basic data - Categories: ${categories.length}, Users: ${users.length}, Orders: ${orders.length}`)
+      
+      // 全商品を取得
+      const products = await this.getProducts()
+      console.log(`📦 Loaded ${products.length} products`)
+      
+      // カテゴリー別に商品アイテムを取得
+      const allItems: ProductItem[] = []
+      let totalLoadedItems = 0
+      
+      for (const category of categories) {
+        console.log(`📁 Loading items for category: ${category.name} (ID: ${category.id})`)
+        
+        const categoryItems = await this.getProductItemsByCategoryId(category.id)
+        allItems.push(...categoryItems)
+        totalLoadedItems += categoryItems.length
+        
+        console.log(`  ✅ Loaded ${categoryItems.length} items for ${category.name} (Total so far: ${totalLoadedItems})`)
+        
+        // 各カテゴリ読み込み後に少し待機（API負荷軽減）
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      
+      console.log(`🎉 Category-wise loading completed! Total items loaded: ${allItems.length}`)
+      
+      return {
+        categories,
+        products,
+        items: allItems,
+        users,
+        orders
+      }
+    } catch (error) {
+      console.error('❌ Error in category-wise data loading:', error)
+      throw error
+    }
+  }
+
   // Clear all data
   async clearAllData(): Promise<void> {
     try {

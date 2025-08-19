@@ -19,7 +19,8 @@
       "Bash(rm:*)",
       "Bash(echo:*)",
       "Bash(npm install:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

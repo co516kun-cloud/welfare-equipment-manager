@@ -31,6 +31,7 @@ interface InventoryState {
   
   // Actions
   loadData: () => Promise<void>
+  loadAllDataOnStartup: () => Promise<void>
   loadItemsForCategory: (categoryId: string) => Promise<void>
   loadItemsForProduct: (productId: string) => Promise<void>
   clearItemsCache: () => void
@@ -126,6 +127,46 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       })
     } catch (error) {
       console.error('Error loading data from Supabase:', error)
+    }
+  },
+
+  loadAllDataOnStartup: async () => {
+    console.log('🚀 Loading ALL data on startup using category-wise approach...')
+    try {
+      // カテゴリー別読み込みで全データを取得
+      const { categories, products, items, users, orders } = await supabaseDb.loadAllDataByCategory()
+      
+      // preparation_tasksは個別にロード（テーブルが存在しない可能性があるため）
+      let preparationTasks: PreparationTask[] = []
+      try {
+        preparationTasks = await supabaseDb.getPreparationTasks()
+      } catch (error) {
+        console.warn('Could not load preparation tasks:', error)
+      }
+      
+      console.log('🎉 Startup data loading completed:', {
+        categories: categories.length,
+        products: products.length,
+        items: items.length,
+        users: users.length,
+        orders: orders.length,
+        preparationTasks: preparationTasks.length
+      })
+      
+      set({
+        categories,
+        products,
+        items,
+        orders,
+        preparationTasks,
+        users,
+        lastSyncTime: new Date().toISOString()
+      })
+    } catch (error) {
+      console.error('❌ Error loading startup data:', error)
+      // フォールバックとして基本的なloadDataを実行
+      console.log('🔄 Falling back to basic loadData...')
+      await get().loadData()
     }
   },
 
@@ -345,7 +386,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     const state = get()
     if (state.isRealtimeEnabled) return
 
-    console.log('🔄 Enabling realtime synchronization...')
+    console.log('🔄 Enabling category-wise realtime synchronization...')
 
     // 既存の接続をクリア
     realtimeSubscriptions.forEach(sub => {
@@ -363,15 +404,27 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         .channel(`public:${table}`)
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: table },
-          (payload) => {
+          async (payload) => {
             console.log(`🔄 Realtime update from ${table}:`, payload)
             
-            // データの変更を検知したら全データを再読み込み
-            // より効率的にするには、変更された特定のデータのみを更新することも可能
             const currentState = get()
-            if (currentState.isRealtimeEnabled) {
-              currentState.loadData()
+            if (!currentState.isRealtimeEnabled) return
+            
+            try {
+              // テーブルに応じて効率的な更新を実行
+              if (table === 'product_items') {
+                // 商品アイテムの変更：カテゴリー別で再読み込み
+                console.log('📦 Product item changed, reloading with category-wise approach...')
+                await currentState.loadAllDataOnStartup()
+              } else {
+                // その他のテーブル：基本的なloadDataのみ
+                console.log(`📊 ${table} changed, reloading basic data...`)
+                await currentState.loadData()
+              }
+              
               set({ lastSyncTime: new Date().toISOString() })
+            } catch (error) {
+              console.error('❌ Error during realtime sync:', error)
             }
           }
         )
@@ -387,7 +440,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       lastSyncTime: new Date().toISOString()
     })
     
-    console.log('✅ Realtime synchronization enabled!')
+    console.log('✅ Category-wise realtime synchronization enabled!')
   },
 
   disableRealtime: () => {
@@ -410,10 +463,10 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 
   forceSync: async () => {
-    console.log('🔄 Force syncing data...')
-    const { loadData, clearItemsCache } = get()
+    console.log('🔄 Force syncing data with category-wise approach...')
+    const { loadAllDataOnStartup, clearItemsCache } = get()
     clearItemsCache() // 強制同期時はキャッシュをクリア
-    await loadData()
+    await loadAllDataOnStartup()
     set({ lastSyncTime: new Date().toISOString() })
     console.log('✅ Force sync completed!')
   },

@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
 import { useAuth } from './hooks/useAuth'
+import { useInventoryStore } from './stores/useInventoryStore'
 import { DebugApp } from './components/debug/debug-app'
 import { Scan } from './pages/scan'
 import { Inventory } from './pages/inventory'
@@ -30,18 +32,60 @@ function App() {
   const authResult = hasSupabaseConfig ? useAuth() : { user: null, loading: false }
   const { user, loading } = authResult
   
+  // データ初期化のための状態
+  const [dataInitialized, setDataInitialized] = useState(false)
+  const [dataLoading, setDataLoading] = useState(false)
+  
+  // ストアのloadAllDataOnStartup関数を取得
+  const { loadAllDataOnStartup, enableRealtime } = useInventoryStore()
+  
+  // 認証完了後にデータを初期化
+  useEffect(() => {
+    const initializeData = async () => {
+      // 認証されているユーザーがいて、まだデータ初期化が完了していない場合のみ実行
+      if (user && hasSupabaseConfig && !dataInitialized && !dataLoading) {
+        console.log('🚀 Starting startup data initialization...')
+        setDataLoading(true)
+        
+        try {
+          // カテゴリ別でのデータ読み込みを実行
+          await loadAllDataOnStartup()
+          
+          // リアルタイム同期を有効化
+          enableRealtime()
+          
+          setDataInitialized(true)
+          console.log('✅ Startup data initialization completed successfully!')
+        } catch (error) {
+          console.error('❌ Error during startup data initialization:', error)
+        } finally {
+          setDataLoading(false)
+        }
+      }
+    }
+    
+    initializeData()
+  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadAllDataOnStartup, enableRealtime])
+  
   // 環境変数がない場合はデバッグモードで起動
   if (!hasSupabaseConfig) {
     console.warn('Supabase環境変数が設定されていません。デバッグモードで起動します。')
     return <DebugApp />
   }
 
-  if (loading) {
+  if (loading || dataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">読み込み中...</p>
+          <p className="text-muted-foreground">
+            {loading ? '認証確認中...' : 'データベース初期化中...'}
+          </p>
+          {dataLoading && (
+            <p className="text-xs text-muted-foreground">
+              カテゴリ別にデータを読み込んでいます
+            </p>
+          )}
         </div>
       </div>
     )

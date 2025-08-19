@@ -96,9 +96,10 @@ export function Inventory() {
   })
   const [orderError, setOrderError] = useState('')
   
-  useEffect(() => {
-    loadData()
-  }, [])
+  // 初回データロードはApp.tsxで処理されるため、ここでは不要
+  // useEffect(() => {
+  //   loadData()
+  // }, [])
 
   // モバイル検出とPC版でのUI状態リセット
   useEffect(() => {

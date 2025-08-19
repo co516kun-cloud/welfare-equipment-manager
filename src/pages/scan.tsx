@@ -113,11 +113,10 @@ function ScanComponent() {
 
 
 
-  // 初回データロード（スクロール位置に影響しないように1回だけ実行）
-  useEffect(() => {
-    loadData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // loadDataを依存配列から除外してスクロールバグを防ぐ
+  // 初回データロードはApp.tsxで処理されるため、ここでは不要
+  // useEffect(() => {
+  //   loadData()
+  // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
     // スクロール位置を保存
