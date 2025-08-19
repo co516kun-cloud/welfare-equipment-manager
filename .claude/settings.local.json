@@ -16,7 +16,8 @@
       "Bash(git push:*)",
       "Bash(git remote set-url:*)",
       "Bash(node:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(echo:*)"
     ],
     "deny": []
   }
