@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV手動インポート</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 20px; 
+            margin: 20px 0;
+        }
+        .field { margin-bottom: 15px; }
+        label { 
+            display: block; 
+            margin-bottom: 5px; 
+            font-weight: bold;
+            color: #555;
+        }
+        textarea { 
+            width: 100%; 
+            min-height: 120px; 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button { 
+            background: #007bff; 
+            color: white; 
+            padding: 12px 24px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .result { 
+            margin-top: 20px; 
+            padding: 15px; 
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { font-size: 12px; color: #666; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 福祉用具管理システム - CSV手動インポート</h1>
+        
+        <div style="background: #fff3cd; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+            <strong>📋 使用方法:</strong>
+            <ol>
+                <li>CSVファイルの内容をコピーして、対応するテキストエリアに貼り付け</li>
+                <li>すべてのデータを入力後、「インポート実行」をクリック</li>
+                <li>結果を確認して、メインアプリでデータを確認</li>
+            </ol>
+        </div>
+        
+        <div class="grid">
+            <div class="field">
+                <label>📂 Categories (カテゴリ)</label>
+                <textarea id="categories" placeholder="ID,name&#10;beds,特殊寝台&#10;wheelchair,車いす"></textarea>
+                <div class="info">形式: ID,name</div>
+            </div>
+            
+            <div class="field">
+                <label>🛒 Products (商品)</label>
+                <textarea id="products" placeholder="ID,name,categoryID,manufacturer&#10;30170,楽匠プラス 2M,beds,パラマウントベッド"></textarea>
+                <div class="info">形式: ID,name,categoryID,manufacturer</div>
+            </div>
+            
+            <div class="field">
+                <label>📦 Product Items (商品アイテム)</label>
+                <textarea id="productItems" placeholder="ID,productId,status,condition,location,customerName,loanStartDate&#10;WC-001,10660,貸与中,優良,顧客先,田中太郎,2024-01-15"></textarea>
+                <div class="info">形式: ID,productId,status,condition,location,customerName,loanStartDate</div>
+            </div>
+            
+            <div class="field">
+                <label>👤 Users (ユーザー)</label>
+                <textarea id="users" placeholder="ID,name,email,role,department&#10;user-001,田口　慧,co516kun@gmail.com,admin,管理部"></textarea>
+                <div class="info">形式: ID,name,email,role,department</div>
+            </div>
+        </div>
+        
+        <div style="text-align: center;">
+            <button onclick="loadSample()">📝 サンプルデータ読み込み</button>
+            <button onclick="clearAll()">🗑️ すべてクリア</button>
+            <button onclick="importData()" id="importBtn">📥 インポート実行</button>
+        </div>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function loadSample() {
+            document.getElementById('categories').value = `ID,name
+beds,特殊寝台
+wheelchair,車いす
+walker,歩行器
+cane,杖
+handrail,手すり`;
+
+            document.getElementById('products').value = `ID,name,categoryID,manufacturer
+30170,楽匠プラス 2M,beds,パラマウントベッド
+10660,BACKS　自走,wheelchair,カワムラサイクル
+90078,リトルターン（H）,walker,アロン化成
+100002,アルミ製4点杖　シルバー,cane,不明
+70008,べスポジ　旧型,handrail,ホクメイ`;
+
+            document.getElementById('productItems').value = `ID,productId,status,condition,location,customerName,loanStartDate
+BED-001,30170,利用可能,良好,倉庫A-1,,
+WC-001,10660,貸与中,優良,顧客先,田中太郎,2024-01-15
+WK-001,90078,不明,不明,不明,,
+CANE-001,100002,倉庫,良好,倉庫B-1,,
+RAIL-001,70008,利用可能,優良,倉庫C-1,,`;
+
+            document.getElementById('users').value = `ID,name,email,role,department
+user-001,田口　慧,co516kun@gmail.com,admin,管理部`;
+        }
+
+        function clearAll() {
+            document.getElementById('categories').value = '';
+            document.getElementById('products').value = '';
+            document.getElementById('productItems').value = '';
+            document.getElementById('users').value = '';
+            document.getElementById('result').innerHTML = '';
+        }
+
+        function importData() {
+            const btn = document.getElementById('importBtn');
+            const result = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ 処理中...';
+            
+            const data = {
+                categories: document.getElementById('categories').value.trim(),
+                products: document.getElementById('products').value.trim(),
+                productItems: document.getElementById('productItems').value.trim(),
+                users: document.getElementById('users').value.trim()
+            };
+            
+            // 簡単な検証
+            if (!data.categories || !data.products || !data.productItems || !data.users) {
+                result.innerHTML = '<div class="result error">❌ すべてのデータを入力してください</div>';
+                btn.disabled = false;
+                btn.textContent = '📥 インポート実行';
+                return;
+            }
+            
+            // ローカルストレージに保存（簡易実装）
+            try {
+                localStorage.setItem('csv_import_data', JSON.stringify(data));
+                localStorage.setItem('csv_import_timestamp', new Date().toISOString());
+                
+                result.innerHTML = `
+                    <div class="result success">
+                        ✅ データを正常に保存しました<br>
+                        <strong>次の手順:</strong><br>
+                        1. メインアプリケーション（http://localhost:8000）にアクセス<br>
+                        2. サイドバーから「データ取込」をクリック<br>
+                        3. 保存されたデータが自動的に読み込まれます
+                    </div>
+                `;
+            } catch (error) {
+                result.innerHTML = `<div class="result error">❌ エラー: ${error.message}</div>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '📥 インポート実行';
+        }
+    </script>
+</body>
+</html>
