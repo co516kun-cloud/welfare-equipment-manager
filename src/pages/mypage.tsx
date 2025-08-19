@@ -100,7 +100,54 @@ export function MyPage() {
   const fetchWeatherData = async () => {
     setWeatherLoading(true)
     try {
-      // モックデータを使用（実際のAPI実装の前段階）
+      // 実際の天気APIを使用
+      const apiKey = import.meta.env.VITE_WEATHER_API_KEY
+      const location = import.meta.env.VITE_WEATHER_LOCATION || 'Tokyo'
+      
+      if (!apiKey) {
+        console.warn('VITE_WEATHER_API_KEY が設定されていません。モックデータを使用します。')
+        throw new Error('Weather API key not configured')
+      }
+      
+      const response = await fetch(
+        `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${location}&days=2&lang=ja`
+      )
+      
+      if (!response.ok) {
+        throw new Error(`Weather API error: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // 天気アイコンマッピング関数
+      const getWeatherIcon = (conditionCode: number) => {
+        if (conditionCode === 1000) return '☀️' // 晴れ
+        if (conditionCode >= 1003 && conditionCode <= 1009) return '☁️' // 曇り
+        if (conditionCode >= 1030 && conditionCode <= 1087) return '🌫️' // 霧・雷
+        if (conditionCode >= 1114 && conditionCode <= 1117) return '❄️' // 雪
+        if (conditionCode >= 1150 && conditionCode <= 1201) return '🌧️' // 雨
+        if (conditionCode >= 1204 && conditionCode <= 1237) return '🌨️' // みぞれ
+        if (conditionCode >= 1240 && conditionCode <= 1246) return '🌦️' // にわか雨
+        return '🌤️' // その他
+      }
+      
+      const weatherData = {
+        today: {
+          temperature: Math.round(data.forecast.forecastday[0].day.avgtemp_c),
+          condition: getWeatherIcon(data.forecast.forecastday[0].day.condition.code),
+          description: data.forecast.forecastday[0].day.condition.text
+        },
+        tomorrow: {
+          temperature: Math.round(data.forecast.forecastday[1].day.avgtemp_c),
+          condition: getWeatherIcon(data.forecast.forecastday[1].day.condition.code),
+          description: data.forecast.forecastday[1].day.condition.text
+        }
+      }
+      
+      setWeatherData(weatherData)
+    } catch (error) {
+      console.error('天気予報の取得に失敗しました:', error)
+      // エラーの場合はモックデータを設定
       const mockWeatherData = {
         today: {
           temperature: Math.floor(Math.random() * 15) + 15, // 15-30度
@@ -113,31 +160,7 @@ export function MyPage() {
           description: ['晴れ', '曇り', '晴れ時々曇り', '小雨'][Math.floor(Math.random() * 4)]
         }
       }
-      
-      // 実際のAPIを使用する場合は以下のようになります：
-      // const response = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=YOUR_API_KEY&q=Tokyo&days=2&lang=ja`)
-      // const data = await response.json()
-      // const weatherData = {
-      //   today: {
-      //     temperature: Math.round(data.forecast.forecastday[0].day.avgtemp_c),
-      //     condition: getWeatherIcon(data.forecast.forecastday[0].day.condition.code),
-      //     description: data.forecast.forecastday[0].day.condition.text
-      //   },
-      //   tomorrow: {
-      //     temperature: Math.round(data.forecast.forecastday[1].day.avgtemp_c),
-      //     condition: getWeatherIcon(data.forecast.forecastday[1].day.condition.code),
-      //     description: data.forecast.forecastday[1].day.condition.text
-      //   }
-      // }
-      
       setWeatherData(mockWeatherData)
-    } catch (error) {
-      console.error('天気予報の取得に失敗しました:', error)
-      // エラーの場合はデフォルトデータを設定
-      setWeatherData({
-        today: { temperature: 20, condition: '☀️', description: '晴れ' },
-        tomorrow: { temperature: 22, condition: '☁️', description: '曇り' }
-      })
     } finally {
       setWeatherLoading(false)
     }
