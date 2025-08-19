@@ -47,10 +47,10 @@ function App() {
     )
   }
 
-  // 認証を一時的にバイパス（本番テスト用）
-  // if (!user) {
-  //   return <Login />
-  // }
+  // 認証チェック
+  if (!user) {
+    return <Login />
+  }
 
   return (
     <BrowserRouter>
