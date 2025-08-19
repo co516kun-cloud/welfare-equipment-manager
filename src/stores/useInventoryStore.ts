@@ -216,31 +216,44 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   }),
   
   updateItemStatus: async (itemId, status) => {
-    console.log(`🏷️ updateItemStatus called: ${itemId} -> ${status}`)
+    console.log(`🚀 Optimistic updateItemStatus called: ${itemId} -> ${status}`)
+    
+    const { items } = get()
+    const targetItem = items.find(i => i.id === itemId)
+    
+    if (!targetItem) {
+      console.error('❌ Item not found in store:', itemId)
+      throw new Error(`Item ${itemId} not found`)
+    }
+    
+    const originalStatus = targetItem.status
+    console.log(`🔄 Optimistic update: ${originalStatus} -> ${status}`)
+    
+    // 1. 楽観的更新：即座にストアを更新（ユーザーには瞬時反映）
+    const updatedItem = { ...targetItem, status }
+    const updatedItems = items.map(i => i.id === itemId ? updatedItem : i)
+    set({ items: updatedItems })
+    get().clearItemsCache()
+    console.log('⚡ Optimistic update applied to store')
+    
     try {
-      const item = await supabaseDb.getProductItemById(itemId)
-      console.log('📦 Found item:', item)
+      // 2. データベース保存（非同期）
+      await supabaseDb.saveProductItem(updatedItem)
+      console.log('✅ Item saved to database successfully')
       
-      if (item) {
-        const updatedItem = { ...item, status }
-        console.log('🔄 Updating item:', updatedItem)
-        
-        await supabaseDb.saveProductItem(updatedItem)
-        console.log('✅ Item saved to database')
-        
-        const { items } = get()
-        const updatedItems = items.map(i => 
-          i.id === itemId ? updatedItem : i
-        )
-        set({ items: updatedItems })
-        // アイテムが更新されたのでキャッシュをクリア
-        get().clearItemsCache()
-        console.log('📊 Store updated')
-      } else {
-        console.log('❌ Item not found:', itemId)
-      }
+      // 3. 成功時は追加処理なし（既にストア更新済み）
+      
     } catch (error) {
-      console.error('❌ Error updating item status:', error)
+      console.error('❌ Database save failed, rolling back...', error)
+      
+      // 4. エラー時：ロールバック（元のステータスに戻す）
+      const rolledBackItem = { ...targetItem, status: originalStatus }
+      const rolledBackItems = items.map(i => i.id === itemId ? rolledBackItem : i)
+      set({ items: rolledBackItems })
+      get().clearItemsCache()
+      console.log('🔙 Rolled back to original status:', originalStatus)
+      
+      // エラーを再投げして呼び出し元に通知
       throw error
     }
   },
@@ -425,9 +438,39 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
             try {
               // テーブルに応じて効率的な更新を実行
               if (table === 'product_items') {
-                // 商品アイテムの変更：カテゴリー別で再読み込み
-                console.log('📦 Product item changed, reloading with category-wise approach...')
-                await currentState.loadAllDataOnStartup()
+                // 商品アイテムの変更：軽量な個別更新
+                console.log('📦 Product item changed, applying lightweight update...')
+                
+                const { event, new: newData, old: oldData } = payload
+                console.log(`🔄 ${event} event:`, { newData, oldData })
+                
+                if (event === 'UPDATE' && newData) {
+                  // 個別アイテムの更新（他のユーザーからの変更）
+                  const { items } = currentState
+                  const updatedItems = items.map(item => 
+                    item.id === newData.id ? { ...item, ...newData } : item
+                  )
+                  set({ items: updatedItems })
+                  currentState.clearItemsCache()
+                  console.log('⚡ Individual item updated in store:', newData.id)
+                  
+                } else if (event === 'INSERT' && newData) {
+                  // 新しいアイテムの追加
+                  const { items } = currentState
+                  const updatedItems = [...items, newData]
+                  set({ items: updatedItems })
+                  currentState.clearItemsCache()
+                  console.log('➕ New item added to store:', newData.id)
+                  
+                } else if (event === 'DELETE' && oldData) {
+                  // アイテムの削除
+                  const { items } = currentState
+                  const updatedItems = items.filter(item => item.id !== oldData.id)
+                  set({ items: updatedItems })
+                  currentState.clearItemsCache()
+                  console.log('🗑️ Item removed from store:', oldData.id)
+                }
+                
               } else {
                 // その他のテーブル：基本的なloadDataのみ
                 console.log(`📊 ${table} changed, reloading basic data...`)
