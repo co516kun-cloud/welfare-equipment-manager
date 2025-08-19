@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
 
 export function Search() {
-  const { products, items, orders, categories, loadData, users } = useInventoryStore()
+  const { products, items, orders, categories, loadData, users, isDataInitialized } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   
@@ -50,11 +50,12 @@ export function Search() {
   
   
   useEffect(() => {
-    // データが空の場合は強制的に再読み込み
-    if (products.length === 0 || items.length === 0) {
+    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
+    if (!isDataInitialized && products.length === 0) {
+      console.log('🔄 Search page: Data not initialized, loading basic data...')
       loadData()
     }
-  }, [products.length, items.length, loadData])
+  }, [products.length, isDataInitialized, loadData])
   
   // 検索実行
   const handleSearch = async () => {

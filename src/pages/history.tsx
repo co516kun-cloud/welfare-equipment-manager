@@ -37,9 +37,10 @@ export function History() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  // 初回データロードはApp.tsxで処理されるため、ここでは不要
+  // useEffect(() => {
+  //   loadData()
+  // }, [])
 
   useEffect(() => {
     applyFilters()

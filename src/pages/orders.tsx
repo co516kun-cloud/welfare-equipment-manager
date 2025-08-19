@@ -10,7 +10,7 @@ import { supabaseDb } from '../lib/supabase-database'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 export function Orders() {
-  const { orders, products, users, items, createOrder, loadData, updateItemStatus, getProductAvailableStock } = useInventoryStore()
+  const { orders, products, users, items, createOrder, loadData, updateItemStatus, getProductAvailableStock, isDataInitialized } = useInventoryStore()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -30,11 +30,12 @@ export function Orders() {
   const currentUser = getCurrentUserName()
   
   useEffect(() => {
-    // データが空の場合は強制的に再読み込み
-    if (orders.length === 0 || products.length === 0 || items.length === 0) {
+    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
+    if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
+      console.log('🔄 Orders page: Data not initialized, loading basic data...')
       loadData()
     }
-  }, [orders.length, products.length, items.length, loadData])
+  }, [orders.length, products.length, isDataInitialized, loadData])
 
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false)
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())

@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 
 export function MyPage() {
-  const { orders, products, loadData, users } = useInventoryStore()
+  const { orders, products, loadData, users, isDataInitialized } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(false)
@@ -83,11 +83,12 @@ export function MyPage() {
   }, [users, user])
 
   useEffect(() => {
-    // データが空の場合は強制的に再読み込み
-    if (orders.length === 0 || products.length === 0) {
+    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
+    if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
+      console.log('🔄 MyPage: Data not initialized, loading basic data...')
       loadData()
     }
-  }, [orders.length, products.length, loadData])
+  }, [orders.length, products.length, isDataInitialized, loadData])
   
   // 天気予報データの取得（モバイル版のみ）
   useEffect(() => {

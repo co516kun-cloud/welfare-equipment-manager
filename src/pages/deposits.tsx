@@ -25,10 +25,10 @@ export function Deposits() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<DepositItem | null>(null)
 
-  // 初期データ読み込み
-  useEffect(() => {
-    loadData()
-  }, [])
+  // 初回データロードはApp.tsxで処理されるため、ここでは不要
+  // useEffect(() => {
+  //   loadData()
+  // }, [])
 
   const loadData = async () => {
     try {

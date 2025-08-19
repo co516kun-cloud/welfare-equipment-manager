@@ -129,10 +129,10 @@ export function Menu() {
   const [isMobile, setIsMobile] = useState(false)
   
   useEffect(() => {
-    loadData()
+    // 初回データロードはApp.tsxで処理されるため、ここでは時刻更新のみ
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
-  }, [loadData])
+  }, [])
 
   useEffect(() => {
     const checkMobile = () => {

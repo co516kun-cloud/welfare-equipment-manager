@@ -29,6 +29,9 @@ interface InventoryState {
   isRealtimeEnabled: boolean
   lastSyncTime: string | null
   
+  // Initialization state
+  isDataInitialized: boolean
+  
   // Actions
   loadData: () => Promise<void>
   loadAllDataOnStartup: () => Promise<void>
@@ -89,6 +92,9 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   isRealtimeEnabled: false,
   lastSyncTime: null,
   
+  // Initial initialization state
+  isDataInitialized: false,
+  
   // Actions
   loadData: async () => {
     console.log('Loading basic data from Supabase...')
@@ -109,18 +115,23 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         console.warn('Could not load preparation tasks:', error)
       }
       
+      // 現在のitemsを取得（既に読み込まれている場合は保持）
+      const currentState = get()
+      const currentItems = currentState.items
+      
       console.log('Loaded basic data from Supabase:', {
         categories: categories.length,
         products: products.length,
         users: users.length,
         orders: orders.length,
-        preparationTasks: preparationTasks.length
+        preparationTasks: preparationTasks.length,
+        itemsKept: currentItems.length // 保持されたitems数をログ出力
       })
       
       set({
         categories,
         products,
-        items: [], // 商品個体は動的に読み込み
+        items: currentItems, // 既存のitemsを保持（空配列にしない）
         orders,
         preparationTasks,
         users
@@ -160,7 +171,8 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         orders,
         preparationTasks,
         users,
-        lastSyncTime: new Date().toISOString()
+        lastSyncTime: new Date().toISOString(),
+        isDataInitialized: true // 初期化完了フラグを設定
       })
     } catch (error) {
       console.error('❌ Error loading startup data:', error)

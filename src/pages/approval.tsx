@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import type { Order, Product } from '../types'
 
 export function Approval() {
-  const { orders, products, items, users, loadData } = useInventoryStore()
+  const { orders, products, items, users, loadData, isDataInitialized } = useInventoryStore()
   const { user } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
   const [pendingOrders, setPendingOrders] = useState<Order[]>([])
@@ -48,11 +48,12 @@ export function Approval() {
   const currentUser = getCurrentUserName()
 
   useEffect(() => {
-    // データが空の場合は強制的に再読み込み
-    if (orders.length === 0 || products.length === 0) {
+    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
+    if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
+      console.log('🔄 Approval page: Data not initialized, loading basic data...')
       loadData()
     }
-  }, [orders.length, products.length, loadData])
+  }, [orders.length, products.length, isDataInitialized, loadData])
 
   useEffect(() => {
     // 承認待ちまたは一部承認済みの発注を取得

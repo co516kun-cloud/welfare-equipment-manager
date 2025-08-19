@@ -26,10 +26,10 @@ export function Demo() {
   })
   const [addError, setAddError] = useState('')
 
-  // 初期データ読み込み
-  useEffect(() => {
-    loadData()
-  }, [])
+  // 初回データロードはApp.tsxで処理されるため、ここでは不要
+  // useEffect(() => {
+  //   loadData()
+  // }, [])
 
   const loadData = async () => {
     try {

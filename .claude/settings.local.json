@@ -20,7 +20,9 @@
       "Bash(echo:*)",
       "Bash(npm install:*)",
       "Bash(gh api:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(vercel:*)",
+      "Bash(npx vercel:*)"
     ],
     "deny": []
   }

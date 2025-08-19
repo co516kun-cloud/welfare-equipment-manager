@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function Preparation() {
-  const { orders, products, users, loadData } = useInventoryStore()
+  const { orders, products, users, loadData, isDataInitialized } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(false)
@@ -57,11 +57,12 @@ export function Preparation() {
   const [qrCodeInput, setQrCodeInput] = useState('')
   
   useEffect(() => {
-    // データが空の場合は強制的に再読み込み
-    if (orders.length === 0 || products.length === 0) {
+    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
+    if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
+      console.log('🔄 Preparation page: Data not initialized, loading basic data...')
       loadData()
     }
-  }, [orders.length, products.length, loadData])
+  }, [orders.length, products.length, isDataInitialized, loadData])
   
   
   // QRスキャンダイアログを開く
