@@ -453,8 +453,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
                 // 商品アイテムの変更：軽量な個別更新
                 console.log('📦 Product item changed, applying lightweight update...')
                 
-                // payloadの構造をデバッグログで確認
-                console.log('🔍 Full payload structure:', JSON.stringify(payload, null, 2))
                 
                 const { eventType, new: newData, old: oldData } = payload
                 console.log(`🔄 ${eventType} event:`, { newData, oldData })
@@ -486,6 +484,15 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
                   console.log('🗑️ Item removed from store:', oldData.id)
                 }
                 
+              } else if (table === 'orders' || table === 'order_items') {
+                // オーダー関連：軽量な更新のみ（頻繁に変更されるため）
+                console.log(`📊 ${table} changed, refreshing orders...`)
+                try {
+                  const orders = await supabaseDb.getOrders()
+                  set({ orders })
+                } catch (error) {
+                  console.error('Error refreshing orders:', error)
+                }
               } else {
                 // その他のテーブル：基本的なloadDataのみ
                 console.log(`📊 ${table} changed, reloading basic data...`)

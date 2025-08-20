@@ -18,24 +18,7 @@ const useMockDatabase = () => {
   const url = import.meta.env.VITE_SUPABASE_URL
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY
   
-  console.log('🔧 Headers error troubleshooting - Database connection check:', {
-    hasUrl: !!url,
-    hasKey: !!key,
-    urlLength: url?.length,
-    keyLength: key?.length,
-    urlSample: url?.substring(0, 30) + '...',
-    keySample: key?.substring(0, 30) + '...'
-  })
-  
-  // Headers エラーが解決されたのでSupabase接続を再有効化
-  const forceUseMock = false // Headers エラー解決済み
-  const shouldUseMock = forceUseMock || !url || !key || url.includes('dummy') || key.includes('dummy')
-  
-  console.log('🔧 Database mode decision:', {
-    shouldUseMock,
-    reason: forceUseMock ? 'Force mock for debugging' : shouldUseMock ? 'Missing or dummy credentials' : 'Using real Supabase'
-  })
-  
+  const shouldUseMock = !url || !key || url.includes('dummy') || key.includes('dummy')
   return shouldUseMock
 }
 
