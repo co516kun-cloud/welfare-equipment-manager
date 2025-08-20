@@ -450,12 +450,14 @@ export function Preparation() {
     await updateItemStatus(productItem.id, 'ready_for_delivery')
     
     // その他の属性も更新が必要な場合は追加で保存
+    // 発注時の備考があれば反映、なければ空文字
+    const orderNotes = order.notes ? order.notes : ''
     const updatedProductItem = {
       ...productItem,
       id: productItem.id,
       status: 'ready_for_delivery' as const,
       customer_name: order.customer_name,
-      notes: `発注準備完了 - ${order.customer_name}様`,
+      notes: orderNotes, // 発注時の備考を反映
     }
     await supabaseDb.saveProductItem(updatedProductItem)
     

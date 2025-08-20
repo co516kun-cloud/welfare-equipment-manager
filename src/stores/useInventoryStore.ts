@@ -241,11 +241,12 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     console.log(`🔄 Optimistic update: ${originalStatus} -> ${status}`)
     
     // 1. 楽観的更新：即座にストアを更新（ユーザーには瞬時反映）
-    const updatedItem = { ...targetItem, status }
+    // ステータス変更時はnotesをリセット（一時的な備考をクリア）
+    const updatedItem = { ...targetItem, status, notes: '' }
     const updatedItems = items.map(i => i.id === itemId ? updatedItem : i)
     set({ items: updatedItems })
     get().clearItemsCache()
-    console.log('⚡ Optimistic update applied to store')
+    console.log('⚡ Optimistic update applied to store (notes reset)')
     
     try {
       // 2. データベース保存（非同期）
@@ -257,7 +258,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     } catch (error) {
       console.error('❌ Database save failed, rolling back...', error)
       
-      // 4. エラー時：ロールバック（元のステータスに戻す）
+      // 4. エラー時：ロールバック（元のステータスとnotesに戻す）
       const rolledBackItem = { ...targetItem, status: originalStatus }
       const rolledBackItems = items.map(i => i.id === itemId ? rolledBackItem : i)
       set({ items: rolledBackItems })
