@@ -5,6 +5,7 @@ import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { supabaseDb } from '../lib/supabase-database'
+import { useInventoryStore } from '../stores/useInventoryStore'
 import type { ProductItem, Product, Order, OrderItem } from '../types'
 
 interface SelectedItem extends ProductItem {
@@ -32,6 +33,7 @@ export function ScanActionDialog({
   getCurrentUserName,
   orders
 }: ScanActionDialogProps) {
+  const { updateItemStatus } = useInventoryStore()
   const [actionForm, setActionForm] = useState({
     condition: '',
     location: '',
@@ -171,19 +173,28 @@ export function ScanActionDialog({
         ? 'out_of_order' as ProductItem['status']
         : action.nextStatus as ProductItem['status']
 
-      const updatedItem: ProductItem = {
-        id: selectedItem.id,
-        product_id: selectedItem.product_id,
-        status: finalStatus,
-        condition: newCondition,
-        location: actionForm.location || selectedItem.location,
-        qr_code: selectedItem.qr_code,
-        condition_notes: newConditionNotes,
-        customer_name: selectedItem.customer_name,
-        loan_start_date: selectedItem.loan_start_date
+      // 楽観的更新でステータスを即座に反映（データベース保存も含む）
+      await updateItemStatus(selectedItem.id, finalStatus)
+      
+      // ステータス以外の属性も更新が必要な場合は追加でDB保存
+      if (
+        (actionForm.condition && actionForm.condition !== selectedItem.condition) ||
+        (actionForm.location && actionForm.location !== selectedItem.location) ||
+        (shouldSaveConditionNotes && actionForm.conditionNotes !== selectedItem.condition_notes)
+      ) {
+        const updatedItem: ProductItem = {
+          id: selectedItem.id,
+          product_id: selectedItem.product_id,
+          status: finalStatus,
+          condition: newCondition,
+          location: actionForm.location || selectedItem.location,
+          qr_code: selectedItem.qr_code,
+          condition_notes: newConditionNotes,
+          customer_name: selectedItem.customer_name,
+          loan_start_date: selectedItem.loan_start_date
+        }
+        await supabaseDb.saveProductItem(updatedItem)
       }
-
-      await supabaseDb.saveProductItem(updatedItem)
 
       // 履歴を記録
       const historyMetadata: any = {

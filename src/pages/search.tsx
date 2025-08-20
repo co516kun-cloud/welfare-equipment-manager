@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
 
 export function Search() {
-  const { products, items, orders, categories, loadData, users, isDataInitialized } = useInventoryStore()
+  const { products, items, orders, categories, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   
@@ -256,6 +256,10 @@ export function Search() {
         notes: selectedItem.notes
       }
       
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(item.id, updatedItem.status)
+      
+      // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
       
       // 履歴を記録
@@ -305,6 +309,10 @@ export function Search() {
         notes: editForm.notes
       }
       
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(item.id, updatedItem.status)
+      
+      // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
       
       // 履歴を記録
@@ -418,6 +426,10 @@ export function Search() {
         notes: selectedItem.notes
       }
       
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(item.id, updatedItem.status)
+      
+      // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
       
       // 履歴を記録

@@ -30,6 +30,7 @@ export function Inventory() {
     getInventorySummary,
     getReservations,
     resetUIState,
+    updateItemStatus,
   } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -253,6 +254,10 @@ export function Inventory() {
       status: statusForm.status as ProductItem['status']
     }
 
+    // 楽観的更新でステータスを即座に反映
+    await updateItemStatus(selectedItem.id, updatedItem.status)
+    
+    // ステータス以外の属性も更新が必要な場合は追加で保存
     await supabaseDb.saveProductItem(updatedItem)
     
     // 履歴を記録
@@ -293,6 +298,10 @@ export function Inventory() {
       notes: editForm.notes
     }
 
+    // 楽観的更新でステータスを即座に反映
+    await updateItemStatus(selectedItem.id, updatedItem.status)
+    
+    // ステータス以外の属性も更新が必要な場合は追加で保存
     await supabaseDb.saveProductItem(updatedItem)
     
     // 履歴を記録
@@ -396,7 +405,11 @@ export function Inventory() {
         customer_name: orderForm.customerName.trim() // 顧客名も設定
       }
       
-      await supabaseDb.saveProductItem(updatedItem)
+      // 楽観的更新でステータスを即座に反映
+    await updateItemStatus(selectedItem.id, updatedItem.status)
+    
+    // ステータス以外の属性も更新が必要な場合は追加で保存
+    await supabaseDb.saveProductItem(updatedItem)
       
       // 履歴を記録
       await supabaseDb.createItemHistory(
@@ -834,29 +847,75 @@ export function Inventory() {
               </div>
               
               <div className="p-4 max-h-[60vh] overflow-y-auto">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   {selectedProductItems.map((item, index) => (
                     <div 
                       key={item.id}
-                      className="bg-slate-50 rounded-lg p-3 text-center cursor-pointer hover:bg-slate-100 transition-colors active:bg-slate-200"
-                      onClick={() => {
-                        setShowManagementNumbers(false)
-                        navigate(`/item/${item.id}`)
-                      }}
+                      className="bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition-colors"
                     >
-                      <div className="font-mono font-bold text-slate-800 text-sm">
-                        {item.id}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {item.location}
-                      </div>
-                      <div className="mt-2 space-y-1">
-                        <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
-                          {getConditionText(item.condition)}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <div className="font-mono font-bold text-slate-800 text-sm">
+                            {item.id}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {item.location}
+                          </div>
+                          <div className="mt-2">
+                            <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getConditionColor(item.condition)}`}>
+                              {getConditionText(item.condition)}
+                            </div>
+                          </div>
+                        </div>
+                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+                          {getStatusText(item.status)}
                         </div>
                       </div>
-                      <div className="text-xs text-blue-600 mt-1 opacity-70">
-                        タップで詳細
+                      
+                      {/* 操作ボタン */}
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setShowManagementNumbers(false)
+                            navigate(`/item/${item.id}`)
+                          }}
+                          className="border-blue-500 text-blue-600 hover:bg-blue-50 hover:text-blue-700 text-xs"
+                        >
+                          詳細
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setShowManagementNumbers(false)
+                            handleEdit(item)
+                          }}
+                          className="border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700 text-xs"
+                        >
+                          編集
+                        </Button>
+                        {item.status === 'available' && (
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setShowManagementNumbers(false)
+                              handleOrder(item)
+                            }}
+                            className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                          >
+                            発注
+                          </Button>
+                        )}
+                        {item.status !== 'available' && (
+                          <div className="text-xs text-slate-400 text-center py-1">
+                            利用不可
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1156,7 +1215,16 @@ export function Inventory() {
         currentUser={currentUser}
         onSuccess={loadData}
       />
-
+      </div>
+    </div>
+  )
+  
+  return (
+    <>
+      {/* UI分岐 */}
+      {isMobile ? <MobileInventoryUI /> : <DesktopInventoryUI />}
+      
+      {/* 共通ダイアログ（モバイル・デスクトップ両方で使用） */}
       {/* Order Dialog */}
       <Dialog open={showOrderDialog} onOpenChange={setShowOrderDialog}>
         <DialogContent className="max-w-md">
@@ -1225,14 +1293,6 @@ export function Inventory() {
           </div>
         </DialogContent>
       </Dialog>
-      </div>
-    </div>
-  )
-  
-  return (
-    <>
-      {/* UI分岐 */}
-      {isMobile ? <MobileInventoryUI /> : <DesktopInventoryUI />}
     </>
   )
 }

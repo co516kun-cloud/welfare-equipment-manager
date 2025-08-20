@@ -191,6 +191,31 @@ export class SupabaseDatabase {
     return data || []
   }
 
+  // 差分同期用: 指定された日時以降に更新されたアイテムを取得
+  async getRecentlyUpdatedProductItems(since: string): Promise<ProductItem[]> {
+    if (useMockDatabase()) {
+      console.log('🏷️ Using mock database for recently updated items')
+      const items = await mockDb.getProductItems()
+      // モックデータでは全件返す（実際の環境では使われない）
+      return items
+    }
+    
+    const { data, error } = await supabase
+      .from('product_items')
+      .select('*')
+      .gte('updated_at', since)
+      .order('updated_at', { ascending: false })
+    
+    if (error) {
+      console.error('Error fetching recently updated product items:', error)
+      return []
+    }
+    
+    console.log(`🔄 Fetched ${data?.length || 0} recently updated product items since ${since}`)
+    
+    return data || []
+  }
+
   async getProductItemsByProductId(productId: string): Promise<ProductItem[]> {
     if (useMockDatabase()) {
       console.log('🏷️ Using mock database for product items by product')
@@ -616,6 +641,83 @@ export class SupabaseDatabase {
     }
     
     return data || []
+  }
+
+  // ページネーション対応の履歴取得
+  async getItemHistoriesPaginated(
+    page: number = 1, 
+    limit: number = 50,
+    filters?: {
+      fromStatus?: string
+      toStatus?: string  
+      year?: number
+      month?: number
+      itemId?: string
+      action?: string
+    }
+  ): Promise<{
+    data: ItemHistory[]
+    totalCount: number
+    totalPages: number
+    currentPage: number
+  }> {
+    try {
+      let query = supabase
+        .from('item_histories')
+        .select('*', { count: 'exact' })
+
+      // フィルターの適用
+      if (filters) {
+        if (filters.fromStatus) {
+          query = query.eq('to_status', filters.fromStatus)
+        }
+        if (filters.year) {
+          const startDate = `${filters.year}-01-01T00:00:00Z`
+          const endDate = `${filters.year + 1}-01-01T00:00:00Z`
+          query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+        }
+        if (filters.month && filters.year) {
+          const startDate = `${filters.year}-${filters.month.toString().padStart(2, '0')}-01T00:00:00Z`
+          const nextMonth = filters.month === 12 ? 1 : filters.month + 1
+          const nextYear = filters.month === 12 ? filters.year + 1 : filters.year
+          const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01T00:00:00Z`
+          query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+        }
+        if (filters.itemId) {
+          query = query.ilike('item_id', `%${filters.itemId}%`)
+        }
+        if (filters.action) {
+          query = query.ilike('action', `%${filters.action}%`)
+        }
+      }
+
+      const offset = (page - 1) * limit
+      const { data, error, count } = await query
+        .order('timestamp', { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      if (error) {
+        if (error.code === '42P01') {
+          console.warn('item_histories table does not exist. Please run create-item-histories-table.sql')
+          return { data: [], totalCount: 0, totalPages: 0, currentPage: page }
+        }
+        console.error('Error fetching paginated item histories:', error)
+        return { data: [], totalCount: 0, totalPages: 0, currentPage: page }
+      }
+
+      const totalCount = count || 0
+      const totalPages = Math.ceil(totalCount / limit)
+
+      return {
+        data: data || [],
+        totalCount,
+        totalPages,
+        currentPage: page
+      }
+    } catch (error) {
+      console.error('Error in getItemHistoriesPaginated:', error)
+      return { data: [], totalCount: 0, totalPages: 0, currentPage: page }
+    }
   }
 
   async getItemHistoriesByItemId(itemId: string): Promise<ItemHistory[]> {

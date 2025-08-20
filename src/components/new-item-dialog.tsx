@@ -5,6 +5,7 @@ import { Label } from './ui/label'
 import { Select } from './ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { supabaseDb } from '../lib/supabase-database'
+import { useInventoryStore } from '../stores/useInventoryStore'
 import type { ProductItem, ProductCategory, Product } from '../types'
 
 interface NewItemDialogProps {
@@ -26,6 +27,7 @@ export function NewItemDialog({
   currentUser, 
   onSuccess 
 }: NewItemDialogProps) {
+  const { addProductItem } = useInventoryStore()
   // 登録タイプ
   const [registrationType, setRegistrationType] = useState<'existing' | 'new'>('existing')
   
@@ -115,9 +117,8 @@ export function NewItemDialog({
         }
       }
       
-      // 新規アイテムを作成
-      const newItem: ProductItem = {
-        id: newItemForm.managementId.trim(),
+      // 新規アイテムを作成（ストア経由で楽観的追加）
+      const newItemData: Omit<ProductItem, 'id'> = {
         qr_code: newItemForm.managementId.trim(), // 管理番号と同じ値
         product_id: productId,
         status: 'available',
@@ -126,7 +127,13 @@ export function NewItemDialog({
         notes: newItemForm.notes || ''
       }
       
-      await supabaseDb.saveProductItem(newItem)
+      await addProductItem(newItemData)
+      
+      // idを取得するために生成されたアイテムIDを作成
+      const newItem: ProductItem = {
+        id: newItemForm.managementId.trim(),
+        ...newItemData
+      }
       
       // 履歴を記録
       await supabaseDb.createItemHistory(

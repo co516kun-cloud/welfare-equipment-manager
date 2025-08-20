@@ -263,16 +263,16 @@ export function ItemDetail() {
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 mb-1">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(history.fromStatus)}`}>
-                            {getStatusText(history.fromStatus)}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(history.from_status)}`}>
+                            {getStatusText(history.from_status)}
                           </span>
                           <span className="text-xs text-muted-foreground">→</span>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(history.toStatus)}`}>
-                            {getStatusText(history.toStatus)}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(history.to_status)}`}>
+                            {getStatusText(history.to_status)}
                           </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          実行者: {history.performedBy}
+                          実行者: {history.performed_by}
                         </p>
                         {history.location && (
                           <p className="text-xs text-muted-foreground">

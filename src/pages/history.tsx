@@ -9,21 +9,27 @@ import type { ItemHistory, ProductItem, Product } from '../types'
 
 export function History() {
   const [histories, setHistories] = useState<ItemHistory[]>([])
-  const [filteredHistories, setFilteredHistories] = useState<ItemHistory[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [productItems, setProductItems] = useState<ProductItem[]>([])
   const [isMobile, setIsMobile] = useState(false)
   const [filters, setFilters] = useState({
     fromStatus: '',
     toStatus: '',
-    month: new Date().getMonth() + 1, // 現在の月
-    year: new Date().getFullYear(), // 現在の年
+    month: '', // 初期状態では全ての月を表示
+    year: '', // 初期状態では全ての年を表示
     itemId: '',
     action: ''
   })
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list')
   const [selectedHistories, setSelectedHistories] = useState<Set<string>>(new Set())
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  // ページネーション状態
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
+  const [itemsPerPage] = useState(isMobile ? 20 : 50)
 
   // 安全なモバイル検出
   useEffect(() => {
@@ -37,75 +43,78 @@ export function History() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  // 初回データロードはApp.tsxで処理されるため、ここでは不要
-  // useEffect(() => {
-  //   loadData()
-  // }, [])
-
+  // 履歴ページ用の初回データロード
   useEffect(() => {
-    applyFilters()
-  }, [histories, filters])
+    loadProducts()
+    loadHistories()
+  }, [])
 
-  const loadData = async () => {
+  // フィルターまたはページが変更された時のデータ再読み込み
+  useEffect(() => {
+    loadHistories()
+  }, [filters, currentPage, itemsPerPage])
+
+  const loadProducts = async () => {
     try {
-      const allHistories = await supabaseDb.getItemHistories()
       const allProducts = await supabaseDb.getProducts()
       const allItems = await supabaseDb.getProductItems()
-      
-      // Sort histories by timestamp (newest first)
-      const sortedHistories = allHistories.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      )
-      
-      setHistories(sortedHistories)
       setProducts(allProducts)
       setProductItems(allItems)
     } catch (error) {
-      console.error('Error loading history data:', error)
+      console.error('❌ Error loading product data:', error)
     }
   }
 
-  const applyFilters = () => {
-    let filtered = [...histories]
-
-    // Status filter (変更後ステータス)
-    if (filters.fromStatus) {
-      filtered = filtered.filter(h => h.to_status === filters.fromStatus)
-    }
-
-    // Year filter (年のみでフィルタリング可能)
-    if (filters.year) {
-      const year = parseInt(filters.year)
-      filtered = filtered.filter(h => {
-        const date = new Date(h.timestamp)
-        return date.getFullYear() === year
+  const loadHistories = async () => {
+    try {
+      setIsLoading(true)
+      console.log('🔄 Loading paginated history data...', { 
+        page: currentPage, 
+        limit: itemsPerPage,
+        filters 
       })
-    }
 
-    // Month filter (月が指定されている場合のみ適用)
-    if (filters.month) {
-      const month = parseInt(filters.month)
-      filtered = filtered.filter(h => {
-        const date = new Date(h.timestamp)
-        return date.getMonth() === month - 1
+      const filterParams = {
+        fromStatus: filters.fromStatus || undefined,
+        year: filters.year ? parseInt(filters.year.toString()) : undefined,
+        month: filters.month ? parseInt(filters.month.toString()) : undefined,
+        itemId: filters.itemId || undefined,
+        action: filters.action || undefined
+      }
+
+      const result = await supabaseDb.getItemHistoriesPaginated(
+        currentPage,
+        itemsPerPage,
+        filterParams
+      )
+      
+      console.log('📊 Loaded paginated data:', {
+        histories: result.data.length,
+        totalCount: result.totalCount,
+        totalPages: result.totalPages,
+        currentPage: result.currentPage
       })
+      
+      setHistories(result.data)
+      setTotalCount(result.totalCount)
+      setTotalPages(result.totalPages)
+      setCurrentPage(result.currentPage)
+    } catch (error) {
+      console.error('❌ Error loading paginated history data:', error)
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    // Item ID filter
-    if (filters.itemId) {
-      filtered = filtered.filter(h => 
-        h.itemId.toLowerCase().includes(filters.itemId.toLowerCase())
-      )
-    }
+  // フィルター変更時に1ページ目に戻す
+  const handleFilterChange = (newFilters: typeof filters) => {
+    setFilters(newFilters)
+    setCurrentPage(1) // フィルター変更時は1ページ目に戻す
+  }
 
-    // Action filter
-    if (filters.action) {
-      filtered = filtered.filter(h => 
-        h.action.toLowerCase().includes(filters.action.toLowerCase())
-      )
-    }
-
-    setFilteredHistories(filtered)
+  // ページ変更処理
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
   }
 
   const getActionIcon = (action: string) => {
@@ -192,14 +201,16 @@ export function History() {
   }
 
   const clearFilters = () => {
-    setFilters({
+    const newFilters = {
       fromStatus: '',
       toStatus: '',
-      month: new Date().getMonth() + 1, // 現在の月に戻す
-      year: new Date().getFullYear(), // 現在の年に戻す
+      month: '', // 全ての月を表示
+      year: '', // 全ての年を表示
       itemId: '',
       action: ''
-    })
+    }
+    setFilters(newFilters)
+    setCurrentPage(1) // フィルタークリア時も1ページ目に戻す
   }
 
   // 履歴選択関連の関数
@@ -214,12 +225,12 @@ export function History() {
   }
   
   const handleSelectAll = () => {
-    if (selectedHistories.size === filteredHistories.length && filteredHistories.length > 0) {
+    if (selectedHistories.size === histories.length && histories.length > 0) {
       // 全選択解除
       setSelectedHistories(new Set())
     } else {
-      // 全選択
-      const allIds = new Set(filteredHistories.map(h => h.id))
+      // 全選択（現在のページのみ）
+      const allIds = new Set(histories.map(h => h.id))
       setSelectedHistories(allIds)
     }
   }
@@ -238,7 +249,7 @@ export function History() {
       }
       
       // データを再読み込み
-      await loadData()
+      await loadHistories()
       
       // 選択状態をクリア
       setSelectedHistories(new Set())
@@ -254,7 +265,7 @@ export function History() {
   const exportData = () => {
     const csvData = [
       ['日時', '商品名', '管理番号', 'アクション', '顧客名', 'ステータス', '実行者', '備考'],
-      ...filteredHistories.map(h => [
+      ...histories.map(h => [
         new Date(h.timestamp).toLocaleString('ja-JP'),
         getProductName(h.item_id),
         h.item_id,
@@ -278,6 +289,63 @@ export function History() {
     document.body.removeChild(link)
   }
 
+  // ページネーションコンポーネント
+  const PaginationControls = () => {
+    const maxVisiblePages = 5
+    const startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1)
+    const pages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i)
+
+    return (
+      <div className="flex items-center justify-between mt-6 px-4">
+        <div className="text-sm text-muted-foreground">
+          {totalCount > 0 ? (
+            <>
+              {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, totalCount)} 件 / 全 {totalCount} 件
+            </>
+          ) : (
+            '0 件'
+          )}
+        </div>
+        
+        {totalPages > 1 && (
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1 || isLoading}
+            >
+              前へ
+            </Button>
+            
+            {pages.map(page => (
+              <Button
+                key={page}
+                variant={page === currentPage ? "default" : "outline"}
+                size="sm"
+                onClick={() => handlePageChange(page)}
+                disabled={isLoading}
+                className={`w-10 ${page === currentPage ? 'bg-primary' : ''}`}
+              >
+                {page}
+              </Button>
+            ))}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages || isLoading}
+            >
+              次へ
+            </Button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // モバイル版UIコンポーネント
   const MobileHistoryUI = () => (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 p-4">
@@ -287,8 +355,11 @@ export function History() {
           <h1 className="text-lg font-bold text-slate-800">履歴管理</h1>
           <div className="flex items-center space-x-2">
             <div className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-              {filteredHistories.length}
+              {totalCount}
             </div>
+            {isLoading && (
+              <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+            )}
           </div>
         </div>
         <p className="text-xs text-slate-600">システム操作履歴</p>
@@ -302,7 +373,7 @@ export function History() {
             <Select
               id="mobile-month"
               value={filters.month}
-              onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, month: e.target.value })}
               className="text-sm"
             >
               <option value="">全て</option>
@@ -316,7 +387,7 @@ export function History() {
             <Select
               id="mobile-status"
               value={filters.fromStatus}
-              onChange={(e) => setFilters(prev => ({ ...prev, fromStatus: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, fromStatus: e.target.value })}
               className="text-sm"
             >
               <option value="">全て</option>
@@ -332,7 +403,12 @@ export function History() {
 
       {/* 履歴一覧（テーブル） */}
       <div className="bg-white/95 backdrop-blur-xl rounded-xl shadow-lg overflow-hidden">
-        {filteredHistories.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-8 text-slate-600">
+            <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p>読み込み中...</p>
+          </div>
+        ) : histories.length === 0 ? (
           <div className="text-center py-8 text-slate-600">
             <div className="text-4xl mb-2">📋</div>
             <p>履歴が見つかりませんでした</p>
@@ -349,7 +425,7 @@ export function History() {
                 </tr>
               </thead>
               <tbody>
-                {filteredHistories.map((history, index) => (
+                {histories.map((history, index) => (
                   <tr 
                     key={history.id} 
                     className={`border-b border-slate-200 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
@@ -393,6 +469,9 @@ export function History() {
           </div>
         )}
       </div>
+      
+      {/* モバイル版ページネーション */}
+      <PaginationControls />
     </div>
   )
 
@@ -435,7 +514,7 @@ export function History() {
             <Label htmlFor="year">年</Label>
             <Select
               value={filters.year}
-              onChange={(e) => setFilters(prev => ({ ...prev, year: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, year: e.target.value })}
             >
               <option value="">すべて</option>
               {(() => {
@@ -455,7 +534,7 @@ export function History() {
             <Label htmlFor="month">月</Label>
             <Select
               value={filters.month}
-              onChange={(e) => setFilters(prev => ({ ...prev, month: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, month: e.target.value })}
             >
               <option value="">すべて</option>
               {Array.from({ length: 12 }, (_, i) => (
@@ -468,7 +547,7 @@ export function History() {
             <Label htmlFor="status">ステータス</Label>
             <Select
               value={filters.fromStatus}
-              onChange={(e) => setFilters(prev => ({ ...prev, fromStatus: e.target.value, toStatus: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, fromStatus: e.target.value, toStatus: e.target.value })}
             >
               <option value="">すべて</option>
               <option value="available">利用可能</option>
@@ -487,7 +566,7 @@ export function History() {
             <Input
               id="itemId"
               value={filters.itemId}
-              onChange={(e) => setFilters(prev => ({ ...prev, itemId: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, itemId: e.target.value })}
               placeholder="例: WC-001"
             />
           </div>
@@ -497,7 +576,7 @@ export function History() {
             <Input
               id="action"
               value={filters.action}
-              onChange={(e) => setFilters(prev => ({ ...prev, action: e.target.value }))}
+              onChange={(e) => handleFilterChange({ ...filters, action: e.target.value })}
               placeholder="例: 返却"
             />
           </div>
@@ -511,8 +590,14 @@ export function History() {
         
         <div className="mt-4 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {filteredHistories.length} 件の履歴が見つかりました
+            {totalCount} 件の履歴が見つかりました
           </p>
+          {isLoading && (
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+              <span className="text-sm text-muted-foreground">読み込み中...</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -529,7 +614,7 @@ export function History() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground w-10">
                       <input
                         type="checkbox"
-                        checked={selectedHistories.size === filteredHistories.length && filteredHistories.length > 0}
+                        checked={selectedHistories.size === histories.length && histories.length > 0}
                         onChange={handleSelectAll}
                         className="w-4 h-4"
                       />
@@ -544,7 +629,7 @@ export function History() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredHistories.map((history) => (
+                  {histories.map((history) => (
                     <tr key={history.id} className="border-b border-border hover:bg-accent/50">
                       <td className="py-3 px-4 w-10">
                         <input
@@ -587,7 +672,7 @@ export function History() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredHistories.map((history) => (
+              {histories.map((history) => (
                 <div key={history.id} className="bg-white/95 backdrop-blur-xl rounded-xl p-3 shadow-lg">
                   <div className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
@@ -656,12 +741,15 @@ export function History() {
             </div>
           )}
           
-          {filteredHistories.length === 0 && (
+          {histories.length === 0 && !isLoading && (
             <div className="text-center py-8">
               <p className="text-muted-foreground">履歴が見つかりませんでした</p>
             </div>
           )}
         </div>
+        
+        {/* デスクトップ版ページネーション */}
+        <PaginationControls />
       </div>
 
       {/* Delete Confirmation Dialog */}

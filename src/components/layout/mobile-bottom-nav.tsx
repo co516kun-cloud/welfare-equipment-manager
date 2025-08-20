@@ -31,10 +31,11 @@ export function MobileBottomNav() {
   
   // データはLayoutで読み込まれるため、ここでは読み込まない
   
-  // 準備待ち件数を計算
+  // 準備待ち件数を計算（番号なし + 番号あり）
   const preparationCount = orders.flatMap(order => 
     order.items
       .filter(item => {
+        // 準備待ち状態のアイテムをフィルタ
         return (
           (item.approval_status === 'not_required' && item.item_processing_status === 'waiting') ||
           (item.approval_status === 'approved' && item.item_processing_status === 'waiting') ||
@@ -43,14 +44,20 @@ export function MobileBottomNav() {
       })
       .flatMap(item => {
         const individualItems = []
-        for (let i = 0; i < item.quantity; i++) {
-          const assignedItemId = item.assigned_item_ids ? item.assigned_item_ids[i] : null
-          const isAssigned = assignedItemId !== null && assignedItemId !== undefined
-          
-          if (!isAssigned) {
+        
+        // 番号ありの場合（assigned_item_idsが事前に設定されている）
+        if (item.assigned_item_ids && item.assigned_item_ids.length > 0) {
+          // 番号あり商品は全てカウント
+          for (let i = 0; i < item.quantity; i++) {
+            individualItems.push(1)
+          }
+        } else {
+          // 番号なしの場合（通常の発注）
+          for (let i = 0; i < item.quantity; i++) {
             individualItems.push(1)
           }
         }
+        
         return individualItems
       })
   ).length

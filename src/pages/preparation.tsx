@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 export function Preparation() {
-  const { orders, products, users, loadData, isDataInitialized } = useInventoryStore()
+  const { orders, products, users, loadData, isDataInitialized, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(false)
@@ -161,15 +161,18 @@ export function Preparation() {
 
       await supabaseDb.saveOrder(updatedOrder)
 
-      // 商品ステータスを ready_for_delivery に変更
-      const updatedProductItem = {
-        ...scannedItem,
-        status: 'ready_for_delivery' as const,
-        customer_name: order.customer_name,
-        // location と notes は既存の値を保持（自動変更しない）
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(scannedItem.id, 'ready_for_delivery')
+      
+      // customer_name も更新が必要な場合は追加で保存
+      if (scannedItem.customer_name !== order.customer_name) {
+        const updatedProductItem = {
+          ...scannedItem,
+          status: 'ready_for_delivery' as const,
+          customer_name: order.customer_name,
+        }
+        await supabaseDb.saveProductItem(updatedProductItem)
       }
-
-      await supabaseDb.saveProductItem(updatedProductItem)
 
       // 履歴を記録（履歴のみに記録、商品データは変更しない）
       await supabaseDb.createItemHistory(
@@ -314,14 +317,18 @@ export function Preparation() {
           const previousStatus = assignmentHistory?.fromStatus || 'available'
           const previousLocation = assignmentHistory?.metadata?.previousLocation || '倉庫'
           
-          // 商品を前のステータスに戻す
-          const updatedProductItem = {
-            ...productItem,
-            status: previousStatus,
-            location: previousLocation
-          }
+          // 楽観的更新でステータスを即座に反映
+          await updateItemStatus(assignedItemId, previousStatus)
           
-          await supabaseDb.saveProductItem(updatedProductItem)
+          // location も更新が必要な場合は追加で保存
+          if (productItem.location !== previousLocation) {
+            const updatedProductItem = {
+              ...productItem,
+              status: previousStatus,
+              location: previousLocation
+            }
+            await supabaseDb.saveProductItem(updatedProductItem)
+          }
           
           // 履歴を記録
           await supabaseDb.createItemHistory(
@@ -439,16 +446,17 @@ export function Preparation() {
     
     await supabaseDb.saveOrder(updatedOrder)
     
-    // 商品アイテムのステータスを配送準備完了に更新
+    // 楽観的更新でステータスを即座に反映
+    await updateItemStatus(productItem.id, 'ready_for_delivery')
+    
+    // その他の属性も更新が必要な場合は追加で保存
     const updatedProductItem = {
       ...productItem,
-      id: productItem.id, // IDを明示的に設定
+      id: productItem.id,
       status: 'ready_for_delivery' as const,
       customer_name: order.customer_name,
-      notes: `発注準備完了 - ${order.customer_name}様`, // 現在の状態に関連するメモに更新
-      // loan_start_dateは実際の配送完了時に設定
+      notes: `発注準備完了 - ${order.customer_name}様`,
     }
-    
     await supabaseDb.saveProductItem(updatedProductItem)
     
     // 履歴を記録
@@ -529,12 +537,18 @@ export function Preparation() {
       // 商品ステータスを準備完了に変更
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
-        const updatedProductItem = {
-          ...productItem,
-          status: 'ready_for_delivery' as const,
-          customer_name: order.customer_name
+        // 楽観的更新でステータスを即座に反映
+        await updateItemStatus(productItem.id, 'ready_for_delivery')
+        
+        // customer_name も更新が必要な場合は追加で保存
+        if (productItem.customer_name !== order.customer_name) {
+          const updatedProductItem = {
+            ...productItem,
+            status: 'ready_for_delivery' as const,
+            customer_name: order.customer_name
+          }
+          await supabaseDb.saveProductItem(updatedProductItem)
         }
-        await supabaseDb.saveProductItem(updatedProductItem)
       }
 
       // 履歴を記録

@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 
 export function MyPage() {
-  const { orders, products, loadData, users, isDataInitialized } = useInventoryStore()
+  const { orders, products, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(false)
@@ -421,11 +421,15 @@ export function MyPage() {
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
+        // 楽観的更新でステータスを即座に反映
+        await updateItemStatus(productItem.id, 'rented')
+        
+        // その他の属性も更新が必要な場合は追加で保存
         const updatedProductItem = {
           ...productItem,
           status: 'rented' as const,
           customer_name: item.customer,
-          loan_start_date: new Date().toISOString().split('T')[0] // 今日の日付をYYYY-MM-DD形式で設定
+          loan_start_date: new Date().toISOString().split('T')[0]
         }
         await supabaseDb.saveProductItem(updatedProductItem)
         
@@ -482,11 +486,15 @@ export function MyPage() {
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
+        // 楽観的更新でステータスを即座に反映
+        await updateItemStatus(productItem.id, 'rented')
+        
+        // その他の属性も更新が必要な場合は追加で保存
         const updatedProductItem = {
           ...productItem,
           status: 'rented' as const,
           customer_name: item.customer,
-          loan_start_date: new Date().toISOString().split('T')[0] // 今日の日付をYYYY-MM-DD形式で設定
+          loan_start_date: new Date().toISOString().split('T')[0]
         }
         await supabaseDb.saveProductItem(updatedProductItem)
         
@@ -648,14 +656,18 @@ export function MyPage() {
         const previousStatus = assignmentHistory?.fromStatus || 'available'
         const previousLocation = assignmentHistory?.metadata?.previousLocation || '倉庫'
         
-        // 商品を前のステータスに戻す
-        const updatedProductItem = {
-          ...productItem,
-          status: previousStatus,
-          location: previousLocation
-        }
+        // 楽観的更新でステータスを即座に反映
+        await updateItemStatus(assignedItemId, previousStatus)
         
-        await supabaseDb.saveProductItem(updatedProductItem)
+        // location も更新が必要な場合は追加で保存
+        if (productItem.location !== previousLocation) {
+          const updatedProductItem = {
+            ...productItem,
+            status: previousStatus,
+            location: previousLocation
+          }
+          await supabaseDb.saveProductItem(updatedProductItem)
+        }
         
         // 履歴を記録
         await supabaseDb.createItemHistory(

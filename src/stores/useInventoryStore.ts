@@ -32,6 +32,9 @@ interface InventoryState {
   // Initialization state
   isDataInitialized: boolean
   
+  // Full sync state (for daily refresh)
+  lastFullSyncTime: string | null
+  
   // Actions
   loadData: () => Promise<void>
   loadAllDataOnStartup: () => Promise<void>
@@ -60,6 +63,9 @@ interface InventoryState {
   enableRealtime: () => void
   disableRealtime: () => void
   forceSync: () => Promise<void>
+  
+  // Daily sync actions
+  checkAndPerformDailySync: () => Promise<void>
   
   // UI reset action
   resetUIState: () => void
@@ -94,6 +100,9 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   
   // Initial initialization state
   isDataInitialized: false,
+  
+  // Initial full sync state
+  lastFullSyncTime: null,
   
   // Actions
   loadData: async () => {
@@ -164,6 +173,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         preparationTasks: preparationTasks.length
       })
       
+      const syncTime = new Date().toISOString()
       set({
         categories,
         products,
@@ -171,7 +181,8 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         orders,
         preparationTasks,
         users,
-        lastSyncTime: new Date().toISOString(),
+        lastSyncTime: syncTime,
+        lastFullSyncTime: syncTime, // 初回データ読み込み時に全同期時刻も設定
         isDataInitialized: true // 初期化完了フラグを設定
       })
     } catch (error) {
@@ -424,13 +435,14 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     // データベースの各テーブルをリアルタイム監視（存在するテーブルのみ）
     const tables = ['categories', 'products', 'product_items', 'orders', 'order_items', 'users']
     
+    // 単一のチャネルで全テーブルを監視（接続効率化）
+    const channel = supabase.channel('db-changes')
+    
     tables.forEach(table => {
-      const subscription = supabase
-        .channel(`public:${table}`)
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: table },
-          async (payload) => {
-            console.log(`🔄 Realtime update from ${table}:`, payload)
+      channel.on('postgres_changes', 
+        { event: '*', schema: 'public', table: table },
+        async (payload) => {
+          console.log(`🔄 Realtime update from ${table}:`, payload)
             
             const currentState = get()
             if (!currentState.isRealtimeEnabled) return
@@ -441,20 +453,23 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
                 // 商品アイテムの変更：軽量な個別更新
                 console.log('📦 Product item changed, applying lightweight update...')
                 
-                const { event, new: newData, old: oldData } = payload
-                console.log(`🔄 ${event} event:`, { newData, oldData })
+                // payloadの構造をデバッグログで確認
+                console.log('🔍 Full payload structure:', JSON.stringify(payload, null, 2))
                 
-                if (event === 'UPDATE' && newData) {
+                const { eventType, new: newData, old: oldData } = payload
+                console.log(`🔄 ${eventType} event:`, { newData, oldData })
+                
+                if (eventType === 'UPDATE' && newData) {
                   // 個別アイテムの更新（他のユーザーからの変更）
                   const { items } = currentState
                   const updatedItems = items.map(item => 
-                    item.id === newData.id ? { ...item, ...newData } : item
+                    item.id === newData.id ? newData : item
                   )
                   set({ items: updatedItems })
                   currentState.clearItemsCache()
                   console.log('⚡ Individual item updated in store:', newData.id)
                   
-                } else if (event === 'INSERT' && newData) {
+                } else if (eventType === 'INSERT' && newData) {
                   // 新しいアイテムの追加
                   const { items } = currentState
                   const updatedItems = [...items, newData]
@@ -462,7 +477,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
                   currentState.clearItemsCache()
                   console.log('➕ New item added to store:', newData.id)
                   
-                } else if (event === 'DELETE' && oldData) {
+                } else if (eventType === 'DELETE' && oldData) {
                   // アイテムの削除
                   const { items } = currentState
                   const updatedItems = items.filter(item => item.id !== oldData.id)
@@ -483,12 +498,17 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
             }
           }
         )
-        .subscribe((status) => {
-          console.log(`📡 Realtime status for ${table}:`, status)
-        })
-
-      realtimeSubscriptions.push(subscription)
     })
+    
+    // チャネルを購読
+    channel.subscribe((status) => {
+      console.log(`📡 Realtime channel status:`, status)
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Successfully connected to realtime updates!')
+      }
+    })
+    
+    realtimeSubscriptions.push(channel)
 
     set({ 
       isRealtimeEnabled: true,
@@ -524,6 +544,43 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     await loadAllDataOnStartup()
     set({ lastSyncTime: new Date().toISOString() })
     console.log('✅ Force sync completed!')
+  },
+
+  checkAndPerformDailySync: async () => {
+    const { lastFullSyncTime, loadAllDataOnStartup, clearItemsCache } = get()
+    const now = new Date()
+    
+    // 最後の全同期から24時間経過しているかチェック
+    if (!lastFullSyncTime) {
+      console.log('📅 No previous full sync time found, performing initial daily sync...')
+    } else {
+      const lastSync = new Date(lastFullSyncTime)
+      const hoursSinceLastSync = (now.getTime() - lastSync.getTime()) / (1000 * 60 * 60)
+      
+      if (hoursSinceLastSync < 24) {
+        console.log(`📅 Last full sync was ${hoursSinceLastSync.toFixed(1)} hours ago, skipping daily sync`)
+        return
+      }
+      
+      console.log(`📅 Last full sync was ${hoursSinceLastSync.toFixed(1)} hours ago, performing daily sync...`)
+    }
+    
+    try {
+      // 全データを再読み込み
+      clearItemsCache()
+      await loadAllDataOnStartup()
+      
+      // 全同期時刻を更新
+      const syncTime = now.toISOString()
+      set({ 
+        lastFullSyncTime: syncTime,
+        lastSyncTime: syncTime
+      })
+      
+      console.log('✅ Daily full sync completed successfully!')
+    } catch (error) {
+      console.error('❌ Error during daily sync:', error)
+    }
   },
 
   clearItemsCache: () => {
@@ -565,12 +622,64 @@ if (typeof window !== 'undefined') {
     }
   })
   
-  // ページがフォーカスされた時に再同期
-  window.addEventListener('focus', () => {
+  // ページがフォーカスされた時に差分同期（最近更新されたアイテムのみ）
+  window.addEventListener('focus', async () => {
     const store = useInventoryStore.getState()
-    if (store.isRealtimeEnabled) {
-      console.log('🔄 Page focused, force syncing...')
-      store.forceSync()
+    if (store.isRealtimeEnabled && store.lastSyncTime) {
+      console.log('🔄 Page focused, performing differential sync...')
+      try {
+        // 最後の同期時刻以降に更新されたアイテムのみ取得
+        const recentItems = await supabaseDb.getRecentlyUpdatedProductItems(store.lastSyncTime)
+        
+        if (recentItems.length > 0) {
+          console.log(`📦 Found ${recentItems.length} updated items since last sync`)
+          
+          // 既存のアイテムリストを更新
+          const currentItems = store.items
+          const updatedItems = [...currentItems]
+          
+          recentItems.forEach(recentItem => {
+            const existingIndex = updatedItems.findIndex(item => item.id === recentItem.id)
+            if (existingIndex >= 0) {
+              // 既存アイテムを更新
+              updatedItems[existingIndex] = recentItem
+            } else {
+              // 新しいアイテムを追加
+              updatedItems.push(recentItem)
+            }
+          })
+          
+          store.clearItemsCache()
+          useInventoryStore.setState({ 
+            items: updatedItems,
+            lastSyncTime: new Date().toISOString()
+          })
+          console.log('✅ Differential sync completed')
+        } else {
+          console.log('📦 No updates found since last sync')
+        }
+      } catch (error) {
+        console.error('❌ Error during differential sync:', error)
+      }
+    } else if (store.isRealtimeEnabled && !store.lastSyncTime) {
+      console.log('ℹ️ No last sync time available, skipping differential sync')
     }
+  })
+  
+  // 定期的な日次全同期チェック（6時間ごと）
+  const checkDailySyncInterval = setInterval(async () => {
+    try {
+      const store = useInventoryStore.getState()
+      if (store.isDataInitialized) {
+        await store.checkAndPerformDailySync()
+      }
+    } catch (error) {
+      console.error('❌ Error during periodic daily sync check:', error)
+    }
+  }, 6 * 60 * 60 * 1000) // 6時間 = 6 * 60 * 60 * 1000ms
+  
+  // ページを離れる時に定期チェックを停止
+  window.addEventListener('beforeunload', () => {
+    clearInterval(checkDailySyncInterval)
   })
 }
