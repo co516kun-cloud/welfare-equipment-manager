@@ -85,7 +85,6 @@ export function MyPage() {
   useEffect(() => {
     // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
     if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
-      console.log('🔄 MyPage: Data not initialized, loading basic data...')
       loadData()
     }
   }, [orders.length, products.length, isDataInitialized, loadData])
@@ -168,13 +167,6 @@ export function MyPage() {
   }
   
   useEffect(() => {
-    console.log('🔄 Main useEffect triggered')
-    console.log('📊 Data status:', { 
-      ordersLength: orders.length, 
-      productsLength: products.length, 
-      usersLength: users.length,
-      selectedUser 
-    })
     
     // usersまたはordersデータがある場合にupdateAvailableUsersを実行
     if (users.length > 0 || orders.length > 0) {
@@ -189,10 +181,6 @@ export function MyPage() {
   
   // 利用可能な営業マンリストを更新
   const updateAvailableUsers = () => {
-    console.log('🔍 updateAvailableUsers called')
-    console.log('📊 users.length:', users.length)
-    console.log('📊 orders.length:', orders.length)
-    console.log('👤 currentUser:', currentUser)
     
     const userSet = new Set<string>()
     
@@ -204,7 +192,6 @@ export function MyPage() {
     // usersテーブルから全ユーザーを取得
     users.forEach(dbUser => {
       if (dbUser.name) {
-        console.log('👥 Adding user from users table:', dbUser.name)
         userSet.add(dbUser.name)
       }
     })
@@ -212,11 +199,9 @@ export function MyPage() {
     // 発注データからも担当者を取得（後方互換性のため）
     orders.forEach(order => {
       if (order.assigned_to) {
-        console.log('👥 Adding assigned_to:', order.assigned_to)
         userSet.add(order.assigned_to)
       }
       if (order.carried_by) {
-        console.log('👥 Adding carried_by:', order.carried_by)
         userSet.add(order.carried_by)
       }
     })
@@ -231,7 +216,6 @@ export function MyPage() {
       finalUsersList.push(currentUser)
     }
     
-    console.log('📋 Final users list:', finalUsersList)
     setAvailableUsers(finalUsersList)
   }
 

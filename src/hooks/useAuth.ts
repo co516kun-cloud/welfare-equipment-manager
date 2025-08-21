@@ -22,7 +22,6 @@ export function useAuth(): AuthState {
           const debugUser = localStorage.getItem('auth_user')
           if (debugUser) {
             const userData = JSON.parse(debugUser)
-            console.log('🔧 Debug mode: using local auth user:', userData)
             setUser(userData as User)
           } else {
             setUser(null)
@@ -58,7 +57,6 @@ export function useAuth(): AuthState {
     try {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         (_event, session) => {
-          console.log('Auth state changed:', _event, session?.user?.email)
           setUser(session?.user ?? null)
           setLoading(false)
         }

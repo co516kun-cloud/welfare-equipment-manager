@@ -37,7 +37,6 @@ export class SupabaseDatabase {
   // Categories
   async getCategories(): Promise<ProductCategory[]> {
     if (useMockDatabase()) {
-      console.log('📂 Using mock database for categories')
       return await mockDb.getCategories()
     }
     
@@ -80,7 +79,6 @@ export class SupabaseDatabase {
   // Products
   async getProducts(): Promise<Product[]> {
     if (useMockDatabase()) {
-      console.log('📦 Using mock database for products')
       return await mockDb.getProducts()
     }
     
@@ -153,7 +151,6 @@ export class SupabaseDatabase {
   // Product Items
   async getProductItems(): Promise<ProductItem[]> {
     if (useMockDatabase()) {
-      console.log('🏷️ Using mock database for product items')
       return await mockDb.getProductItems()
     }
     
@@ -169,7 +166,6 @@ export class SupabaseDatabase {
       return []
     }
     
-    console.log(`📦 Fetched ${data?.length || 0} product items (total: ${count})`)
     
     return data || []
   }
@@ -177,7 +173,6 @@ export class SupabaseDatabase {
   // 差分同期用: 指定された日時以降に更新されたアイテムを取得
   async getRecentlyUpdatedProductItems(since: string): Promise<ProductItem[]> {
     if (useMockDatabase()) {
-      console.log('🏷️ Using mock database for recently updated items')
       const items = await mockDb.getProductItems()
       // モックデータでは全件返す（実際の環境では使われない）
       return items
@@ -194,14 +189,12 @@ export class SupabaseDatabase {
       return []
     }
     
-    console.log(`🔄 Fetched ${data?.length || 0} recently updated product items since ${since}`)
     
     return data || []
   }
 
   async getProductItemsByProductId(productId: string): Promise<ProductItem[]> {
     if (useMockDatabase()) {
-      console.log('🏷️ Using mock database for product items by product')
       const items = await mockDb.getProductItems()
       return items.filter(item => item.product_id === productId)
     }
@@ -222,7 +215,6 @@ export class SupabaseDatabase {
 
   async getProductItemsByCategoryId(categoryId: string): Promise<ProductItem[]> {
     if (useMockDatabase()) {
-      console.log('🏷️ Using mock database for product items by category')
       const items = await mockDb.getProductItems()
       const products = await mockDb.getProducts()
       const categoryProducts = products.filter(p => p.category_id === categoryId)
@@ -318,7 +310,6 @@ export class SupabaseDatabase {
   // Users
   async getUsers(): Promise<User[]> {
     if (useMockDatabase()) {
-      console.log('👥 Using mock database for users')
       return await mockDb.getUsers()
     }
     
@@ -376,7 +367,6 @@ export class SupabaseDatabase {
   // Orders (完全実装)
   async getOrders(): Promise<Order[]> {
     if (useMockDatabase()) {
-      console.log('📋 Using mock database for orders')
       return await mockDb.getOrders()
     }
     
@@ -484,10 +474,7 @@ export class SupabaseDatabase {
   }
 
   async saveOrder(order: Order): Promise<void> {
-    console.log('💾 saveOrder called with:', order)
-    
     if (useMockDatabase()) {
-      console.log('🔄 Using mock database for saving order')
       return await mockDb.saveOrder(order)
     }
     
@@ -508,30 +495,25 @@ export class SupabaseDatabase {
         approved_date: order.approved_date,
         approval_notes: order.approval_notes
       }
-      console.log('📝 Order data to save:', orderData)
-
       const { error: orderError } = await supabase
         .from('orders')
         .upsert(orderData)
       
       if (orderError) {
-        console.error('❌ Error saving order to database:', orderError)
+        console.error('Error saving order to database:', orderError)
         throw orderError
       }
-      console.log('✅ Order base data saved successfully')
 
       // 既存の注文項目を削除
-      console.log('🗑️ Deleting existing order items for order:', order.id)
       const { error: deleteError } = await supabase
         .from('order_items')
         .delete()
         .eq('order_id', order.id)
       
       if (deleteError) {
-        console.error('❌ Error deleting existing order items:', deleteError)
+        console.error('Error deleting existing order items:', deleteError)
         throw deleteError
       }
-      console.log('✅ Existing order items deleted')
 
       // 新しい注文項目を挿入
       if (order.items && order.items.length > 0) {
@@ -539,19 +521,14 @@ export class SupabaseDatabase {
           ...item,
           order_id: order.id
         }))
-        console.log('📦 Order items to save:', itemsData)
-
         const { error: itemsError } = await supabase
           .from('order_items')
           .insert(itemsData)
         
         if (itemsError) {
-          console.error('❌ Error saving order items to database:', itemsError)
+          console.error('Error saving order items to database:', itemsError)
           throw itemsError
         }
-        console.log('✅ Order items saved successfully')
-      } else {
-        console.log('⚠️ No order items to save')
       }
     } catch (error) {
       console.error('Error in saveOrder:', error)
@@ -562,13 +539,11 @@ export class SupabaseDatabase {
   // Order Items
   async saveOrderItem(orderItem: OrderItem & { order_id: string }): Promise<void> {
     if (useMockDatabase()) {
-      console.log('📝 Using mock database for order item')
       // Mock database doesn't have separate order items handling
       return
     }
 
     try {
-      console.log('💾 saveOrderItem called with:', orderItem)
       
       // OrderItemをorder_itemsテーブル用にマッピング
       const orderItemData = {
@@ -599,7 +574,6 @@ export class SupabaseDatabase {
         throw error
       }
       
-      console.log('✅ Order item saved successfully')
     } catch (error) {
       console.error('Error in saveOrderItem:', error)
       throw error
@@ -841,7 +815,6 @@ export class SupabaseDatabase {
   // Batch upsert methods for import
   async upsertCategories(categories: ProductCategory[]): Promise<void> {
     if (useMockDatabase()) {
-      console.log('📂 Using mock database for batch categories upsert')
       for (const category of categories) {
         await mockDb.saveCategory(category)
       }
@@ -860,7 +833,6 @@ export class SupabaseDatabase {
 
   async upsertProducts(products: Product[]): Promise<void> {
     if (useMockDatabase()) {
-      console.log('📦 Using mock database for batch products upsert')
       for (const product of products) {
         await mockDb.saveProduct(product)
       }
@@ -879,7 +851,6 @@ export class SupabaseDatabase {
 
   async upsertProductItems(items: ProductItem[]): Promise<void> {
     if (useMockDatabase()) {
-      console.log('🏷️ Using mock database for batch product items upsert')
       for (const item of items) {
         await mockDb.saveProductItem(item)
       }
@@ -898,7 +869,6 @@ export class SupabaseDatabase {
 
   async upsertUsers(users: User[]): Promise<void> {
     if (useMockDatabase()) {
-      console.log('👥 Using mock database for batch users upsert')
       for (const user of users) {
         await mockDb.saveUser(user)
       }
@@ -918,7 +888,6 @@ export class SupabaseDatabase {
   // Delete item history
   async deleteItemHistory(historyId: string): Promise<void> {
     if (useMockDatabase()) {
-      console.log('🗑️ Using mock database for deleteItemHistory')
       return await mockDb.deleteItemHistory(historyId)
     }
     
@@ -936,7 +905,6 @@ export class SupabaseDatabase {
   // Delete order and its items
   async deleteOrder(orderId: string): Promise<void> {
     if (useMockDatabase()) {
-      console.log('🗑️ Using mock database for deleteOrder')
       return await mockDb.deleteOrder(orderId)
     }
     
@@ -976,7 +944,6 @@ export class SupabaseDatabase {
     users: User[]
     orders: Order[]
   }> {
-    console.log('🚀 Starting category-wise data loading to bypass 1000 item limit...')
     
     try {
       // 基本データを並行取得
@@ -986,30 +953,23 @@ export class SupabaseDatabase {
         this.getOrders()
       ])
       
-      console.log(`📊 Loaded basic data - Categories: ${categories.length}, Users: ${users.length}, Orders: ${orders.length}`)
       
       // 全商品を取得
       const products = await this.getProducts()
-      console.log(`📦 Loaded ${products.length} products`)
       
       // カテゴリー別に商品アイテムを取得
       const allItems: ProductItem[] = []
       let totalLoadedItems = 0
       
       for (const category of categories) {
-        console.log(`📁 Loading items for category: ${category.name} (ID: ${category.id})`)
-        
         const categoryItems = await this.getProductItemsByCategoryId(category.id)
         allItems.push(...categoryItems)
         totalLoadedItems += categoryItems.length
-        
-        console.log(`  ✅ Loaded ${categoryItems.length} items for ${category.name} (Total so far: ${totalLoadedItems})`)
         
         // 各カテゴリ読み込み後に少し待機（API負荷軽減）
         await new Promise(resolve => setTimeout(resolve, 100))
       }
       
-      console.log(`🎉 Category-wise loading completed! Total items loaded: ${allItems.length}`)
       
       return {
         categories,
@@ -1019,7 +979,7 @@ export class SupabaseDatabase {
         orders
       }
     } catch (error) {
-      console.error('❌ Error in category-wise data loading:', error)
+      console.error('Error in category-wise data loading:', error)
       throw error
     }
   }
@@ -1048,7 +1008,6 @@ export class SupabaseDatabase {
       await supabase.from('categories').delete().neq('id', '')
       await supabase.from('users').delete().neq('id', '')
       
-      console.log('All data cleared from Supabase')
     } catch (error) {
       console.error('Error clearing data:', error)
       throw error
@@ -1058,7 +1017,6 @@ export class SupabaseDatabase {
   // Demo Equipment Management
   async getDemoEquipment(): Promise<DemoEquipment[]> {
     if (useMockDatabase()) {
-      console.log('📂 Using mock database for demo equipment')
       return await mockDb.getDemoEquipment()
     }
     
@@ -1092,7 +1050,6 @@ export class SupabaseDatabase {
 
   async saveDemoEquipment(equipment: DemoEquipment): Promise<void> {
     if (useMockDatabase()) {
-      console.log('💾 Using mock database for demo equipment')
       return await mockDb.saveDemoEquipment(equipment)
     }
     
@@ -1119,7 +1076,6 @@ export class SupabaseDatabase {
 
   async deleteDemoEquipment(id: string): Promise<void> {
     if (useMockDatabase()) {
-      console.log('🗑️ Using mock database for demo equipment deletion')
       return await mockDb.deleteDemoEquipment(id)
     }
     
@@ -1137,7 +1093,6 @@ export class SupabaseDatabase {
   // Deposit Items Management
   async getDepositItems(): Promise<DepositItem[]> {
     if (useMockDatabase()) {
-      console.log('📂 Using mock database for deposit items')
       return await mockDb.getDepositItems()
     }
     
@@ -1169,7 +1124,6 @@ export class SupabaseDatabase {
 
   async saveDepositItem(item: DepositItem): Promise<void> {
     if (useMockDatabase()) {
-      console.log('💾 Using mock database for deposit item')
       return await mockDb.saveDepositItem(item)
     }
     
@@ -1194,7 +1148,6 @@ export class SupabaseDatabase {
 
   async deleteDepositItem(id: string): Promise<void> {
     if (useMockDatabase()) {
-      console.log('🗑️ Using mock database for deposit item deletion')
       return await mockDb.deleteDepositItem(id)
     }
     

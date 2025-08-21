@@ -45,7 +45,6 @@ function App() {
     const initializeData = async () => {
       // 認証されているユーザーがいて、まだデータ初期化が完了していない場合のみ実行
       if (user && hasSupabaseConfig && !dataInitialized && !dataLoading) {
-        console.log('🚀 Starting startup data initialization...')
         setDataLoading(true)
         
         try {
@@ -56,9 +55,8 @@ function App() {
           enableRealtime()
           
           setDataInitialized(true)
-          console.log('✅ Startup data initialization completed successfully!')
         } catch (error) {
-          console.error('❌ Error during startup data initialization:', error)
+          console.error('Error during startup data initialization:', error)
         } finally {
           setDataLoading(false)
         }

@@ -106,7 +106,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   
   // Actions
   loadData: async () => {
-    console.log('Loading basic data from Supabase...')
     try {
       // 商品個体以外の基本データのみ読み込み
       const [categories, products, users, orders] = await Promise.all([
@@ -128,14 +127,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       const currentState = get()
       const currentItems = currentState.items
       
-      console.log('Loaded basic data from Supabase:', {
-        categories: categories.length,
-        products: products.length,
-        users: users.length,
-        orders: orders.length,
-        preparationTasks: preparationTasks.length,
-        itemsKept: currentItems.length // 保持されたitems数をログ出力
-      })
       
       set({
         categories,
@@ -151,7 +142,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 
   loadAllDataOnStartup: async () => {
-    console.log('🚀 Loading ALL data on startup using category-wise approach...')
     try {
       // カテゴリー別読み込みで全データを取得
       const { categories, products, items, users, orders } = await supabaseDb.loadAllDataByCategory()
@@ -164,14 +154,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         console.warn('Could not load preparation tasks:', error)
       }
       
-      console.log('🎉 Startup data loading completed:', {
-        categories: categories.length,
-        products: products.length,
-        items: items.length,
-        users: users.length,
-        orders: orders.length,
-        preparationTasks: preparationTasks.length
-      })
       
       const syncTime = new Date().toISOString()
       set({
@@ -188,16 +170,13 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     } catch (error) {
       console.error('❌ Error loading startup data:', error)
       // フォールバックとして基本的なloadDataを実行
-      console.log('🔄 Falling back to basic loadData...')
       await get().loadData()
     }
   },
 
   loadItemsForCategory: async (categoryId: string) => {
-    console.log(`📦 Loading items for category: ${categoryId}`)
     try {
       const items = await supabaseDb.getProductItemsByCategoryId(categoryId)
-      console.log(`✅ Loaded ${items.length} items for category ${categoryId}`)
       set({ items })
     } catch (error) {
       console.error('Error loading items for category:', error)
@@ -205,10 +184,8 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 
   loadItemsForProduct: async (productId: string) => {
-    console.log(`📦 Loading items for product: ${productId}`)
     try {
       const items = await supabaseDb.getProductItemsByProductId(productId)
-      console.log(`✅ Loaded ${items.length} items for product ${productId}`)
       set({ items })
     } catch (error) {
       console.error('Error loading items for product:', error)
@@ -227,7 +204,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   }),
   
   updateItemStatus: async (itemId, status) => {
-    console.log(`🚀 Optimistic updateItemStatus called: ${itemId} -> ${status}`)
     
     const { items } = get()
     const targetItem = items.find(i => i.id === itemId)
@@ -246,7 +222,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     const updatedItems = items.map(i => i.id === itemId ? updatedItem : i)
     set({ items: updatedItems })
     get().clearItemsCache()
-    console.log('⚡ Optimistic update applied to store (notes reset)')
     
     try {
       // 2. データベース保存（非同期）
@@ -466,7 +441,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
                   )
                   set({ items: updatedItems })
                   currentState.clearItemsCache()
-                  console.log('⚡ Individual item updated in store:', newData.id)
                   
                 } else if (eventType === 'INSERT' && newData) {
                   // 新しいアイテムの追加
@@ -510,7 +484,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     
     // チャネルを購読
     channel.subscribe((status) => {
-      console.log(`📡 Realtime channel status:`, status)
       if (status === 'SUBSCRIBED') {
         console.log('✅ Successfully connected to realtime updates!')
       }
