@@ -6,6 +6,8 @@ import { Select } from './ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { supabaseDb } from '../lib/supabase-database'
 import { useInventoryStore } from '../stores/useInventoryStore'
+import { MaintenanceChecklist, type ChecklistResult } from './maintenance-checklist'
+import { getCategoryIdByName } from '../lib/maintenance-checklist-config'
 import type { ProductItem, Product, Order, OrderItem } from '../types'
 
 interface SelectedItem extends ProductItem {
@@ -42,6 +44,9 @@ export function ScanActionDialog({
     orderItemId: '',
     photos: [] as string[]
   })
+  
+  const [showMaintenanceChecklist, setShowMaintenanceChecklist] = useState(false)
+  const [checklistResult, setChecklistResult] = useState<ChecklistResult | null>(null)
 
   // フォームをリセット
   const resetForm = () => {
@@ -53,6 +58,8 @@ export function ScanActionDialog({
       orderItemId: '',
       photos: []
     })
+    setChecklistResult(null)
+    setShowMaintenanceChecklist(false)
   }
 
   // 写真撮影機能
@@ -81,6 +88,17 @@ export function ScanActionDialog({
       ...prev, 
       photos: prev.photos.filter((_, i) => i !== index)
     }))
+  }
+  
+  // チェックリスト完了処理
+  const handleChecklistComplete = (result: ChecklistResult) => {
+    setChecklistResult(result)
+    console.log('Checklist completed:', result)
+  }
+  
+  // チェックリストボタンの処理
+  const handleOpenChecklist = () => {
+    setShowMaintenanceChecklist(true)
   }
 
   const getAvailableActions = (status: string) => {
@@ -207,6 +225,15 @@ export function ScanActionDialog({
         historyMetadata.orderItemId = actionForm.orderItemId
       }
       
+      // チェックリストデータの準備（メンテナンス処理の場合）
+      const finalChecklistData = actionType === 'maintenance' ? 
+        (checklistResult || {
+          allItemsOK: true,
+          checkedItems: {},
+          checkedAt: new Date().toISOString(),
+          method: 'quick' // チェックリストボタンを押さなかった場合
+        }) : undefined
+
       await supabaseDb.createItemHistory(
         selectedItem.id,
         newCondition === 'needs_repair' ? '故障中へ変更' : action.label,
@@ -225,7 +252,8 @@ export function ScanActionDialog({
             actionType: actionType,
             conditionChanged: newCondition === 'needs_repair',
             originalNextStatus: action.nextStatus,
-            photoCount: actionType === 'maintenance' ? actionForm.photos.length : 0
+            photoCount: actionType === 'maintenance' ? actionForm.photos.length : 0,
+            maintenanceChecklist: finalChecklistData
           }
         }
       )
@@ -425,6 +453,37 @@ export function ScanActionDialog({
             </div>
           )}
           
+          {/* メンテナンス処理の場合のチェックリストボタン */}
+          {actionType === 'maintenance' && selectedItem?.product && (
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <Label>点検チェックリスト</Label>
+                  <p className="text-xs text-muted-foreground">
+                    異常がある場合のみ記録してください
+                  </p>
+                </div>
+                {checklistResult && (
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    checklistResult.allItemsOK 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {checklistResult.allItemsOK ? '✅ 全項目OK' : '⚠️ 異常項目あり'}
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleOpenChecklist}
+              >
+                📋 異常項目を記録
+              </Button>
+            </div>
+          )}
+          
           <div className="flex justify-end space-x-2 pt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               キャンセル
@@ -435,6 +494,17 @@ export function ScanActionDialog({
           </div>
         </div>
       </DialogContent>
+      
+      {/* メンテナンスチェックリスト */}
+      {selectedItem?.product && (
+        <MaintenanceChecklist
+          isOpen={showMaintenanceChecklist}
+          onClose={() => setShowMaintenanceChecklist(false)}
+          productCategoryId={getCategoryIdByName(selectedItem.product.category) || selectedItem.product.category}
+          productName={selectedItem.product.name}
+          onComplete={handleChecklistComplete}
+        />
+      )}
     </Dialog>
   )
 }
