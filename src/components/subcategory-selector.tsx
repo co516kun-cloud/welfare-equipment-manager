@@ -23,9 +23,50 @@ export function SubcategorySelector({
 }: SubcategorySelectorProps) {
   const config = getChecklistConfig(productCategoryId)
   
-  // サブカテゴリがない商品の場合は何も表示しない
-  if (!config?.subcategories) {
+  // チェックリスト設定がない場合は何も表示しない
+  if (!config) {
     return null
+  }
+  
+  // サブカテゴリがない商品の場合は直接チェックリストボタンのみ表示
+  if (!config.subcategories) {
+    return (
+      <div className="border-t pt-4">
+        <div className="space-y-3">
+          <div>
+            <Label>📋 点検チェックリスト</Label>
+            <p className="text-xs text-muted-foreground">
+              問題がある場合のみ詳細チェック
+            </p>
+          </div>
+          
+          <div className="flex items-center justify-between mb-2">
+            {checklistResult && (
+              <span className={`px-2 py-1 rounded-full text-xs ${
+                checklistResult.allItemsOK 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {checklistResult.allItemsOK ? '✅ 全項目OK' : '⚠️ 異常項目あり'}
+              </span>
+            )}
+          </div>
+          
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onOpenChecklist()
+            }}
+          >
+            📋 チェックリスト
+          </Button>
+        </div>
+      </div>
+    )
   }
   
   const handleSubcategoryToggle = (subcategoryId: string) => {
