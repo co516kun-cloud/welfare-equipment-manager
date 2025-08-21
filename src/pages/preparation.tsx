@@ -800,9 +800,9 @@ export function Preparation() {
       ) : (
         sortedGroups.map(([groupKey, group]) => {
           const isExpanded = expandedGroups[groupKey] !== false // デフォルトで展開
-          const groupPriorityColor = group.priority === 'high' ? 'border-l-red-500 bg-red-50/50' :
-                                   group.priority === 'medium' ? 'border-l-yellow-500 bg-yellow-50/50' :
-                                   'border-l-blue-500 bg-blue-50/50'
+          const groupPriorityColor = group.priority === 'high' ? 'border-l-red-500 bg-white' :
+                                   group.priority === 'medium' ? 'border-l-yellow-500 bg-white' :
+                                   'border-l-blue-500 bg-white'
           
           return (
             <div key={groupKey} className={`bg-card rounded-xl border border-border shadow-sm border-l-4 ${groupPriorityColor}`}>
