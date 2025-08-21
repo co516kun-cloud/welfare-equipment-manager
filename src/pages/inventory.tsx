@@ -534,6 +534,7 @@ export function Inventory() {
                 <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">ステータス</th>
                 <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">状態</th>
                 <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">場所/顧客</th>
+                <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">状態メモ</th>
                 <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">QRコード</th>
                 <th className="text-left py-4 px-6 font-medium text-muted-foreground whitespace-nowrap">操作</th>
               </tr>
@@ -573,6 +574,15 @@ export function Inventory() {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-foreground">{getLocationDisplay()}</td>
+                    <td className="py-4 px-6 text-foreground text-sm max-w-48">
+                      {item.condition_notes ? (
+                        <span className="truncate block" title={item.condition_notes}>
+                          {item.condition_notes}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
                     <td className="py-4 px-6 text-foreground font-mono text-sm">{item.qr_code}</td>
                     <td className="py-4 px-6">
                       <div className="flex space-x-2">
@@ -660,6 +670,12 @@ export function Inventory() {
                     </span>
                     <span className="text-sm text-foreground">{getLocationDisplay()}</span>
                   </div>
+                  {item.condition_notes && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">状態メモ:</span>
+                      <span className="text-sm text-foreground">{item.condition_notes}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">

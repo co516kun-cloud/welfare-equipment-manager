@@ -304,6 +304,12 @@ export function ItemDetail() {
                 <p className="text-sm text-muted-foreground">現在の場所</p>
                 <p className="font-medium text-foreground">{item.location}</p>
               </div>
+              {item.condition_notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground">状態メモ</p>
+                  <p className="font-medium text-foreground">{item.condition_notes}</p>
+                </div>
+              )}
             </div>
             
             {item.notes && (
