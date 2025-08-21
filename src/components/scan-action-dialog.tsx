@@ -194,8 +194,8 @@ export function ScanActionDialog({
         }
       }
 
-      // 状態メモはメンテナンス済み、入庫処理、修理完了時のみ保存
-      const shouldSaveConditionNotes = ['maintenance', 'storage', 'repair'].includes(actionType)
+      // 状態メモはメンテナンス済み、修理完了時のみ保存
+      const shouldSaveConditionNotes = ['maintenance', 'repair'].includes(actionType)
       const newConditionNotes = shouldSaveConditionNotes ? actionForm.conditionNotes : selectedItem.condition_notes
       
       // 商品状態が「要修理」の場合はステータスを「故障中」に変更
@@ -211,7 +211,7 @@ export function ScanActionDialog({
       if (
         (actionForm.condition && actionForm.condition !== selectedItem.condition) ||
         (actionForm.location && actionForm.location !== selectedItem.location) ||
-        (shouldSaveConditionNotes && actionForm.conditionNotes !== selectedItem.condition_notes)
+        (shouldSaveConditionNotes && actionForm.conditionNotes !== (selectedItem.condition_notes || ''))
       ) {
         const updatedItem: ProductItem = {
           id: selectedItem.id,
