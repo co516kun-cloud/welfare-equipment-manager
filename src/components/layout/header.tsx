@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react'
 import { RealtimeStatus } from '../realtime-status'
 import { useAuth, logout } from '../../hooks/useAuth'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useNotificationStore } from '../../stores/useNotificationStore'
+import { generateNotifications } from '../../lib/notification-generator'
 
 export function Header() {
   const [isMobile, setIsMobile] = useState(false)
@@ -10,6 +12,17 @@ export function Header() {
   const { user, loading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const { unreadCount } = useNotificationStore()
+  
+  // 定期的に通知をチェック（5分ごと）
+  useEffect(() => {
+    generateNotifications() // 初回実行
+    const interval = setInterval(() => {
+      generateNotifications()
+    }, 5 * 60 * 1000) // 5分
+    
+    return () => clearInterval(interval)
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -102,11 +115,18 @@ export function Header() {
               <RealtimeStatus />
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="text-white p-2 relative hover:bg-white/10">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-white p-2 relative hover:bg-white/10"
+            onClick={() => navigate('/notifications')}
+          >
             <span className="text-xl">🔔</span>
-            <span className="absolute -top-1 -right-1 bg-rose-500 text-white h-5 w-5 rounded-full text-xs flex items-center justify-center font-bold shadow-md">
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-rose-500 text-white h-5 w-5 rounded-full text-xs flex items-center justify-center font-bold shadow-md">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </Button>
         </div>
         
@@ -247,9 +267,19 @@ export function Header() {
         </div>
         <div className="flex items-center space-x-4">
           <RealtimeStatus />
-          <Button variant="ghost" size="sm" className="text-warning">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-warning"
+            onClick={() => navigate('/notifications')}
+          >
             <span className="mr-2">🔔</span>
-            通知 <span className="ml-1 bg-warning text-warning-foreground px-1.5 py-0.5 rounded-full text-xs">3</span>
+            通知 
+            {unreadCount > 0 && (
+              <span className="ml-1 bg-warning text-warning-foreground px-1.5 py-0.5 rounded-full text-xs">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </Button>
           {user && (
             <>
