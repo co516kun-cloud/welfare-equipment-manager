@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Header } from './header'
 import { MobileBottomNav } from './mobile-bottom-nav'
 import { ApprovalBanner } from './approval-banner'
+import { MobileRefreshFab } from '../mobile-refresh-fab'
 import { useState, useEffect } from 'react'
 import { useInventoryStore } from '../../stores/useInventoryStore'
 // Database initialization is now handled by the useInventoryStore
@@ -66,6 +67,7 @@ export function Layout() {
           <Outlet />
         </main>
         <MobileBottomNav />
+        {isMobile && <MobileRefreshFab />}
       </div>
     )
   }

@@ -4,6 +4,7 @@ import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
 import { useAuth } from './hooks/useAuth'
 import { useInventoryStore } from './stores/useInventoryStore'
+import { useRealtimeNotificationStore } from './stores/useRealtimeNotificationStore'
 import { DebugApp } from './components/debug/debug-app'
 import { Scan } from './pages/scan'
 import { Inventory } from './pages/inventory'
@@ -30,15 +31,16 @@ function App() {
   const hasSupabaseConfig = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
   
   // フックを条件分岐の前に呼ぶ（Hooks順序の問題を解決）
-  const authResult = hasSupabaseConfig ? useAuth() : { user: null, loading: false }
-  const { user, loading } = authResult
+  const authResult = useAuth()
+  const { user, loading } = hasSupabaseConfig ? authResult : { user: null, loading: false }
   
   // データ初期化のための状態
   const [dataInitialized, setDataInitialized] = useState(false)
   const [dataLoading, setDataLoading] = useState(false)
   
-  // ストアのloadAllDataOnStartup関数を取得
-  const { loadAllDataOnStartup, enableRealtime } = useInventoryStore()
+  // ストアの関数を取得
+  const { loadAllDataOnStartup } = useInventoryStore()
+  const { initializeRealtimeNotifications, cleanup } = useRealtimeNotificationStore()
   
   // 認証完了後にデータを初期化
   useEffect(() => {
@@ -51,8 +53,8 @@ function App() {
           // カテゴリ別でのデータ読み込みを実行
           await loadAllDataOnStartup()
           
-          // リアルタイム同期を有効化
-          enableRealtime()
+          // リアルタイム通知システムを初期化（データ同期はしない軽量版）
+          initializeRealtimeNotifications()
           
           setDataInitialized(true)
         } catch (error) {
@@ -64,7 +66,14 @@ function App() {
     }
     
     initializeData()
-  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadAllDataOnStartup, enableRealtime])
+  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadAllDataOnStartup, initializeRealtimeNotifications])
+
+  // クリーンアップ処理
+  useEffect(() => {
+    return () => {
+      cleanup()
+    }
+  }, [cleanup])
   
   // 環境変数がない場合はデバッグモードで起動
   if (!hasSupabaseConfig) {

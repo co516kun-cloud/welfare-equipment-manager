@@ -395,108 +395,8 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
 
   // Realtime functions
   enableRealtime: () => {
-    const state = get()
-    if (state.isRealtimeEnabled) return
-
-    console.log('🔄 Enabling category-wise realtime synchronization...')
-
-    // 既存の接続をクリア
-    realtimeSubscriptions.forEach(sub => {
-      if (sub && sub.unsubscribe) {
-        sub.unsubscribe()
-      }
-    })
-    realtimeSubscriptions = []
-
-    // データベースの各テーブルをリアルタイム監視（存在するテーブルのみ）
-    const tables = ['categories', 'products', 'product_items', 'orders', 'order_items', 'users']
-    
-    // 単一のチャネルで全テーブルを監視（接続効率化）
-    const channel = supabase.channel('db-changes')
-    
-    tables.forEach(table => {
-      channel.on('postgres_changes', 
-        { event: '*', schema: 'public', table: table },
-        async (payload) => {
-          console.log(`🔄 Realtime update from ${table}:`, payload)
-            
-            const currentState = get()
-            if (!currentState.isRealtimeEnabled) return
-            
-            try {
-              // テーブルに応じて効率的な更新を実行
-              if (table === 'product_items') {
-                // 商品アイテムの変更：軽量な個別更新
-                console.log('📦 Product item changed, applying lightweight update...')
-                
-                
-                const { eventType, new: newData, old: oldData } = payload
-                console.log(`🔄 ${eventType} event:`, { newData, oldData })
-                
-                if (eventType === 'UPDATE' && newData) {
-                  // 個別アイテムの更新（他のユーザーからの変更）
-                  const { items } = currentState
-                  const updatedItems = items.map(item => 
-                    item.id === newData.id ? newData : item
-                  )
-                  set({ items: updatedItems })
-                  currentState.clearItemsCache()
-                  
-                } else if (eventType === 'INSERT' && newData) {
-                  // 新しいアイテムの追加
-                  const { items } = currentState
-                  const updatedItems = [...items, newData]
-                  set({ items: updatedItems })
-                  currentState.clearItemsCache()
-                  console.log('➕ New item added to store:', newData.id)
-                  
-                } else if (eventType === 'DELETE' && oldData) {
-                  // アイテムの削除
-                  const { items } = currentState
-                  const updatedItems = items.filter(item => item.id !== oldData.id)
-                  set({ items: updatedItems })
-                  currentState.clearItemsCache()
-                  console.log('🗑️ Item removed from store:', oldData.id)
-                }
-                
-              } else if (table === 'orders' || table === 'order_items') {
-                // オーダー関連：軽量な更新のみ（頻繁に変更されるため）
-                console.log(`📊 ${table} changed, refreshing orders...`)
-                try {
-                  const orders = await supabaseDb.getOrders()
-                  set({ orders })
-                } catch (error) {
-                  console.error('Error refreshing orders:', error)
-                }
-              } else {
-                // その他のテーブル：基本的なloadDataのみ
-                console.log(`📊 ${table} changed, reloading basic data...`)
-                await currentState.loadData()
-              }
-              
-              set({ lastSyncTime: new Date().toISOString() })
-            } catch (error) {
-              console.error('❌ Error during realtime sync:', error)
-            }
-          }
-        )
-    })
-    
-    // チャネルを購読
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Successfully connected to realtime updates!')
-      }
-    })
-    
-    realtimeSubscriptions.push(channel)
-
-    set({ 
-      isRealtimeEnabled: true,
-      lastSyncTime: new Date().toISOString()
-    })
-    
-    console.log('✅ Category-wise realtime synchronization enabled!')
+    // リアルタイム同期は無効化（軽量通知システムを代わりに使用）
+    console.log('ℹ️ Realtime synchronization is disabled - using lightweight notification system')
   },
 
   disableRealtime: () => {
@@ -586,13 +486,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
 if (typeof window !== 'undefined') {
   // リアルタイム同期を一時的に無効化
   console.log('ℹ️ Realtime synchronization is temporarily disabled')
-  // window.addEventListener('load', () => {
-  //   setTimeout(() => {
-  //     const store = useInventoryStore.getState()
-  //     console.log('🚀 Auto-enabling realtime synchronization...')
-  //     store.enableRealtime()
-  //   }, 1000)
-  // })
+  // Auto-enabling realtime synchronization is disabled - using lightweight notification system instead
   
   // ページを離れる時にリアルタイム同期を停止
   window.addEventListener('beforeunload', () => {

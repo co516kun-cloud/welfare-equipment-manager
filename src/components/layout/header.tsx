@@ -5,6 +5,7 @@ import { useAuth, logout } from '../../hooks/useAuth'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useNotificationStore } from '../../stores/useNotificationStore'
 import { generateNotifications } from '../../lib/notification-generator'
+import { GlobalRefreshButton } from '../global-refresh-button'
 
 export function Header() {
   const [isMobile, setIsMobile] = useState(false)
@@ -267,6 +268,7 @@ export function Header() {
         </div>
         <div className="flex items-center space-x-4">
           <RealtimeStatus />
+          <GlobalRefreshButton />
           <Button 
             variant="ghost" 
             size="sm" 
