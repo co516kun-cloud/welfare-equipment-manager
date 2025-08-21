@@ -98,15 +98,6 @@ export function ScanActionDialog({
   
   // チェックリストボタンの処理
   const handleOpenChecklist = () => {
-    console.log('チェックリストボタンがクリックされました')
-    console.log('selectedItem?.product:', selectedItem?.product)
-    console.log('category_id:', selectedItem?.product?.category_id)
-    console.log('category:', selectedItem?.product?.category)
-    
-    const categoryId = selectedItem?.product?.category_id || selectedItem?.product?.category
-    const mappedCategoryId = getCategoryIdByName(categoryId) || categoryId
-    console.log('使用するcategoryId:', mappedCategoryId)
-    
     setShowMaintenanceChecklist(true)
   }
 
