@@ -2,6 +2,7 @@ import { Button } from '../components/ui/button'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
+import { getChecklistConfig } from '../lib/maintenance-checklist-config'
 import type { ProductItem, Product, ItemHistory } from '../types'
 
 export function ItemDetail() {
@@ -11,6 +12,7 @@ export function ItemDetail() {
   const [product, setProduct] = useState<Product | null>(null)
   const [histories, setHistories] = useState<ItemHistory[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedChecklist, setExpandedChecklist] = useState<string | null>(null)
 
   useEffect(() => {
     if (itemId) {
@@ -100,6 +102,65 @@ export function ItemDetail() {
     if (action.includes('入庫')) return '📥'
     if (action.includes('デモ')) return '🎯'
     return '📋'
+  }
+
+  const renderChecklistDetails = (history: ItemHistory) => {
+    const checklistData = history.metadata?.maintenanceChecklist
+    if (!checklistData || !product) return null
+
+    const config = getChecklistConfig(product.category_id || product.category || 'beds')
+    if (!config) return null
+
+    const currentItems = checklistData.subcategory 
+      ? config.subcategories?.find(sub => sub.id === checklistData.subcategory)?.items || []
+      : config.items || []
+
+    const currentSubcategoryName = checklistData.subcategory 
+      ? config.subcategories?.find(sub => sub.id === checklistData.subcategory)?.name
+      : null
+
+    return (
+      <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">📋 チェックリスト結果</span>
+            {currentSubcategoryName && (
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                {currentSubcategoryName}
+              </span>
+            )}
+          </div>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+            checklistData.allItemsOK 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-red-100 text-red-800'
+          }`}>
+            {checklistData.allItemsOK ? '✅ 全項目OK' : '⚠️ 異常項目あり'}
+          </span>
+        </div>
+        
+        <div className="text-xs text-gray-600 mb-2">
+          実施方法: {checklistData.method === 'detailed' ? '詳細チェック' : 'クイックチェック'} 
+          ({new Date(checklistData.checkedAt).toLocaleString('ja-JP')})
+        </div>
+
+        {checklistData.method === 'detailed' && currentItems.length > 0 && (
+          <div className="space-y-1">
+            {currentItems.map(item => {
+              const isChecked = checklistData.checkedItems[item.id] !== false
+              return (
+                <div key={item.id} className={`flex items-center gap-2 text-xs p-2 rounded ${
+                  isChecked ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}>
+                  <span>{isChecked ? '✅' : '❌'}</span>
+                  <span>{item.name}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (loading) {
@@ -283,6 +344,23 @@ export function ItemDetail() {
                           <p className="text-xs text-muted-foreground mt-1">
                             備考: {history.notes}
                           </p>
+                        )}
+                        
+                        {/* メンテナンス履歴の場合のチェックリスト詳細 */}
+                        {history.action.includes('メンテナンス') && history.metadata?.maintenanceChecklist && (
+                          <div className="mt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setExpandedChecklist(
+                                expandedChecklist === history.id ? null : history.id
+                              )}
+                              className="text-xs h-6 px-2"
+                            >
+                              {expandedChecklist === history.id ? '📋 チェックリスト詳細を隠す' : '📋 チェックリスト詳細を表示'}
+                            </Button>
+                            {expandedChecklist === history.id && renderChecklistDetails(history)}
+                          </div>
                         )}
                       </div>
                     </div>
