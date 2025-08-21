@@ -18,6 +18,8 @@ interface RealtimeNotificationState {
 // リアルタイム通知専用ストア（軽量）
 export const useRealtimeNotificationStore = create<RealtimeNotificationState>((set, get) => {
   let notificationChannel: any = null
+  let reconnectAttempts = 0
+  const MAX_RECONNECT_ATTEMPTS = 3
 
   return {
     // 初期状態
@@ -50,6 +52,12 @@ export const useRealtimeNotificationStore = create<RealtimeNotificationState>((s
       if (notificationChannel) {
         notificationChannel.unsubscribe()
       }
+      
+      // 初期化時に再接続回数をリセット（手動呼び出し時）
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts = 0
+        console.log('🔄 Manual reconnection attempt - resetting counter')
+      }
 
       // 軽量通知専用チャンネルを作成
       notificationChannel = supabase
@@ -79,12 +87,18 @@ export const useRealtimeNotificationStore = create<RealtimeNotificationState>((s
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             console.log('✅ Lightweight notification system connected')
+            reconnectAttempts = 0 // リセット成功
           } else if (status === 'CHANNEL_ERROR') {
             console.error('❌ Notification channel error')
-            // 5秒後に再接続を試行
-            setTimeout(() => {
-              get().initializeRealtimeNotifications()
-            }, 5000)
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttempts++
+              console.log(`🔄 Retrying connection (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
+              setTimeout(() => {
+                get().initializeRealtimeNotifications()
+              }, 5000)
+            } else {
+              console.warn('⚠️ Max reconnection attempts reached. Lightweight notifications disabled.')
+            }
           }
         })
     },
