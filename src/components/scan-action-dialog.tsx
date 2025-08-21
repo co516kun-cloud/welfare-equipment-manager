@@ -370,7 +370,7 @@ export function ScanActionDialog({
             </div>
           )}
           
-          {(actionType === 'maintenance' || actionType === 'storage' || actionType === 'repair') && (
+          {(actionType === 'maintenance' || actionType === 'repair') && (
             <div>
               <Label htmlFor="conditionNotes">状態メモ</Label>
               <Input
