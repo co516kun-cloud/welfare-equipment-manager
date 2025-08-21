@@ -158,7 +158,12 @@ export function Menu() {
     items: items.filter(i => i.status === 'available').length,
     orders: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
-    ready: orders.filter(o => o.status === 'approved').length,
+    ready: orders
+      .filter(o => o.status === 'preparing')
+      .flatMap(order => order.items.filter(item => 
+        item.assigned_item_ids && item.assigned_item_ids.length > 0
+      ))
+      .reduce((total, item) => total + (item.assigned_item_ids?.length || 0), 0),
   }
 
   // 認証ユーザーから現在のユーザー名を取得（バッジ用）
