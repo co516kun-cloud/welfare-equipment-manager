@@ -137,7 +137,7 @@ export function ItemDetail() {
             </span>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-600">実施者:</span>
               <span className="ml-2 font-medium text-gray-900">{history.performed_by}</span>
@@ -146,12 +146,6 @@ export function ItemDetail() {
               <span className="text-gray-600">実施日時:</span>
               <span className="ml-2 font-medium text-gray-900">
                 {new Date(checklistData.checkedAt).toLocaleString('ja-JP')}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-600">点検方法:</span>
-              <span className="ml-2 font-medium text-gray-900">
-                {checklistData.method === 'detailed' ? '詳細点検' : '簡易点検'}
               </span>
             </div>
           </div>
