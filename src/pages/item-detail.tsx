@@ -119,46 +119,119 @@ export function ItemDetail() {
       ? config.subcategories?.find(sub => sub.id === checklistData.subcategory)?.name
       : null
 
+    const okCount = currentItems.filter(item => checklistData.checkedItems[item.id] !== false).length
+    const ngCount = currentItems.length - okCount
+
     return (
-      <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">📋 チェックリスト結果</span>
-            {currentSubcategoryName && (
-              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+      <div className="mt-3 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+        {/* ヘッダー情報 */}
+        <div className="mb-4 pb-3 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-base font-semibold text-gray-900">📋 メンテナンス点検記録</h4>
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              checklistData.allItemsOK 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {checklistData.allItemsOK ? '✅ 全項目正常' : '⚠️ 異常あり'}
+            </span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div>
+              <span className="text-gray-600">実施者:</span>
+              <span className="ml-2 font-medium text-gray-900">{history.performed_by}</span>
+            </div>
+            <div>
+              <span className="text-gray-600">実施日時:</span>
+              <span className="ml-2 font-medium text-gray-900">
+                {new Date(checklistData.checkedAt).toLocaleString('ja-JP')}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-600">点検方法:</span>
+              <span className="ml-2 font-medium text-gray-900">
+                {checklistData.method === 'detailed' ? '詳細点検' : '簡易点検'}
+              </span>
+            </div>
+          </div>
+
+          {currentSubcategoryName && (
+            <div className="mt-2">
+              <span className="text-gray-600">点検種別:</span>
+              <span className="ml-2 inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
                 {currentSubcategoryName}
               </span>
-            )}
-          </div>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            checklistData.allItemsOK 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
-            {checklistData.allItemsOK ? '✅ 全項目OK' : '⚠️ 異常項目あり'}
-          </span>
-        </div>
-        
-        <div className="text-xs text-gray-600 mb-2">
-          実施方法: {checklistData.method === 'detailed' ? '詳細チェック' : 'クイックチェック'} 
-          ({new Date(checklistData.checkedAt).toLocaleString('ja-JP')})
+            </div>
+          )}
         </div>
 
-        {checklistData.method === 'detailed' && currentItems.length > 0 && (
-          <div className="space-y-1">
-            {currentItems.map(item => {
-              const isChecked = checklistData.checkedItems[item.id] !== false
-              return (
-                <div key={item.id} className={`flex items-center gap-2 text-xs p-2 rounded ${
-                  isChecked ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-                }`}>
-                  <span>{isChecked ? '✅' : '❌'}</span>
-                  <span>{item.name}</span>
-                </div>
-              )
-            })}
+        {/* 集計情報 */}
+        <div className="mb-4 flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+            <span className="text-gray-600">正常項目: <span className="font-semibold text-green-700">{okCount}項目</span></span>
           </div>
-        )}
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+            <span className="text-gray-600">異常項目: <span className="font-semibold text-red-700">{ngCount}項目</span></span>
+          </div>
+          <div className="text-gray-600">
+            全体: <span className="font-semibold">{currentItems.length}項目</span>
+          </div>
+        </div>
+
+        {/* 全項目の詳細 */}
+        <div className="space-y-2">
+          <h5 className="text-sm font-medium text-gray-700 mb-3">点検項目詳細</h5>
+          {currentItems.map((item, index) => {
+            const isChecked = checklistData.checkedItems[item.id] !== false
+            return (
+              <div key={item.id} className={`flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
+                isChecked 
+                  ? 'border-green-200 bg-green-50' 
+                  : 'border-red-200 bg-red-50'
+              }`}>
+                <div className="flex-shrink-0">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    isChecked 
+                      ? 'bg-green-500 text-white' 
+                      : 'bg-red-500 text-white'
+                  }`}>
+                    {index + 1}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{isChecked ? '✅' : '❌'}</span>
+                    <span className={`font-medium ${
+                      isChecked ? 'text-green-800' : 'text-red-800'
+                    }`}>
+                      {item.name}
+                    </span>
+                  </div>
+                  <div className="text-xs mt-1">
+                    <span className={`px-2 py-1 rounded-full font-medium ${
+                      isChecked 
+                        ? 'bg-green-200 text-green-800' 
+                        : 'bg-red-200 text-red-800'
+                    }`}>
+                      {isChecked ? '正常' : '異常・要確認'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* フッター情報 */}
+        <div className="mt-4 pt-3 border-t border-gray-200 text-xs text-gray-500">
+          <div className="flex justify-between items-center">
+            <span>記録ID: {history.id}</span>
+            <span>商品ID: {history.item_id}</span>
+          </div>
+        </div>
       </div>
     )
   }
