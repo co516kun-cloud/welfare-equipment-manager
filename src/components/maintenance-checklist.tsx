@@ -31,6 +31,13 @@ export function MaintenanceChecklist({
   
   const config = getChecklistConfig(productCategoryId)
   
+  console.log('MaintenanceChecklist props:', {
+    isOpen,
+    productCategoryId,
+    productName,
+    config
+  })
+  
   useEffect(() => {
     if (isOpen && config) {
       // デフォルトで全項目をチェック済みにする
