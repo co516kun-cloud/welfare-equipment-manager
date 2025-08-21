@@ -629,7 +629,7 @@ export function Preparation() {
             priority: isUrgent ? 'high' : 'medium',
             dueDate: order.required_date,
             lastUpdated: order.order_date,
-            notes: order.notes || '準備待ち',
+            notes: order.notes || '',
             quantity: 1, // 個別アイテムなので常に1
             totalQuantity: item.quantity,
             approvalStatus: item.approval_status,
