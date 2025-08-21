@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { supabaseDb } from '../lib/supabase-database'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { MaintenanceChecklist, type ChecklistResult } from './maintenance-checklist'
-import { getCategoryIdByName } from '../lib/maintenance-checklist-config'
+import { SubcategorySelector } from './subcategory-selector'
+import { getCategoryIdByName, getChecklistConfig } from '../lib/maintenance-checklist-config'
 import type { ProductItem, Product, Order, OrderItem } from '../types'
 
 interface SelectedItem extends ProductItem {
@@ -47,6 +48,7 @@ export function ScanActionDialog({
   
   const [showMaintenanceChecklist, setShowMaintenanceChecklist] = useState(false)
   const [checklistResult, setChecklistResult] = useState<ChecklistResult | null>(null)
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
 
   // フォームをリセット
   const resetForm = () => {
@@ -60,6 +62,7 @@ export function ScanActionDialog({
     })
     setChecklistResult(null)
     setShowMaintenanceChecklist(false)
+    setSelectedSubcategory(null)
   }
 
   // 写真撮影機能
@@ -155,6 +158,16 @@ export function ScanActionDialog({
     const action = getAvailableActions(selectedItem.status).find(a => a.key === actionType)
     if (!action) return
 
+    // メンテナンス処理で、サブカテゴリが必要な商品の場合の検証
+    if (actionType === 'maintenance' && selectedItem.product) {
+      const categoryId = selectedItem.product.category_id || selectedItem.product.category
+      const config = getChecklistConfig(categoryId)
+      if (config?.subcategories && !selectedSubcategory) {
+        alert('点検項目の種類を選択してください')
+        return
+      }
+    }
+
     try {
       // 発注に割り当てる場合の特別処理
       if (actionType === 'assign_to_order') {
@@ -230,6 +243,7 @@ export function ScanActionDialog({
         (checklistResult || {
           allItemsOK: true,
           checkedItems: {},
+          subcategory: selectedSubcategory || undefined,
           checkedAt: new Date().toISOString(),
           method: 'quick' // チェックリストボタンを押さなかった場合
         }) : undefined
@@ -453,39 +467,15 @@ export function ScanActionDialog({
             </div>
           )}
           
-          {/* メンテナンス処理の場合のチェックリストボタン */}
+          {/* メンテナンス処理の場合のサブカテゴリ選択とチェックリスト */}
           {actionType === 'maintenance' && selectedItem?.product && (
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <Label>点検チェックリスト</Label>
-                  <p className="text-xs text-muted-foreground">
-                    問題がある場合のみチェックリストで記録
-                  </p>
-                </div>
-                {checklistResult && (
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    checklistResult.allItemsOK 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {checklistResult.allItemsOK ? '✅ 全項目OK' : '⚠️ 異常項目あり'}
-                  </span>
-                )}
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  handleOpenChecklist()
-                }}
-              >
-                📋 チェックリスト
-              </Button>
-            </div>
+            <SubcategorySelector
+              productCategoryId={selectedItem.product.category_id || selectedItem.product.category || 'beds'}
+              selectedSubcategory={selectedSubcategory}
+              onSubcategoryChange={setSelectedSubcategory}
+              onOpenChecklist={handleOpenChecklist}
+              checklistResult={checklistResult}
+            />
           )}
           
           <div className="flex justify-end space-x-2 pt-4">
@@ -506,6 +496,7 @@ export function ScanActionDialog({
           onClose={() => setShowMaintenanceChecklist(false)}
           productCategoryId={selectedItem.product.category_id || selectedItem.product.category || 'beds'}
           productName={selectedItem.product.name}
+          selectedSubcategory={selectedSubcategory}
           onComplete={handleChecklistComplete}
         />
       )}

@@ -8,6 +8,7 @@ interface MaintenanceChecklistProps {
   onClose: () => void
   productCategoryId: string
   productName: string
+  selectedSubcategory?: string | null
   onComplete: (checklistData: ChecklistResult) => void
 }
 
@@ -24,6 +25,7 @@ export function MaintenanceChecklist({
   onClose,
   productCategoryId,
   productName,
+  selectedSubcategory: propSelectedSubcategory,
   onComplete
 }: MaintenanceChecklistProps) {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
@@ -47,11 +49,11 @@ export function MaintenanceChecklist({
   }, [isOpen, config, selectedSubcategory])
   
   useEffect(() => {
-    // ダイアログを開く時にサブカテゴリをリセット
+    // ダイアログを開く時にサブカテゴリを設定（プロパティから取得）
     if (isOpen) {
-      setSelectedSubcategory(null)
+      setSelectedSubcategory(propSelectedSubcategory || null)
     }
-  }, [isOpen])
+  }, [isOpen, propSelectedSubcategory])
   
   if (!config) {
     return null
