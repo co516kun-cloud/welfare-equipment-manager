@@ -98,6 +98,8 @@ export function ScanActionDialog({
   
   // チェックリストボタンの処理
   const handleOpenChecklist = () => {
+    console.log('チェックリストボタンがクリックされました')
+    console.log('selectedItem?.product:', selectedItem?.product)
     setShowMaintenanceChecklist(true)
   }
 
@@ -460,7 +462,7 @@ export function ScanActionDialog({
                 <div>
                   <Label>点検チェックリスト</Label>
                   <p className="text-xs text-muted-foreground">
-                    異常がある場合のみ記録してください
+                    問題がある場合のみチェックリストで記録
                   </p>
                 </div>
                 {checklistResult && (
@@ -477,9 +479,13 @@ export function ScanActionDialog({
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={handleOpenChecklist}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleOpenChecklist()
+                }}
               >
-                📋 異常項目を記録
+                📋 チェックリスト
               </Button>
             </div>
           )}
