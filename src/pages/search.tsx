@@ -10,7 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
 
 export function Search() {
-  const { products, items, orders, categories, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
+  const { products, items, categories, users, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   
@@ -49,13 +49,7 @@ export function Search() {
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list')
   
   
-  useEffect(() => {
-    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
-    if (!isDataInitialized && products.length === 0) {
-      console.log('🔄 Search page: Data not initialized, loading basic data...')
-      loadData()
-    }
-  }, [products.length, isDataInitialized, loadData])
+  // 商品検索ページはproduct_itemsのみを使用（App.tsxで初期化済み）
   
   // 検索実行
   const handleSearch = async () => {
@@ -114,47 +108,29 @@ export function Search() {
           if (searchFilters.dateTo && loanDate > new Date(searchFilters.dateTo)) return false
         }
         
+        // 担当者フィルター（商品アイテムの担当者情報を使用）
+        if (searchFilters.assignedTo && 
+            !item.assigned_to?.toLowerCase().includes(searchFilters.assignedTo.toLowerCase())) {
+          return false
+        }
+        
         return true
       })
       
-      // 商品情報を追加して結果を整形
+      // 商品情報を追加して結果を整形（注文情報は削除）
       results = filteredItems.map(item => {
         const product = products.find(p => p.id === item.product_id)
         const category = categories.find(c => c.id === product?.category_id)
         
-        // 関連する発注情報を検索
-        let orderInfo = null
-        for (const order of orders) {
-          const orderItem = order.items.find(oi => 
-            oi.assigned_item_ids?.includes(item.id)
-          )
-          if (orderItem) {
-            orderInfo = {
-              orderId: order.id,
-              assignedTo: order.assigned_to,
-              carriedBy: order.carried_by,
-              orderDate: order.order_date,
-              requiredDate: order.required_date,
-            }
-            break
-          }
-        }
-        
         return {
           ...item,
           product: product,
-          category: category,
-          orderInfo: orderInfo
+          category: category
+          // orderInfo は削除 - 発注管理ページで確認
         }
       })
       
-      // 担当者フィルター（発注情報がある場合）
-      if (searchFilters.assignedTo) {
-        results = results.filter(result => 
-          result.orderInfo?.assignedTo?.toLowerCase().includes(searchFilters.assignedTo.toLowerCase()) ||
-          result.orderInfo?.carriedBy?.toLowerCase().includes(searchFilters.assignedTo.toLowerCase())
-        )
-      }
+      // 担当者フィルターは上記のループ内で処理済み
       
       setSearchResults(results)
     } catch (error) {
