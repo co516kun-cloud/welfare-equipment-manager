@@ -56,10 +56,10 @@ export function History() {
 
   const loadProducts = async () => {
     try {
+      // 履歴ページでは商品マスタのみ取得（アイテムは不要）
       const allProducts = await supabaseDb.getProducts()
-      const allItems = await supabaseDb.getProductItems()
       setProducts(allProducts)
-      setProductItems(allItems)
+      console.log(`✅ Loaded ${allProducts.length} products for history page`)
     } catch (error) {
       console.error('❌ Error loading product data:', error)
     }

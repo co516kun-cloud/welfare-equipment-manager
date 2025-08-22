@@ -39,34 +39,37 @@ function App() {
   const [dataLoading, setDataLoading] = useState(false)
   
   // ストアの関数を取得
-  const { loadAllDataOnStartup } = useInventoryStore()
+  const { loadInitialData } = useInventoryStore()
   const { initializeRealtimeNotifications, cleanup } = useRealtimeNotificationStore()
   
   // 認証完了後にデータを初期化
   useEffect(() => {
-    const initializeData = async () => {
+    const initializeApp = async () => {
       // 認証されているユーザーがいて、まだデータ初期化が完了していない場合のみ実行
       if (user && hasSupabaseConfig && !dataInitialized && !dataLoading) {
         setDataLoading(true)
         
         try {
-          // カテゴリ別でのデータ読み込みを実行
-          await loadAllDataOnStartup()
+          // シンプルな一括読み込み（カテゴリー分けなし）
+          await loadInitialData()
           
           // リアルタイム通知システムを初期化（データ同期はしない軽量版）
           initializeRealtimeNotifications()
           
           setDataInitialized(true)
+          console.log('✅ App initialization complete')
+          
         } catch (error) {
-          console.error('Error during startup data initialization:', error)
+          console.error('❌ App initialization failed:', error)
+          // TODO: エラー時のフォールバック処理
         } finally {
           setDataLoading(false)
         }
       }
     }
     
-    initializeData()
-  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadAllDataOnStartup, initializeRealtimeNotifications])
+    initializeApp()
+  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadInitialData, initializeRealtimeNotifications])
 
   // クリーンアップ処理
   useEffect(() => {
@@ -85,14 +88,19 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">
-            {loading ? '認証確認中...' : 'データベース初期化中...'}
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground font-medium">
+            {loading ? '認証確認中...' : '商品データを読み込んでいます...'}
           </p>
           {dataLoading && (
-            <p className="text-xs text-muted-foreground">
-              カテゴリ別にデータを読み込んでいます
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">
+                初回読み込みには少し時間がかかります
+              </p>
+              <p className="text-xs text-muted-foreground">
+                約2000件のデータを準備しています
+              </p>
+            </div>
           )}
         </div>
       </div>

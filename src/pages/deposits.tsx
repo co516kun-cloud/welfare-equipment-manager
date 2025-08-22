@@ -10,6 +10,8 @@ export function Deposits() {
   const [depositItems, setDepositItems] = useState<DepositItem[]>([])
   const [filteredItems, setFilteredItems] = useState<DepositItem[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   
   // 新規登録ダイアログ用の状態
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -25,18 +27,25 @@ export function Deposits() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [itemToDelete, setItemToDelete] = useState<DepositItem | null>(null)
 
-  // 初回データロードはApp.tsxで処理されるため、ここでは不要
-  // useEffect(() => {
-  //   loadData()
-  // }, [])
+  // 預かり物ページ用のデータをオンデマンド読み込み
+  useEffect(() => {
+    loadData()
+  }, [])
 
   const loadData = async () => {
     try {
+      setIsLoading(true)
+      setLoadError(null)
+      console.log('📦 Loading deposit items...')
       const data = await supabaseDb.getDepositItems()
       setDepositItems(data)
       setFilteredItems(data)
+      console.log(`✅ Loaded ${data.length} deposit items`)
     } catch (error) {
       console.error('Error loading deposit items:', error)
+      setLoadError('預かり物データの読み込みに失敗しました')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -126,6 +135,30 @@ export function Deposits() {
       console.error('Error deleting deposit item:', error)
       alert('削除中にエラーが発生しました')
     }
+  }
+
+  // ローディング中の表示
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="text-white">預かり物データを読み込んでいます...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // エラー時の表示
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-red-400">{loadError}</p>
+          <Button onClick={() => loadData()}>再読み込み</Button>
+        </div>
+      </div>
+    )
   }
 
   return (

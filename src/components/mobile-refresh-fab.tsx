@@ -9,7 +9,7 @@ interface MobileRefreshFabProps {
 export function MobileRefreshFab({ className = '' }: MobileRefreshFabProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { hasNewChanges, changeCount, clearNotifications } = useRealtimeNotificationStore()
-  const { loadAllDataOnStartup } = useInventoryStore()
+  const { loadIncrementalUpdates } = useInventoryStore()
 
   const handleRefresh = async () => {
     if (isRefreshing) return
@@ -17,8 +17,10 @@ export function MobileRefreshFab({ className = '' }: MobileRefreshFabProps) {
     setIsRefreshing(true)
     
     try {
-      await loadAllDataOnStartup()
+      // 差分更新を実行
+      await loadIncrementalUpdates()
       clearNotifications()
+      console.log('🔄 Mobile refresh completed (incremental)')
       
       // 成功フィードバック
       await new Promise(resolve => setTimeout(resolve, 300))

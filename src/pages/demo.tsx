@@ -8,6 +8,8 @@ import type { DemoEquipment } from '../types'
 
 export function Demo() {
   const [demoEquipment, setDemoEquipment] = useState<DemoEquipment[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [showLoanDialog, setShowLoanDialog] = useState(false)
   const [selectedEquipment, setSelectedEquipment] = useState<DemoEquipment | null>(null)
   const [activeTab, setActiveTab] = useState<'available' | 'demo'>('available')
@@ -26,17 +28,24 @@ export function Demo() {
   })
   const [addError, setAddError] = useState('')
 
-  // 初回データロードはApp.tsxで処理されるため、ここでは不要
-  // useEffect(() => {
-  //   loadData()
-  // }, [])
+  // デモページ用のデータをオンデマンド読み込み
+  useEffect(() => {
+    loadData()
+  }, [])
 
   const loadData = async () => {
     try {
+      setIsLoading(true)
+      setLoadError(null)
+      console.log('📦 Loading demo equipment...')
       const data = await supabaseDb.getDemoEquipment()
       setDemoEquipment(data)
+      console.log(`✅ Loaded ${data.length} demo equipment`)
     } catch (error) {
       console.error('Error loading demo equipment:', error)
+      setLoadError('デモ機器データの読み込みに失敗しました')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -188,6 +197,30 @@ export function Demo() {
 
   // タブ別にデータをフィルタ
   const filteredEquipment = demoEquipment.filter(item => item.status === activeTab)
+
+  // ローディング中の表示
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="text-white">デモ機器データを読み込んでいます...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // エラー時の表示
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-red-400">{loadError}</p>
+          <Button onClick={() => loadData()}>再読み込み</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 dark:bg-slate-900/80 backdrop-blur-lg relative overflow-hidden">

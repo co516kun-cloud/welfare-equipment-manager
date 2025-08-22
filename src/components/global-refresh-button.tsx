@@ -10,7 +10,7 @@ interface GlobalRefreshButtonProps {
 export function GlobalRefreshButton({ className = '' }: GlobalRefreshButtonProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const { hasNewChanges, changeCount, clearNotifications } = useRealtimeNotificationStore()
-  const { loadAllDataOnStartup } = useInventoryStore()
+  const { loadIncrementalUpdates } = useInventoryStore()
 
   const handleRefresh = async () => {
     if (isRefreshing) return
@@ -18,8 +18,10 @@ export function GlobalRefreshButton({ className = '' }: GlobalRefreshButtonProps
     setIsRefreshing(true)
     
     try {
-      await loadAllDataOnStartup()
+      // 差分更新を実行
+      await loadIncrementalUpdates()
       clearNotifications()
+      console.log('🔄 Manual refresh completed (incremental)')
     } catch (error) {
       console.error('Error refreshing data:', error)
     } finally {

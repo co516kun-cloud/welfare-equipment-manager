@@ -38,6 +38,8 @@ interface InventoryState {
   // Actions
   loadData: () => Promise<void>
   loadAllDataOnStartup: () => Promise<void>
+  loadInitialData: () => Promise<void>
+  loadIncrementalUpdates: () => Promise<void>
   loadItemsForCategory: (categoryId: string) => Promise<void>
   loadItemsForProduct: (productId: string) => Promise<void>
   clearItemsCache: () => void
@@ -142,35 +144,43 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 
   loadAllDataOnStartup: async () => {
+    // 新しいloadInitialDataを呼び出す
+    await get().loadInitialData()
+  },
+
+  // 新しい初期読み込み関数（シンプルな一括取得）
+  loadInitialData: async () => {
     try {
-      // カテゴリー別読み込みで全データを取得
-      const { categories, products, items, users, orders } = await supabaseDb.loadAllDataByCategory()
+      console.log('🚀 Loading initial data...')
+      const startTime = Date.now()
       
-      // preparation_tasksは個別にロード（テーブルが存在しない可能性があるため）
-      let preparationTasks: PreparationTask[] = []
-      try {
-        preparationTasks = await supabaseDb.getPreparationTasks()
-      } catch (error) {
-        console.warn('Could not load preparation tasks:', error)
-      }
+      // 並列で全データを一括取得（カテゴリー分けなし）
+      const [categories, products, users, productItems] = await Promise.all([
+        supabaseDb.getCategories(),        // マスタデータ
+        supabaseDb.getProducts(),          // マスタデータ
+        supabaseDb.getUsers(),             // マスタデータ
+        supabaseDb.getAllProductItems()    // 全商品アイテム一括取得
+      ])
       
+      const elapsed = Date.now() - startTime
+      console.log(`✅ Initial data loaded in ${elapsed}ms`)
+      console.log(`📦 Categories: ${categories.length}, Products: ${products.length}, Items: ${productItems.length}`)
       
       const syncTime = new Date().toISOString()
       set({
         categories,
         products,
-        items,
-        orders,
-        preparationTasks,
         users,
+        items: productItems,  // 全アイテムを一括セット
+        orders: [],          // 注文データはオンデマンド読み込み
+        preparationTasks: [], // 準備タスクもオンデマンド読み込み
         lastSyncTime: syncTime,
-        lastFullSyncTime: syncTime, // 初回データ読み込み時に全同期時刻も設定
-        isDataInitialized: true // 初期化完了フラグを設定
+        lastFullSyncTime: syncTime,
+        isDataInitialized: true
       })
     } catch (error) {
-      console.error('❌ Error loading startup data:', error)
-      // フォールバックとして基本的なloadDataを実行
-      await get().loadData()
+      console.error('❌ Error loading initial data:', error)
+      throw error  // エラーは呼び出し元で処理
     }
   },
 
@@ -189,6 +199,47 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       set({ items })
     } catch (error) {
       console.error('Error loading items for product:', error)
+    }
+  },
+  
+  // 差分更新用の関数（手動更新で使用）
+  loadIncrementalUpdates: async () => {
+    const { lastFullSyncTime, items } = get()
+    
+    if (!lastFullSyncTime) {
+      // 初回同期していない場合は全件取得
+      console.log('⚠️ No previous sync found, loading all data...')
+      return get().loadInitialData()
+    }
+    
+    try {
+      console.log(`🔄 Loading incremental updates since ${lastFullSyncTime}...`)
+      
+      // 最終同期時刻以降の変更のみ取得
+      const updatedItems = await supabaseDb.getRecentlyUpdatedProductItems(lastFullSyncTime)
+      
+      if (updatedItems.length > 0) {
+        // 差分をマージ
+        const itemMap = new Map(items.map(item => [item.id, item]))
+        
+        updatedItems.forEach(item => {
+          itemMap.set(item.id, item)  // 追加または更新
+        })
+        
+        const mergedItems = Array.from(itemMap.values())
+        set({ 
+          items: mergedItems,
+          lastFullSyncTime: new Date().toISOString()
+        })
+        
+        console.log(`✅ Updated ${updatedItems.length} items (total: ${mergedItems.length})`)
+      } else {
+        console.log('✅ No changes since last sync')
+        set({ lastFullSyncTime: new Date().toISOString() })
+      }
+    } catch (error) {
+      console.error('❌ Error loading incremental updates:', error)
+      throw error
     }
   },
   

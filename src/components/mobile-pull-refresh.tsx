@@ -15,7 +15,7 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
   
   const containerRef = useRef<HTMLDivElement>(null)
   const { clearNotifications } = useRealtimeNotificationStore()
-  const { loadAllDataOnStartup } = useInventoryStore()
+  const { loadIncrementalUpdates } = useInventoryStore()
 
   const PULL_THRESHOLD = 80 // プルリフレッシュが発動する距離
   const MAX_PULL_DISTANCE = 120 // 最大プル距離
@@ -52,8 +52,10 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
       setIsRefreshing(true)
       
       try {
-        await loadAllDataOnStartup()
+        // 差分更新を実行
+        await loadIncrementalUpdates()
         clearNotifications()
+        console.log('🔄 Pull refresh completed (incremental)')
         
         // 成功フィードバック
         await new Promise(resolve => setTimeout(resolve, 500))
@@ -65,7 +67,7 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
     }
 
     setPullDistance(0)
-  }, [isPulling, pullDistance, isRefreshing, loadAllDataOnStartup, clearNotifications])
+  }, [isPulling, pullDistance, isRefreshing, loadIncrementalUpdates, clearNotifications])
 
   useEffect(() => {
     const container = containerRef.current

@@ -10,10 +10,15 @@ import { supabaseDb } from '../lib/supabase-database'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 export function Orders() {
-  const { orders, products, users, items, createOrder, loadData, updateItemStatus, getProductAvailableStock, isDataInitialized } = useInventoryStore()
+  const { products, users, items, createOrder, updateItemStatus, getProductAvailableStock } = useInventoryStore()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  
+  // ローカル状態で注文データを管理
+  const [orders, setOrders] = useState<any[]>([])
+  const [ordersLoading, setOrdersLoading] = useState(true)
+  const [ordersError, setOrdersError] = useState<string | null>(null)
 
   // 認証ユーザーから現在のユーザー名を取得
   const getCurrentUserName = () => {
@@ -29,13 +34,27 @@ export function Orders() {
   
   const currentUser = getCurrentUserName()
   
+  // 注文データをオンデマンドで読み込み
   useEffect(() => {
-    // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
-    if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
-      console.log('🔄 Orders page: Data not initialized, loading basic data...')
-      loadData()
+    const loadOrdersData = async () => {
+      setOrdersLoading(true)
+      setOrdersError(null)
+      
+      try {
+        console.log('📦 Loading orders data...')
+        const ordersData = await supabaseDb.getOrders()
+        setOrders(ordersData)
+        console.log(`✅ Loaded ${ordersData.length} orders`)
+      } catch (error) {
+        console.error('Failed to load orders:', error)
+        setOrdersError('注文データの読み込みに失敗しました')
+      } finally {
+        setOrdersLoading(false)
+      }
     }
-  }, [orders.length, products.length, isDataInitialized, loadData])
+    
+    loadOrdersData()
+  }, [])
 
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false)
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
@@ -409,6 +428,30 @@ export function Orders() {
     approved: orders.filter(o => o.status === 'approved').length,
     ready: orders.filter(o => o.status === 'ready').length,
     delivered: orders.filter(o => o.status === 'delivered').length,
+  }
+
+  // ローディング中の表示
+  if (ordersLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+          <p className="text-white">注文データを読み込んでいます...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // エラー時の表示
+  if (ordersError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-red-400">{ordersError}</p>
+          <Button onClick={() => window.location.reload()}>再読み込み</Button>
+        </div>
+      </div>
+    )
   }
 
   return (

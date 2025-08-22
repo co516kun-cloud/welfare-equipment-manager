@@ -170,6 +170,19 @@ export class SupabaseDatabase {
     return data || []
   }
 
+  // 全商品アイテムを一括取得（初回読み込み用）
+  async getAllProductItems(): Promise<ProductItem[]> {
+    console.log('📦 Fetching all product items...')
+    const startTime = Date.now()
+    
+    const items = await this.getProductItems()
+    
+    const elapsed = Date.now() - startTime
+    console.log(`✅ Loaded ${items.length} product items in ${elapsed}ms`)
+    
+    return items
+  }
+
   // 差分同期用: 指定された日時以降に更新されたアイテムを取得
   async getRecentlyUpdatedProductItems(since: string): Promise<ProductItem[]> {
     if (useMockDatabase()) {
