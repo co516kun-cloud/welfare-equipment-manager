@@ -36,8 +36,8 @@ export function MobileRefreshFab({ className = '' }: MobileRefreshFabProps) {
       onClick={handleRefresh}
       disabled={isRefreshing}
       className={`
-        fixed bottom-4 right-4 z-50
-        w-14 h-14 rounded-full shadow-lg
+        fixed top-20 right-4 z-40
+        w-12 h-12 rounded-full shadow-lg
         flex items-center justify-center
         transition-all duration-300 hover:scale-110 active:scale-95
         ${hasNewChanges 
@@ -49,13 +49,13 @@ export function MobileRefreshFab({ className = '' }: MobileRefreshFabProps) {
       `}
     >
       {/* メインアイコン */}
-      <span className={`text-xl ${isRefreshing ? 'animate-spin' : ''}`}>
+      <span className={`text-lg ${isRefreshing ? 'animate-spin' : ''}`}>
         {isRefreshing ? '🔄' : '↻'}
       </span>
       
       {/* 通知バッジ */}
       {hasNewChanges && changeCount > 0 && !isRefreshing && (
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center shadow-lg">
+        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-1 py-0.5 rounded-full min-w-[18px] text-center shadow-lg">
           {changeCount > 99 ? '99+' : changeCount}
         </span>
       )}
