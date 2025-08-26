@@ -632,7 +632,8 @@ export function MyPage() {
           name: item.name,
           orderItemId: item.orderItemId,
           assignedItemId: item.assignedItemId,
-          readyForDelivery: item.readyForDelivery
+          readyForDelivery: item.readyForDelivery,
+          isOwnItem: selectedUser === currentUser
         })
         
         if (item.assignedItemId && item.orderItemId) {
@@ -659,10 +660,15 @@ export function MyPage() {
             }
             await supabaseDb.saveProductItem(updatedProductItem)
             
+            // 自分の商品か代理配送かで履歴を分ける
+            const isOwnDelivery = selectedUser === currentUser
+            const actionText = isOwnDelivery ? '一括配送完了（貸与開始）' : '一括代理配送完了（貸与開始）'
+            const deliveryType = isOwnDelivery ? 'batch' : 'batch_proxy'
+            
             // 配送完了の履歴を記録
             await supabaseDb.createItemHistory(
               productItem.id,
-              '一括配送完了（貸与開始）',
+              actionText,
               productItem.status,
               'rented' as const,
               currentUser,
@@ -671,8 +677,10 @@ export function MyPage() {
                 customer_name: item.customer,
                 metadata: {
                   orderId: item.orderId,
-                  deliveryType: 'batch',
+                  deliveryType: deliveryType,
                   deliverer: currentUser,
+                  originalAssignee: isOwnDelivery ? currentUser : selectedUser,
+                  proxyDeliverer: isOwnDelivery ? undefined : currentUser,
                   deliveryDate: new Date().toISOString()
                 }
               }
@@ -693,9 +701,14 @@ export function MyPage() {
         processedOrderItemIds: Array.from(processedOrderItemIds)
       })
       
+      const isOwnDelivery = selectedUser === currentUser
+      const completionMessage = isOwnDelivery 
+        ? `${selectedDisplayItems.length}件の項目が配送完了しました`
+        : `${selectedUser}さんの代理で${selectedDisplayItems.length}件の項目が配送完了しました`
+      
       setSelectedItems(new Set())
       loadData()
-      alert(`${selectedDisplayItems.length}件の項目が配送完了しました`)
+      alert(completionMessage)
     } catch (error) {
       console.error('Batch delivery error:', error)
       alert('一括配送完了処理中にエラーが発生しました')
@@ -1092,6 +1105,24 @@ export function MyPage() {
           ) : (
             // 他の営業マンの商品の場合
             <div className="space-y-2">
+              {item.readyForDelivery && (
+                <>
+                  {/* チェックボックス */}
+                  <div className="flex items-center justify-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedItems.has(item.id)}
+                      onChange={() => handleSelectItem(item.id)}
+                      className="w-4 h-4 mr-2"
+                      id={`checkbox-${item.id}`}
+                    />
+                    <label htmlFor={`checkbox-${item.id}`} className="text-xs text-gray-600">
+                      一括代理配送用
+                    </label>
+                  </div>
+                </>
+              )}
+              
               <div className="grid grid-cols-2 gap-2">
                 <Button 
                   size="sm" 
@@ -1863,6 +1894,35 @@ export function MyPage() {
             </span>
           </div>
         </div>
+        
+        {/* デスクトップ版一括処理ボタン */}
+        {(() => {
+          const readyItems = displayedItems.filter(item => item.readyForDelivery)
+          console.log('🔍 [DEBUG] Desktop Batch buttons - readyItems:', readyItems.length)
+          
+          return readyItems.length > 0 && (
+            <div className="flex items-center justify-center gap-3 mb-6 p-4 bg-white/10 rounded-lg border border-white/20">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSelectAllDeliveryItems}
+                className="text-xs bg-white/10 border-white/30 text-white hover:bg-white/20"
+              >
+                {selectedItems.size === readyItems.length ? '選択解除' : '全選択'} ({readyItems.length}件)
+              </Button>
+              {selectedItems.size > 0 && (
+                <Button
+                  size="sm"
+                  onClick={handleBatchDelivery}
+                  className="bg-success hover:bg-success/90 text-success-foreground text-xs"
+                >
+                  <span className="mr-1">🚚</span>
+                  {selectedUser === currentUser ? '一括配送完了' : '一括代理配送'} ({selectedItems.size})
+                </Button>
+              )}
+            </div>
+          )
+        })()}
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           {displayedItems.length === 0 ? (
