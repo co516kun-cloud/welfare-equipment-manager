@@ -35,12 +35,10 @@ export function MobileBottomNav() {
   const preparationCount = orders.flatMap(order => 
     order.items
       .filter(item => {
-        // 準備待ち状態のアイテムをフィルタ
-        return (
-          (item.approval_status === 'not_required' && item.item_processing_status === 'waiting') ||
-          (item.approval_status === 'approved' && item.item_processing_status === 'waiting') ||
-          (order.status === 'approved' && item.item_processing_status !== 'ready')
-        )
+        // 準備画面と同じ条件: 承認済みかつ準備待ち状態のアイテムのみ
+        const isApproved = order.status === 'approved' || item.approval_status === 'not_required'
+        const isWaiting = item.item_processing_status === 'waiting'
+        return isApproved && isWaiting
       })
       .flatMap(item => {
         const individualItems = []
