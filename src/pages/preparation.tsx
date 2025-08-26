@@ -97,18 +97,10 @@ export function Preparation() {
         return
       }
       
-      // 少し待ってから自動で割り当て処理を実行
-      setTimeout(async () => {
-        try {
-          console.log('📱 Calling handleQRAssign with qrScanItem:', qrScanItem)
-          await handleQRAssign()
-        } catch (error) {
-          console.error('🔥 Error in auto QR assign:', error)
-          setScanError(`QR処理エラー: ${error instanceof Error ? error.message : String(error)}`)
-          // 手動入力モードに切り替え
-          setUseCameraScanner(false)
-        }
-      }, 100) // タイミングを短縮
+      // 状態更新のタイミング問題を回避するため、QRコードを直接渡す
+      console.log('📱 Calling handleQRAssignWithCode with:', { qrCode, qrScanItem })
+      await handleQRAssignWithCode(qrCode, qrScanItem)
+      
     } catch (error) {
       console.error('🔥 Error in handleCameraScanResult:', error)
       setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
@@ -121,6 +113,159 @@ export function Preparation() {
     console.error('📱 Camera error:', error)
     setCameraError(error)
     setUseCameraScanner(false)
+  }
+
+  // QRコードと対象アイテムを直接受け取る割り当て処理（状態更新タイミング問題を回避）
+  const handleQRAssignWithCode = async (qrCode: string, targetItem: any) => {
+    try {
+      console.log('🔧 Starting QR assignment with direct params:', {
+        qrCode,
+        targetItem
+      })
+      
+      if (!qrCode.trim()) {
+        setScanError('QRコードを入力してください')
+        return
+      }
+
+      if (!targetItem) {
+        setScanError('準備対象商品が選択されていません')
+        return
+      }
+
+      setScanError('')
+      
+      // QRコードからアイテムを検索
+      console.log('🔧 Fetching product items...')
+      const items = await supabaseDb.getProductItems()
+      console.log('🔧 Found', items.length, 'product items')
+      
+      const scannedItem = items.find(item => {
+        const itemQR = item.qr_code?.trim()
+        const inputQR = qrCode.trim()
+        // 大文字小文字を無視して比較
+        return itemQR && itemQR.toLowerCase() === inputQR.toLowerCase()
+      })
+      
+      if (!scannedItem) {
+        setScanError('QRコードに対応するアイテムが見つかりません')
+        return
+      }
+
+      // 商品IDが一致するかチェック
+      const expectedProductId = targetItem.product_id
+      const productIdMatch = scannedItem.product_id?.toLowerCase() === expectedProductId?.toLowerCase()
+      
+      if (!productIdMatch) {
+        setScanError(`商品種類が一致しません。期待: ${expectedProductId}, 実際: ${scannedItem.product_id}`)
+        return
+      }
+
+      // 利用可能状態かチェック
+      if (scannedItem.status !== 'available') {
+        setScanError(`このアイテムは利用できません (状態: ${scannedItem.status})`)
+        return
+      }
+
+      console.log('🔧 Scanned item validation passed, updating order...')
+
+      // 発注データを取得して更新
+      const order = await supabaseDb.getOrderById(targetItem.orderId)
+      if (!order) {
+        setScanError('発注が見つかりません')
+        return
+      }
+
+      const orderItem = order.items.find(item => item.id === targetItem.itemId)
+      if (!orderItem) {
+        setScanError('発注アイテムが見つかりません')
+        return
+      }
+
+      // assigned_item_idsを更新
+      const updatedItems = order.items.map(item => {
+        if (item.id === targetItem.itemId) {
+          const currentAssigned = item.assigned_item_ids || []
+          // targetItem.individualIndex の位置に scannedItem.id を設定
+          const newAssigned = [...currentAssigned]
+          newAssigned[targetItem.individualIndex] = scannedItem.id
+          
+          const isFullyAssigned = newAssigned.every((id, index) => 
+            index < item.quantity ? id !== null && id !== undefined : true
+          )
+          
+          return {
+            ...item,
+            assigned_item_ids: newAssigned,
+            item_processing_status: isFullyAssigned ? 'ready' as const : 'waiting' as const
+          }
+        }
+        return item
+      })
+
+      // 全てのアイテムが ready かチェック
+      const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
+
+      const updatedOrder = {
+        ...order,
+        items: updatedItems,
+        status: allReady ? 'ready' as const : 'approved' as const
+      }
+
+      await supabaseDb.saveOrder(updatedOrder)
+
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(scannedItem.id, 'ready_for_delivery')
+      
+      // customer_name も更新が必要な場合は追加で保存
+      if (scannedItem.customer_name !== order.customer_name) {
+        const updatedProductItem = {
+          ...scannedItem,
+          status: 'ready_for_delivery' as const,
+          customer_name: order.customer_name,
+        }
+        await supabaseDb.saveProductItem(updatedProductItem)
+      }
+
+      // 履歴を記録
+      await supabaseDb.createItemHistory(
+        scannedItem.id,
+        '準備完了',
+        scannedItem.status,
+        'ready_for_delivery',
+        currentUser,
+        {
+          location: scannedItem.location,
+          customerName: order.customer_name,
+          notes: '',
+          metadata: {
+            orderId: targetItem.orderId,
+            orderItemId: targetItem.itemId,
+            assignmentMethod: 'qr_scan',
+            previousStatus: scannedItem.status,
+            previousLocation: scannedItem.location,
+            previousNotes: scannedItem.notes,
+            assignedToOrder: `発注${targetItem.orderId}`
+          }
+        }
+      )
+
+      // データ再読み込み
+      await loadData()
+      
+      // ダイアログを閉じる
+      setShowQRScanDialog(false)
+      setQrScanItem(null)
+      setQrCodeInput('')
+      
+      alert(`アイテム ${scannedItem.id} を発注に割り当てました`)
+
+    } catch (error) {
+      console.error('🔥 QR割り当てエラー (direct params):', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setScanError(`割り当て処理中にエラーが発生しました: ${errorMessage}`)
+      setUseCameraScanner(false)
+    }
   }
 
   // QRコードによる割り当て処理
