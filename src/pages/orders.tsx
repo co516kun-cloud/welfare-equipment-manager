@@ -887,14 +887,45 @@ export function Orders() {
                             })()}
                           </Select>
                         </div>
-                        <div className="w-24">
-                          <Input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateOrderItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                            placeholder="数量"
-                          />
+                        <div className="w-32 sm:w-28">
+                          <div className="flex items-center border border-input rounded-md bg-background">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-accent text-lg"
+                              onClick={() => {
+                                const newValue = Math.max(1, item.quantity - 1)
+                                updateOrderItem(index, 'quantity', newValue)
+                              }}
+                              disabled={item.quantity <= 1}
+                            >
+                              -
+                            </Button>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="99"
+                              step="1"
+                              value={item.quantity}
+                              onChange={(e) => updateOrderItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                              className="text-center border-0 h-8 w-12 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              placeholder="数量"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-accent text-lg"
+                              onClick={() => {
+                                const newValue = Math.min(99, item.quantity + 1)
+                                updateOrderItem(index, 'quantity', newValue)
+                              }}
+                              disabled={item.quantity >= 99}
+                            >
+                              +
+                            </Button>
+                          </div>
                         </div>
                         {orderForm.items.length > 1 && (
                           <Button
