@@ -42,6 +42,7 @@ export function MyPage() {
   const [selectedUser, setSelectedUser] = useState(currentUser)
   const [displayedItems, setDisplayedItems] = useState<any[]>([]) // 表示される商品
   const [availableUsers, setAvailableUsers] = useState<string[]>([]) // 利用可能な営業マンリスト
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set()) // 選択された個別order_item
   
   // サポートダイアログ用の状態
   const [showSupportDialog, setShowSupportDialog] = useState(false)
@@ -236,6 +237,7 @@ export function MyPage() {
             if (item.assigned_item_ids && item.assigned_item_ids.length > 0 &&
                 order.status !== 'delivered' &&
                 item.item_processing_status === 'ready') {
+              
               const product = products.find(p => p.id === item.product_id)
               
               // 数量分だけ個別アイテムを生成
@@ -254,10 +256,12 @@ export function MyPage() {
                       }
                     }
 
+                    
                     return {
                       id: `${order.id}-${item.id}-${index}`,
                       orderId: order.id,
                       itemId: item.id,
+                      orderItemId: item.id, // データベースの実際のorder_item ID
                       individualIndex: index,
                       name: product?.name || 'Unknown Product',
                       customer: order.customer_name,
@@ -385,22 +389,24 @@ export function MyPage() {
     }
   }
 
-  // 自分の商品の配送完了処理
+  // 個別order_itemの配送完了処理
   const handleOwnDelivery = async (item: any) => {
     
     try {
-      // 発注ステータスを配送完了に更新
-      const order = await supabaseDb.getOrderById(item.orderId)
-      if (!order) {
-        alert('発注が見つかりません')
-        return
+      console.log('🚚 Starting individual delivery for order_item:', {
+        orderItemId: item.orderItemId,
+        orderId: item.orderId,
+        productName: item.name,
+        customer: item.customer,
+        assignedItemId: item.assignedItemId
+      })
+      
+      if (!item.orderItemId) {
+        throw new Error('有効なorder_item IDが見つかりません')
       }
       
-      const updatedOrder = {
-        ...order,
-        status: 'delivered' as const
-      }
-      await supabaseDb.saveOrder(updatedOrder)
+      // order_itemのステータスを配送完了に更新
+      await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
       
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
@@ -454,18 +460,20 @@ export function MyPage() {
   const handleProxyDelivery = async (item: any) => {
     
     try {
-      // 発注ステータスを配送完了に更新
-      const order = await supabaseDb.getOrderById(item.orderId)
-      if (!order) {
-        alert('発注が見つかりません')
-        return
+      console.log('🚚 Starting proxy delivery for order_item:', {
+        orderItemId: item.orderItemId,
+        orderId: item.orderId,
+        productName: item.name,
+        customer: item.customer,
+        assignedItemId: item.assignedItemId
+      })
+      
+      if (!item.orderItemId) {
+        throw new Error('有効なorder_item IDが見つかりません')
       }
       
-      const updatedOrder = {
-        ...order,
-        status: 'delivered' as const
-      }
-      await supabaseDb.saveOrder(updatedOrder)
+      // order_itemのステータスを配送完了に更新
+      await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
       
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
@@ -513,6 +521,87 @@ export function MyPage() {
     } catch (error) {
       console.error('代理配送処理でエラーが発生しました:', error)
       alert('代理配送処理でエラーが発生しました')
+    }
+  }
+
+  // チェックボックス選択関連の関数
+  const handleSelectItem = (itemId: string) => {
+    const newSelected = new Set(selectedItems)
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId)
+    } else {
+      newSelected.add(itemId)
+    }
+    setSelectedItems(newSelected)
+  }
+
+  const handleSelectAllDeliveryItems = () => {
+    const deliveryItems = displayedItems.filter(item => item.readyForDelivery)
+    const allDeliveryIds = deliveryItems.map(item => item.orderItemId).filter(id => id)
+    
+    if (selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0) {
+      setSelectedItems(new Set())
+    } else {
+      setSelectedItems(new Set(allDeliveryIds))
+    }
+  }
+
+  // 選択されたアイテムの一括配送完了処理
+  const handleBatchDelivery = async () => {
+    if (selectedItems.size === 0) {
+      alert('配送完了する項目を選択してください')
+      return
+    }
+
+    try {
+      const orderItemIds = Array.from(selectedItems)
+      console.log(`🚚 Batch delivery for ${orderItemIds.length} items:`, orderItemIds)
+      
+      await supabaseDb.batchUpdateOrderItemStatus(orderItemIds, 'delivered', currentUser)
+      
+      // 選択されたアイテムの商品アイテムのステータスも更新
+      for (const item of displayedItems.filter(item => selectedItems.has(item.orderItemId))) {
+        if (item.assignedItemId) {
+          await updateItemStatus(item.assignedItemId, 'rented')
+          
+          const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
+          if (productItem) {
+            const updatedProductItem = {
+              ...productItem,
+              status: 'rented' as const,
+              customer_name: item.customer,
+              loan_start_date: new Date().toISOString().split('T')[0]
+            }
+            await supabaseDb.saveProductItem(updatedProductItem)
+            
+            // 配送完了の履歴を記録
+            await supabaseDb.createItemHistory(
+              productItem.id,
+              '一括配送完了（貸与開始）',
+              productItem.status,
+              'rented' as const,
+              currentUser,
+              {
+                location: `${item.customer}様宅`,
+                customer_name: item.customer,
+                metadata: {
+                  orderId: item.orderId,
+                  deliveryType: 'batch',
+                  deliverer: currentUser,
+                  deliveryDate: new Date().toISOString()
+                }
+              }
+            )
+          }
+        }
+      }
+      
+      setSelectedItems(new Set())
+      loadData()
+      alert(`${orderItemIds.length}件の項目が配送完了しました`)
+    } catch (error) {
+      console.error('Batch delivery error:', error)
+      alert('一括配送完了処理中にエラーが発生しました')
     }
   }
 
@@ -831,6 +920,20 @@ export function MyPage() {
             <div className="space-y-2">
               {item.readyForDelivery ? (
                 <>
+                  {/* チェックボックス */}
+                  <div className="flex items-center justify-center mb-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedItems.has(item.orderItemId)}
+                      onChange={() => handleSelectItem(item.orderItemId)}
+                      className="w-4 h-4 mr-2"
+                      id={`checkbox-${item.orderItemId}`}
+                    />
+                    <label htmlFor={`checkbox-${item.orderItemId}`} className="text-xs text-gray-600">
+                      一括処理用
+                    </label>
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-2">
                     <Button 
                       size="sm" 
@@ -990,9 +1093,35 @@ export function MyPage() {
 
         {/* 配送可能商品リスト（アコーディオン式） */}
         <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 mb-4 shadow-lg">
-          <h2 className="text-lg font-bold text-slate-800 mb-3">
-            {selectedUser === currentUser ? '配送可能' : `${selectedUser}さんの配送可能商品`}
-          </h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              {selectedUser === currentUser ? '配送可能' : `${selectedUser}さんの配送可能商品`}
+            </h2>
+            
+            {/* バッチ処理ボタン */}
+            {displayedItems.filter(item => item.readyForDelivery).length > 0 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSelectAllDeliveryItems}
+                  className="text-xs"
+                >
+                  {selectedItems.size === displayedItems.filter(item => item.readyForDelivery).length ? '選択解除' : '全選択'}
+                </Button>
+                {selectedItems.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={handleBatchDelivery}
+                    className="bg-success hover:bg-success/90 text-success-foreground text-xs"
+                  >
+                    <span className="mr-1">🚚</span>
+                    一括配送完了 ({selectedItems.size})
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
           
           {(() => {
             // 配送可能商品を取得
@@ -1140,6 +1269,20 @@ export function MyPage() {
                                       {isOwnItem ? (
                                         // 自分の商品の場合
                                         <div className="space-y-2">
+                                          {/* チェックボックス */}
+                                          <div className="flex items-center justify-center mb-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedItems.has(item.orderItemId)}
+                                              onChange={() => handleSelectItem(item.orderItemId)}
+                                              className="w-4 h-4 mr-2"
+                                              id={`checkbox-mobile-${item.orderItemId}`}
+                                            />
+                                            <label htmlFor={`checkbox-mobile-${item.orderItemId}`} className="text-xs text-gray-600">
+                                              一括処理用
+                                            </label>
+                                          </div>
+                                          
                                           <div className="flex space-x-2">
                                             <Button 
                                               size="sm" 

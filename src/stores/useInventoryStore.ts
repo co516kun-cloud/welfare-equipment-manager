@@ -155,16 +155,17 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       const startTime = Date.now()
       
       // 並列で全データを一括取得（カテゴリー分けなし）
-      const [categories, products, users, productItems] = await Promise.all([
+      const [categories, products, users, productItems, orders] = await Promise.all([
         supabaseDb.getCategories(),        // マスタデータ
         supabaseDb.getProducts(),          // マスタデータ
         supabaseDb.getUsers(),             // マスタデータ
-        supabaseDb.getAllProductItems()    // 全商品アイテム一括取得
+        supabaseDb.getAllProductItems(),   // 全商品アイテム一括取得
+        supabaseDb.getOrders()             // アクティブな注文のみ
       ])
       
       const elapsed = Date.now() - startTime
       console.log(`✅ Initial data loaded in ${elapsed}ms`)
-      console.log(`📦 Categories: ${categories.length}, Products: ${products.length}, Items: ${productItems.length}`)
+      console.log(`📦 Categories: ${categories.length}, Products: ${products.length}, Items: ${productItems.length}, Orders: ${orders.length}`)
       
       const syncTime = new Date().toISOString()
       set({
@@ -172,7 +173,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         products,
         users,
         items: productItems,  // 全アイテムを一括セット
-        orders: [],          // 注文データはオンデマンド読み込み
+        orders: orders,      // 注文データを初期ロードに含める（アーカイブ除く）
         preparationTasks: [], // 準備タスクもオンデマンド読み込み
         lastSyncTime: syncTime,
         lastFullSyncTime: syncTime,
@@ -204,7 +205,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   
   // 差分更新用の関数（手動更新で使用）
   loadIncrementalUpdates: async () => {
-    const { lastFullSyncTime, items } = get()
+    const { lastFullSyncTime, categories, products, users, items, orders, preparationTasks } = get()
     
     if (!lastFullSyncTime) {
       // 初回同期していない場合は全件取得
@@ -215,24 +216,110 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     try {
       console.log(`🔄 Loading incremental updates since ${lastFullSyncTime}...`)
       
-      // 最終同期時刻以降の変更のみ取得
-      const updatedItems = await supabaseDb.getRecentlyUpdatedProductItems(lastFullSyncTime)
+      // 全テーブルの最新更新時刻をチェック
+      const tablesToCheck = [
+        { name: 'categories', current: categories },
+        { name: 'products', current: products },
+        { name: 'users', current: users },
+        { name: 'product_items', current: items },
+        { name: 'orders', current: orders },
+        { name: 'preparation_tasks', current: preparationTasks }
+      ]
       
-      if (updatedItems.length > 0) {
-        // 差分をマージ
-        const itemMap = new Map(items.map(item => [item.id, item]))
-        
-        updatedItems.forEach(item => {
-          itemMap.set(item.id, item)  // 追加または更新
-        })
-        
-        const mergedItems = Array.from(itemMap.values())
+      let hasChanges = false
+      const updates: any = {}
+      
+      // 各テーブルの変更をチェック
+      for (const table of tablesToCheck) {
+        try {
+          let hasTableChanges = false
+          
+          switch (table.name) {
+            case 'categories': {
+              const latestData = await supabaseDb.getCategories()
+              if (JSON.stringify(latestData) !== JSON.stringify(table.current)) {
+                updates.categories = latestData
+                hasTableChanges = true
+              }
+              break
+            }
+            case 'products': {
+              const latestData = await supabaseDb.getProducts()
+              if (JSON.stringify(latestData) !== JSON.stringify(table.current)) {
+                updates.products = latestData
+                hasTableChanges = true
+              }
+              break
+            }
+            case 'users': {
+              const latestData = await supabaseDb.getUsers()
+              if (JSON.stringify(latestData) !== JSON.stringify(table.current)) {
+                updates.users = latestData
+                hasTableChanges = true
+              }
+              break
+            }
+            case 'product_items': {
+              const updatedItems = await supabaseDb.getRecentlyUpdatedProductItems(lastFullSyncTime)
+              if (updatedItems.length > 0) {
+                // 差分をマージ
+                const itemMap = new Map(items.map(item => [item.id, item]))
+                updatedItems.forEach(item => {
+                  itemMap.set(item.id, item)
+                })
+                updates.items = Array.from(itemMap.values())
+                hasTableChanges = true
+              }
+              break
+            }
+            case 'orders': {
+              const latestData = await supabaseDb.getOrders()
+              if (JSON.stringify(latestData) !== JSON.stringify(table.current)) {
+                updates.orders = latestData
+                hasTableChanges = true
+              }
+              break
+            }
+            case 'preparation_tasks': {
+              try {
+                const latestData = await supabaseDb.getPreparationTasks()
+                if (JSON.stringify(latestData) !== JSON.stringify(table.current)) {
+                  updates.preparationTasks = latestData
+                  hasTableChanges = true
+                }
+              } catch (error) {
+                console.warn('Could not load preparation tasks:', error)
+              }
+              break
+            }
+          }
+          
+          if (hasTableChanges) {
+            hasChanges = true
+            console.log(`📊 Changes detected in ${table.name}`)
+          }
+        } catch (error) {
+          console.error(`❌ Error checking ${table.name}:`, error)
+        }
+      }
+      
+      // Demo equipment と deposit items もチェック（別途データを保持していないので参考のみ）
+      try {
+        await supabaseDb.getDemoEquipment()
+        await supabaseDb.getDepositItems()
+      } catch (error) {
+        console.warn('Could not check demo/deposit tables:', error)
+      }
+      
+      if (hasChanges) {
+        // 変更があったデータのみ更新
         set({ 
-          items: mergedItems,
+          ...updates,
           lastFullSyncTime: new Date().toISOString()
         })
         
-        console.log(`✅ Updated ${updatedItems.length} items (total: ${mergedItems.length})`)
+        const changedTables = Object.keys(updates).join(', ')
+        console.log(`✅ Updated tables: ${changedTables}`)
       } else {
         console.log('✅ No changes since last sync')
         set({ lastFullSyncTime: new Date().toISOString() })

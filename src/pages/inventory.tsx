@@ -23,10 +23,6 @@ export function Inventory() {
     setViewMode,
     setSelectedCategory,
     setSelectedProduct,
-    loadData,
-    loadItemsForCategory,
-    loadItemsForProduct,
-    clearItemsCache,
     getInventorySummary,
     getReservations,
     resetUIState,
@@ -280,8 +276,6 @@ export function Inventory() {
 
     setShowStatusDialog(false)
     setSelectedItem(null)
-    clearItemsCache() // キャッシュをクリアしてから再読み込み
-    loadData()
     alert(`${selectedItem.id} のステータスを ${getStatusText(statusForm.status)} に変更しました`)
   }
 
@@ -327,8 +321,6 @@ export function Inventory() {
 
     setShowEditDialog(false)
     setSelectedItem(null)
-    clearItemsCache() // キャッシュをクリアしてから再読み込み
-    loadData()
     alert(`${selectedItem.id} の情報を更新しました`)
   }
 
@@ -435,11 +427,13 @@ export function Inventory() {
       // 成功メッセージ
       alert(`管理番号 ${selectedItem.id} の発注が完了しました\n発注ID: ${newOrder.id}`)
       
-      // ダイアログを閉じてリロード
+      // ダイアログを閉じる
       setShowOrderDialog(false)
       setSelectedItem(null)
-      clearItemsCache() // キャッシュをクリアしてから再読み込み
-      loadData()
+      
+      // ストアを更新して新しい発注を反映
+      const { loadIncrementalUpdates } = useInventoryStore.getState()
+      await loadIncrementalUpdates()
       
     } catch (error) {
       console.error('Order error:', error)
@@ -454,10 +448,9 @@ export function Inventory() {
           <div
             key={category.id}
             className="bg-card rounded-lg border border-border p-6 hover:bg-accent/50 cursor-pointer transition-colors"
-            onClick={async () => {
+            onClick={() => {
               setSelectedCategory(category.id)
               setViewMode('product')
-              await loadItemsForCategory(category.id)
             }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -491,10 +484,9 @@ export function Inventory() {
           <div
             key={product.id}
             className="bg-card rounded-lg border border-border p-6 hover:bg-accent/50 cursor-pointer transition-colors"
-            onClick={async () => {
+            onClick={() => {
               setSelectedProduct(product.id)
               setViewMode('item')
-              await loadItemsForProduct(product.id)
             }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -988,12 +980,8 @@ export function Inventory() {
               <Button
                 variant={viewMode === 'product' ? 'default' : 'outline'}
                 size="sm"
-                onClick={async () => {
+                onClick={() => {
                   setViewMode('product')
-                  // 選択されたカテゴリがある場合、そのデータをロード
-                  if (selectedCategory) {
-                    await loadItemsForCategory(selectedCategory)
-                  }
                 }}
               >
                 商品別
@@ -1025,13 +1013,9 @@ export function Inventory() {
           {selectedCategory && (
             <>
               <span>/</span>
-              <Button variant="ghost" size="sm" onClick={async () => {
+              <Button variant="ghost" size="sm" onClick={() => {
                 setViewMode('product')
                 setSelectedProduct(null)
-                // カテゴリのデータをロード
-                if (selectedCategory) {
-                  await loadItemsForCategory(selectedCategory)
-                }
               }}>
                 {categories.find(c => c.id === selectedCategory)?.name}
               </Button>
@@ -1229,7 +1213,7 @@ export function Inventory() {
         products={products}
         items={items}
         currentUser={currentUser}
-        onSuccess={loadData}
+        onSuccess={() => {}}
       />
       </div>
     </div>

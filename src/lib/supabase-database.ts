@@ -172,15 +172,7 @@ export class SupabaseDatabase {
 
   // 全商品アイテムを一括取得（初回読み込み用）
   async getAllProductItems(): Promise<ProductItem[]> {
-    console.log('📦 Fetching all product items...')
-    const startTime = Date.now()
-    
-    const items = await this.getProductItems()
-    
-    const elapsed = Date.now() - startTime
-    console.log(`✅ Loaded ${items.length} product items in ${elapsed}ms`)
-    
-    return items
+    return await this.getProductItems()
   }
 
   // 差分同期用: 指定された日時以降に更新されたアイテムを取得
@@ -384,10 +376,11 @@ export class SupabaseDatabase {
     }
     
     try {
-      // まず注文の基本情報を取得
+      // まず注文の基本情報を取得（アーカイブされていないもののみ）
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
+        .eq('is_archived', false)  // アーカイブされていない注文のみ
         .order('created_at', { ascending: false })
       
       if (ordersError) {
@@ -411,6 +404,7 @@ export class SupabaseDatabase {
           console.error('Error fetching order items:', itemsError)
           continue
         }
+        
 
         const order: Order = {
           id: orderData.id,
@@ -441,7 +435,7 @@ export class SupabaseDatabase {
 
   async getOrderById(id: string): Promise<Order | null> {
     try {
-      // 注文の基本情報を取得
+      // 注文の基本情報を取得（アーカイブ状態に関係なく取得）
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select('*')
@@ -506,7 +500,8 @@ export class SupabaseDatabase {
         needs_approval: order.needs_approval,
         approved_by: order.approved_by,
         approved_date: order.approved_date,
-        approval_notes: order.approval_notes
+        approval_notes: order.approval_notes,
+        is_archived: false  // 新規作成時はアクティブ状態
       }
       const { error: orderError } = await supabase
         .from('orders')
@@ -530,13 +525,20 @@ export class SupabaseDatabase {
 
       // 新しい注文項目を挿入
       if (order.items && order.items.length > 0) {
-        const itemsData = order.items.map(item => ({
-          ...item,
-          order_id: order.id
-        }))
-        const { error: itemsError } = await supabase
+        const itemsData = order.items.map(item => {
+          // 一時的なIDを新しいUUIDに置き換え
+          const newId = `OI-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          return {
+            ...item,
+            id: newId, // 新しいIDを設定
+            order_id: order.id
+          }
+        })
+        
+        const { data: insertedItems, error: itemsError } = await supabase
           .from('order_items')
           .insert(itemsData)
+          .select() // 挿入されたデータを返す
         
         if (itemsError) {
           console.error('Error saving order items to database:', itemsError)
@@ -557,7 +559,6 @@ export class SupabaseDatabase {
     }
 
     try {
-      
       // OrderItemをorder_itemsテーブル用にマッピング
       const orderItemData = {
         id: orderItem.id,
@@ -589,6 +590,80 @@ export class SupabaseDatabase {
       
     } catch (error) {
       console.error('Error in saveOrderItem:', error)
+      throw error
+    }
+  }
+
+  // 個別order_itemのステータス更新
+  async updateOrderItemStatus(orderItemId: string, status: string, updatedBy?: string): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    try {
+      const updateData: any = {
+        item_processing_status: status
+        // updated_at, updated_byカラムはテーブルに存在しないため削除
+      }
+
+      // if (updatedBy) {
+      //   updateData.updated_by = updatedBy
+      // }
+
+      // delivered_atカラムがないため、コメントアウト
+      // if (status === 'delivered') {
+      //   updateData.delivered_at = new Date().toISOString()
+      // }
+
+      const { error } = await supabase
+        .from('order_items')
+        .update(updateData)
+        .eq('id', orderItemId)
+
+      if (error) {
+        console.error('Error updating order item status:', error)
+        throw error
+      }
+      
+    } catch (error) {
+      console.error('Error in updateOrderItemStatus:', error)
+      throw error
+    }
+  }
+
+  // 複数order_itemのステータス一括更新
+  async batchUpdateOrderItemStatus(orderItemIds: string[], status: string, updatedBy?: string): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    try {
+      const updateData: any = {
+        item_processing_status: status
+        // updated_at, updated_byカラムはテーブルに存在しないため削除
+      }
+
+      // if (updatedBy) {
+      //   updateData.updated_by = updatedBy
+      // }
+
+      // delivered_atカラムがないため、コメントアウト
+      // if (status === 'delivered') {
+      //   updateData.delivered_at = new Date().toISOString()
+      // }
+
+      const { error } = await supabase
+        .from('order_items')
+        .update(updateData)
+        .in('id', orderItemIds)
+
+      if (error) {
+        console.error('Error batch updating order item status:', error)
+        throw error
+      }
+      
+    } catch (error) {
+      console.error('Error in batchUpdateOrderItemStatus:', error)
       throw error
     }
   }

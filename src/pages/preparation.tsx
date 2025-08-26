@@ -585,6 +585,8 @@ export function Preparation() {
   // 準備中のアイテムを取得（発注ステータスとアイテムステータスを組み合わせて判定）
   // 数量が2以上の場合は個別に展開
   
+  // Orders data loaded successfully
+
   const preparationItems = orders.flatMap(order => {
     if (!order.items || order.items.length === 0) {
       return []

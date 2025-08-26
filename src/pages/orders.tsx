@@ -6,18 +6,16 @@ import { Select } from '../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useAuth } from '../hooks/useAuth'
-import { supabaseDb } from '../lib/supabase-database'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 export function Orders() {
-  const { products, users, items, createOrder, updateItemStatus, getProductAvailableStock } = useInventoryStore()
+  const { products, users, items, orders, createOrder, updateItemStatus, getProductAvailableStock, loadData } = useInventoryStore()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   
-  // ローカル状態で注文データを管理
-  const [orders, setOrders] = useState<any[]>([])
-  const [ordersLoading, setOrdersLoading] = useState(true)
+  // ローカル状態管理を削除してストアのデータを使用
+  const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersError, setOrdersError] = useState<string | null>(null)
 
   // 認証ユーザーから現在のユーザー名を取得
@@ -34,26 +32,12 @@ export function Orders() {
   
   const currentUser = getCurrentUserName()
   
-  // 注文データをオンデマンドで読み込み
+  // ストアのデータが空の場合のみ読み込み
   useEffect(() => {
-    const loadOrdersData = async () => {
+    if (orders.length === 0) {
       setOrdersLoading(true)
-      setOrdersError(null)
-      
-      try {
-        console.log('📦 Loading orders data...')
-        const ordersData = await supabaseDb.getOrders()
-        setOrders(ordersData)
-        console.log(`✅ Loaded ${ordersData.length} orders`)
-      } catch (error) {
-        console.error('Failed to load orders:', error)
-        setOrdersError('注文データの読み込みに失敗しました')
-      } finally {
-        setOrdersLoading(false)
-      }
+      loadData().finally(() => setOrdersLoading(false))
     }
-    
-    loadOrdersData()
   }, [])
 
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false)
@@ -137,19 +121,12 @@ export function Orders() {
   }
 
   const handleSubmitOrder = async () => {
-    console.log('🎯 handleSubmitOrder called')
-    console.log('📋 Current orderForm:', orderForm)
-    
     try {
-      console.log('🔍 Starting order submission process...')
-      
       // Validation
       if (!orderForm.customerName || !orderForm.assignedTo || !orderForm.carriedBy || !orderForm.requiredDate) {
-        console.log('❌ Validation failed: missing required fields')
         alert('必須項目を入力してください')
         return
       }
-      console.log('✅ Basic validation passed')
 
       if (orderForm.items.some(item => !item.productId || item.quantity < 1)) {
         alert('商品と数量を正しく入力してください')
@@ -174,45 +151,47 @@ export function Orders() {
     }
 
     // Check if any items need approval and set individual approval status
-    console.log('🔍 Processing order items...')
     const itemsWithApproval = orderForm.items.flatMap((item, index) => {
       const details = getOrderItemDetails(item.productId, item.quantity)
       const result = []
       
-      // 利用可能在庫がある場合、その分を承認不要として処理
+      // 利用可能在庫がある場合、その分を個別order_itemとして処理
       if (details.availableCount > 0) {
         const availableQuantity = Math.min(details.availableCount, item.quantity)
-        result.push({
-          id: `item-${Date.now()}-${index}-available`,
-          product_id: item.productId,
-          quantity: availableQuantity,
-          needs_approval: false,
-          item_status: 'available' as const,
-          approval_status: 'not_required' as const,
-          item_processing_status: 'waiting' as const
-        })
-        console.log(`📦 Available item for ${item.productId}: ${availableQuantity}個`)
+        // 数量分だけ個別のorder_itemを作成（各quantity: 1）
+        for (let i = 0; i < availableQuantity; i++) {
+          result.push({
+            id: `item-${Date.now()}-${index}-available-${i}`,
+            product_id: item.productId,
+            quantity: 1, // 個別管理のため常に1
+            needs_approval: false,
+            item_status: 'available' as const,
+            approval_status: 'not_required' as const,
+            item_processing_status: 'waiting' as const
+          })
+        }
       }
       
-      // 残りの数量で処理中在庫がある場合、承認必要として処理
+      // 残りの数量で処理中在庫がある場合、個別order_itemとして処理
       const remainingQuantity = item.quantity - Math.min(details.availableCount, item.quantity)
       if (remainingQuantity > 0 && details.processingCount > 0) {
         const processingQuantity = Math.min(details.processingCount, remainingQuantity)
-        result.push({
-          id: `item-${Date.now()}-${index}-processing`,
-          product_id: item.productId,
-          quantity: processingQuantity,
-          needs_approval: true,
-          item_status: 'maintenance' as const,
-          approval_status: 'pending' as const,
-          item_processing_status: 'waiting' as const
-        })
-        console.log(`📦 Processing item for ${item.productId}: ${processingQuantity}個 (承認必要)`)
+        // 数量分だけ個別のorder_itemを作成（各quantity: 1）
+        for (let i = 0; i < processingQuantity; i++) {
+          result.push({
+            id: `item-${Date.now()}-${index}-processing-${i}`,
+            product_id: item.productId,
+            quantity: 1, // 個別管理のため常に1
+            needs_approval: true,
+            item_status: 'maintenance' as const,
+            approval_status: 'pending' as const,
+            item_processing_status: 'waiting' as const
+          })
+        }
       }
       
       return result
     })
-    console.log('✅ All items processed:', itemsWithApproval)
 
     // 承認が必要な商品と不要な商品を分離
     const approvalRequiredItems = itemsWithApproval.filter(item => item.needs_approval)
@@ -236,11 +215,8 @@ export function Orders() {
         items: noApprovalItems,
         status: 'approved' as const
       }
-      console.log('🚀 Creating immediate order (no approval):', immediateOrder)
-      
       try {
         await createOrder(immediateOrder)
-        console.log('✅ Immediate order created successfully')
         // 商品のステータスは変更しない（availableのまま）
       } catch (orderError) {
         console.error('❌ Error creating immediate order:', orderError)
@@ -255,11 +231,8 @@ export function Orders() {
         items: approvalRequiredItems,
         status: 'pending' as const
       }
-      console.log('⏳ Creating approval order (needs approval):', approvalOrder)
-      
       try {
         await createOrder(approvalOrder)
-        console.log('✅ Approval order created successfully')
         // 承認待ち商品のステータスは変更しない（承認後に変更）
       } catch (orderError) {
         console.error('❌ Error creating approval order:', orderError)
@@ -268,23 +241,15 @@ export function Orders() {
     }
 
     // メッセージ表示
-    console.log('💬 Showing completion message...')
-    console.log(`📊 Summary: noApproval=${noApprovalItems.length}, approval=${approvalRequiredItems.length}`)
-    
     if (noApprovalItems.length > 0 && approvalRequiredItems.length > 0) {
-      const message = `発注を分割しました。\n承認不要: ${noApprovalItems.length}商品 (承認済み)\n承認必要: ${approvalRequiredItems.length}商品 (承認待ち)`
-      console.log('💬 Showing split order message:', message)
+      const message = `発注を分割しました。\n承認不要: ${noApprovalItems.length}個 (承認済み)\n承認必要: ${approvalRequiredItems.length}個 (承認待ち)`
       alert(message)
     } else if (noApprovalItems.length > 0) {
-      const message = `発注が完了しました。${noApprovalItems.length}商品の発注が承認されました。`
-      console.log('💬 Showing no approval message:', message)
+      const message = `発注が完了しました。${noApprovalItems.length}個の発注が承認されました。`
       alert(message)
     } else if (approvalRequiredItems.length > 0) {
-      const message = `発注が完了しました。${approvalRequiredItems.length}商品が承認待ちになりました。`
-      console.log('💬 Showing approval required message:', message)
+      const message = `発注が完了しました。${approvalRequiredItems.length}個が承認待ちになりました。`
       alert(message)
-    } else {
-      console.log('⚠️ No items to process - this should not happen')
     }
     
       // Reset form
@@ -298,8 +263,12 @@ export function Orders() {
       })
       setShowNewOrderDialog(false)
       
+      // ストアを更新して新しい発注を反映（軽量更新）
+      const { loadData } = useInventoryStore.getState()
+      await loadData()
+      
     } catch (error) {
-      console.error('❌ Error in handleSubmitOrder:', error)
+      console.error('Error in handleSubmitOrder:', error)
       alert(`発注処理中にエラーが発生しました: ${error.message}`)
     }
   }
@@ -309,6 +278,7 @@ export function Orders() {
       case 'pending': return 'bg-warning text-warning-foreground'
       case 'partial_approved': return 'bg-info text-info-foreground'
       case 'approved': return 'bg-info text-info-foreground'
+      case 'waiting': return 'bg-secondary text-secondary-foreground'
       case 'ready': return 'bg-success text-success-foreground'
       case 'delivered': return 'bg-primary text-primary-foreground'
       case 'cancelled': return 'bg-destructive text-destructive-foreground'
@@ -321,6 +291,7 @@ export function Orders() {
       case 'pending': return '承認待ち'
       case 'partial_approved': return '一部承認済み'
       case 'approved': return '承認済み'
+      case 'waiting': return '準備待ち'
       case 'ready': return '準備完了'
       case 'delivered': return '配送完了'
       case 'cancelled': return 'キャンセル'
@@ -330,8 +301,6 @@ export function Orders() {
 
   // 商品のステータスを更新する関数
   const updateProductItemsStatus = async (orderItems: any[], newStatus: string) => {
-    console.log(`🔄 Updating product status to ${newStatus} for order items:`, orderItems)
-    
     try {
       for (const orderItem of orderItems) {
         // 対象商品の利用可能なアイテムを取得
@@ -340,10 +309,7 @@ export function Orders() {
           item.status === 'available'
         )
         
-        console.log(`📦 Found ${availableItems.length} available items for product ${orderItem.product_id}`)
-        
         if (availableItems.length === 0) {
-          console.warn(`⚠️ No available items found for product ${orderItem.product_id}`)
           continue
         }
         
@@ -351,47 +317,47 @@ export function Orders() {
         const itemsToUpdate = availableItems.slice(0, orderItem.quantity)
         
         for (const item of itemsToUpdate) {
-          console.log(`🏷️ Updating item ${item.id} status from ${item.status} to ${newStatus}`)
           try {
             await updateItemStatus(item.id, newStatus as any)
-            console.log(`✅ Successfully updated ${item.id}`)
           } catch (itemError) {
-            console.error(`❌ Failed to update item ${item.id}:`, itemError)
+            console.error(`Failed to update item ${item.id}:`, itemError)
             throw itemError
           }
         }
       }
       
-      // データを再読み込みして画面に反映
-      console.log('🔄 Reloading data to reflect changes...')
-      await loadData()
-      console.log('✅ Product status update completed')
+      // データの再読み込みは不要（ステータス更新のみ）
       
     } catch (error) {
-      console.error('❌ Error in updateProductItemsStatus:', error)
+      console.error('Error in updateProductItemsStatus:', error)
       throw error
     }
   }
 
-  // 発注選択関連の関数
-  const handleSelectOrder = (orderId: string) => {
+  // 発注選択関連の関数（個別order_item対応）
+  const handleSelectOrder = (orderItemId: string) => {
     const newSelected = new Set(selectedOrders)
-    if (newSelected.has(orderId)) {
-      newSelected.delete(orderId)
+    if (newSelected.has(orderItemId)) {
+      newSelected.delete(orderItemId)
     } else {
-      newSelected.add(orderId)
+      newSelected.add(orderItemId)
     }
     setSelectedOrders(newSelected)
   }
   
   const handleSelectAll = () => {
-    if (selectedOrders.size === orders.length && orders.length > 0) {
+    // 全ての表示されているorder_itemのIDを取得
+    const allOrderItemIds = (showAllOrders ? orders : orders.slice(0, 5))
+      .flatMap(order => 
+        order.items?.map((item, index) => `${order.id}-${item.id || index}`) || []
+      )
+    
+    if (selectedOrders.size === allOrderItemIds.length && allOrderItemIds.length > 0) {
       // 全選択解除
       setSelectedOrders(new Set())
     } else {
       // 全選択
-      const allIds = new Set(orders.map(o => o.id))
-      setSelectedOrders(allIds)
+      setSelectedOrders(new Set(allOrderItemIds))
     }
   }
   
@@ -401,33 +367,31 @@ export function Orders() {
     }
   }
   
+  // 発注管理ページではステータス更新は行わない（マイページで実施）
+  // const handleBatchStatusUpdate = ... (削除済み)
+  
   const confirmDeleteOrders = async () => {
     try {
-      // 選択された発注を削除
-      for (const orderId of selectedOrders) {
-        await supabaseDb.deleteOrder(orderId)
-      }
-      
-      // データを再読み込み
-      await loadData()
+      // 選択されたorder_itemを削除（実装は後で必要に応じて）
       
       // 選択状態をクリア
       setSelectedOrders(new Set())
       setShowDeleteDialog(false)
       
-      alert(`${selectedOrders.size}件の発注を削除しました`)
+      alert(`${selectedOrders.size}件の項目を削除しました（実装予定）`)
     } catch (error) {
-      console.error('Error deleting orders:', error)
-      alert('発注の削除中にエラーが発生しました')
+      console.error('Error deleting order items:', error)
+      alert('項目の削除中にエラーが発生しました')
     }
   }
 
-  // Calculate stats
+  // Calculate stats（発注管理ベース）
   const stats = {
     pending: orders.filter(o => o.status === 'pending').length,
     approved: orders.filter(o => o.status === 'approved').length,
     ready: orders.filter(o => o.status === 'ready').length,
     delivered: orders.filter(o => o.status === 'delivered').length,
+    total: orders.length
   }
 
   // ローディング中の表示
@@ -485,7 +449,7 @@ export function Orders() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           <div className="bg-card rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
               <div>
@@ -533,6 +497,18 @@ export function Orders() {
               </div>
             </div>
           </div>
+          
+          <div className="bg-card rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">総発注数</p>
+                <p className="text-lg font-bold text-foreground">{stats.total}</p>
+              </div>
+              <div className="h-6 w-6 rounded-full bg-slate/20 flex items-center justify-center">
+                <span className="text-slate-600 text-xs">📋</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Orders List */}
@@ -550,7 +526,8 @@ export function Orders() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground w-10">
                       <input
                         type="checkbox"
-                        checked={selectedOrders.size === orders.length && orders.length > 0}
+                        checked={selectedOrders.size > 0 && selectedOrders.size === (showAllOrders ? orders : orders.slice(0, 5))
+                          .flatMap(order => order.items || []).length}
                         onChange={handleSelectAll}
                         className="w-4 h-4"
                       />
@@ -566,45 +543,66 @@ export function Orders() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(showAllOrders ? orders : orders.slice(0, 5)).map((order) => {
-                    // 商品名の表示を作成（複数商品の場合は最初の商品名 + 他X件）
-                    const getProductNames = () => {
-                      if (!order.items || order.items.length === 0) return '商品なし'
-                      
-                      const firstProduct = products.find(p => p.id === order.items[0].product_id)
-                      const firstName = firstProduct?.name || '商品名不明'
-                      
-                      if (order.items.length === 1) {
-                        return firstName
-                      } else {
-                        return `${firstName} 他${order.items.length - 1}件`
-                      }
+                  {(showAllOrders ? orders : orders.slice(0, 5)).flatMap((order) => {
+                    // 各order_itemを個別の行として表示
+                    if (!order.items || order.items.length === 0) {
+                      return (
+                        <tr key={order.id} className="border-b border-border hover:bg-accent/50">
+                          <td className="py-3 px-4 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedOrders.has(order.id)}
+                              onChange={() => handleSelectOrder(order.id)}
+                              className="w-4 h-4"
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-foreground">{order.customer_name}様</td>
+                          <td className="py-3 px-4 text-foreground">商品なし</td>
+                          <td className="py-3 px-4 text-foreground">{order.assigned_to}</td>
+                          <td className="py-3 px-4 text-foreground">{order.carried_by}</td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                              {getStatusText(order.status)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-foreground">{order.order_date}</td>
+                          <td className="py-3 px-4 text-foreground">{order.required_date}</td>
+                          <td className="py-3 px-4 text-foreground">{order.created_by}</td>
+                        </tr>
+                      )
                     }
 
-                    return (
-                      <tr key={order.id} className="border-b border-border hover:bg-accent/50">
-                        <td className="py-3 px-4 w-10">
-                          <input
-                            type="checkbox"
-                            checked={selectedOrders.has(order.id)}
-                            onChange={() => handleSelectOrder(order.id)}
-                            className="w-4 h-4"
-                          />
-                        </td>
-                        <td className="py-3 px-4 text-foreground">{order.customer_name}様</td>
-                        <td className="py-3 px-4 text-foreground">{getProductNames()}</td>
-                        <td className="py-3 px-4 text-foreground">{order.assigned_to}</td>
-                        <td className="py-3 px-4 text-foreground">{order.carried_by}</td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                            {getStatusText(order.status)}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-foreground">{order.order_date}</td>
-                        <td className="py-3 px-4 text-foreground">{order.required_date}</td>
-                        <td className="py-3 px-4 text-foreground">{order.created_by}</td>
-                      </tr>
-                    )
+                    return order.items.map((item, itemIndex) => {
+                      const product = products.find(p => p.id === item.product_id)
+                      const productName = product?.name || '商品名不明'
+                      const displayKey = `${order.id}-${item.id || itemIndex}`
+                      
+                                      
+                      return (
+                        <tr key={displayKey} className="border-b border-border hover:bg-accent/50">
+                          <td className="py-3 px-4 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedOrders.has(displayKey)}
+                              onChange={() => handleSelectOrder(displayKey)}
+                              className="w-4 h-4"
+                            />
+                          </td>
+                          <td className="py-3 px-4 text-foreground">{order.customer_name}様</td>
+                          <td className="py-3 px-4 text-foreground">{productName}（{item.quantity}個） [ID: {item.id || 'no-id'}]</td>
+                          <td className="py-3 px-4 text-foreground">{order.assigned_to}</td>
+                          <td className="py-3 px-4 text-foreground">{order.carried_by}</td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.item_processing_status || order.status)}`}>
+                              {getStatusText(item.item_processing_status || order.status)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-foreground">{order.order_date}</td>
+                          <td className="py-3 px-4 text-foreground">{order.required_date}</td>
+                          <td className="py-3 px-4 text-foreground">{order.created_by}</td>
+                        </tr>
+                      )
+                    })
                   })}
                 </tbody>
               </table>
@@ -612,61 +610,92 @@ export function Orders() {
             
             {/* Mobile List */}
             <div className="lg:hidden space-y-2">
-              {(showAllOrders ? orders : orders.slice(0, 5)).map((order) => {
-                // 商品名の表示を作成（複数商品の場合は最初の商品名 + 他X件）
-                const getProductNames = () => {
-                  if (!order.items || order.items.length === 0) return '商品なし'
-                  
-                  const firstProduct = products.find(p => p.id === order.items[0].product_id)
-                  const firstName = firstProduct?.name || '商品名不明'
-                  
-                  if (order.items.length === 1) {
-                    return firstName
-                  } else {
-                    return `${firstName} 他${order.items.length - 1}件`
-                  }
-                }
-
-                return (
-                  <div key={order.id} className="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
-                    <div className="flex items-center space-x-3">
-                      {/* Checkbox */}
-                      <input
-                        type="checkbox"
-                        checked={selectedOrders.has(order.id)}
-                        onChange={() => handleSelectOrder(order.id)}
-                        className="w-4 h-4 flex-shrink-0"
-                      />
-                      
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-muted-foreground">{order.order_date}</span>
-                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                              {getStatusText(order.status)}
-                            </span>
-                          </div>
-                        </div>
+              {(showAllOrders ? orders : orders.slice(0, 5)).flatMap((order) => {
+                // 各order_itemを個別のカードとして表示
+                if (!order.items || order.items.length === 0) {
+                  return (
+                    <div key={order.id} className="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrders.has(order.id)}
+                          onChange={() => handleSelectOrder(order.id)}
+                          className="w-4 h-4 flex-shrink-0"
+                        />
                         
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-foreground text-sm">{order.customer_name}様</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-muted-foreground">{order.order_date}</span>
+                              <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                                {getStatusText(order.status)}
+                              </span>
+                            </div>
                           </div>
                           
-                          <div className="text-xs text-muted-foreground truncate">
-                            {getProductNames()}
-                          </div>
-                          
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>担当: {order.assigned_to}</span>
-                            <span>持出: {order.carried_by}</span>
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground text-sm">{order.customer_name}様</span>
+                            </div>
+                            
+                            <div className="text-xs text-muted-foreground truncate">
+                              商品なし
+                            </div>
+                            
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>担当: {order.assigned_to}</span>
+                              <span>持出: {order.carried_by}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )
+                  )
+                }
+
+                return order.items.map((item, itemIndex) => {
+                  const product = products.find(p => p.id === item.product_id)
+                  const productName = product?.name || '商品名不明'
+                  
+                  return (
+                    <div key={`${order.id}-${item.id || itemIndex}`} className="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrders.has(`${order.id}-${item.id || itemIndex}`)}
+                          onChange={() => handleSelectOrder(`${order.id}-${item.id || itemIndex}`)}
+                          className="w-4 h-4 flex-shrink-0"
+                        />
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-muted-foreground">{order.order_date}</span>
+                              <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.item_processing_status || order.status)}`}>
+                                {getStatusText(item.item_processing_status || order.status)}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-foreground text-sm">{order.customer_name}様</span>
+                            </div>
+                            
+                            <div className="text-xs text-muted-foreground truncate">
+                              {productName}（{item.quantity}個）
+                            </div>
+                            
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>担当: {order.assigned_to}</span>
+                              <span>持出: {order.carried_by}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
               })}
             </div>
             
