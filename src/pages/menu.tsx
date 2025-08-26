@@ -158,11 +158,38 @@ export function Menu() {
     items: items.filter(i => i.status === 'available').length,
     orders: orders.length,
     pending: orders.filter(o => o.status === 'pending').length,
-    ready: orders
-      .filter(o => o.status === 'preparing')
-      .flatMap(order => order.items)
-      .reduce((total, item) => total + (item.quantity || 0), 0),
+    ready: orders.flatMap(order => {
+      if (!order.items || order.items.length === 0) return []
+      
+      return order.items
+        .filter(item => {
+          // 承認済みで準備中のアイテムをカウント
+          const isApproved = order.status === 'approved' || item.approval_status === 'not_required'
+          const isInPreparation = ['waiting', 'preparing', 'assigned'].includes(item.item_processing_status)
+          return isApproved && isInPreparation
+        })
+        .flatMap(item => {
+          // 数量分だけ個別アイテムを生成
+          const individualItems = []
+          for (let i = 0; i < item.quantity; i++) {
+            individualItems.push(1)
+          }
+          return individualItems
+        })
+    }).length,
   }
+  
+  // デバッグ: 統計情報をログ出力
+  console.log('📊 Menu stats debug:', {
+    totalOrders: orders.length,
+    approvedOrders: orders.filter(o => o.status === 'approved').length,
+    pendingOrders: orders.filter(o => o.status === 'pending').length,
+    preparationItemsCount: stats.ready,
+    sampleApprovedOrder: orders.find(o => o.status === 'approved'),
+    itemsWithPreparationStatus: orders.flatMap(o => o.items || []).filter(item => 
+      ['waiting', 'preparing', 'assigned'].includes(item.item_processing_status)
+    ).length
+  })
 
   // 認証ユーザーから現在のユーザー名を取得（バッジ用）
   const currentUser = getCurrentUserName()
