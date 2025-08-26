@@ -2,7 +2,6 @@ import { Outlet } from 'react-router-dom'
 import { Header } from './header'
 import { MobileBottomNav } from './mobile-bottom-nav'
 import { ApprovalBanner } from './approval-banner'
-import { MobileRefreshFab } from '../mobile-refresh-fab'
 import { useState, useEffect } from 'react'
 
 export function Layout() {
@@ -41,7 +40,6 @@ export function Layout() {
           <Outlet />
         </main>
         <MobileBottomNav />
-        {isMobile && <MobileRefreshFab />}
       </div>
     )
   }

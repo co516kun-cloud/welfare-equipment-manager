@@ -6,6 +6,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useNotificationStore } from '../../stores/useNotificationStore'
 import { generateNotifications } from '../../lib/notification-generator'
 import { GlobalRefreshButton } from '../global-refresh-button'
+import { useRealtimeNotificationStore } from '../../stores/useRealtimeNotificationStore'
+import { useInventoryStore } from '../../stores/useInventoryStore'
 
 export function Header() {
   const [isMobile, setIsMobile] = useState(false)
@@ -14,6 +16,11 @@ export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const { unreadCount } = useNotificationStore()
+  
+  // 手動更新用の状態
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const { hasNewChanges, changeCount, clearNotifications } = useRealtimeNotificationStore()
+  const { loadIncrementalUpdates } = useInventoryStore()
   
   // 定期的に通知をチェック（5分ごと）
   useEffect(() => {
@@ -24,6 +31,27 @@ export function Header() {
     
     return () => clearInterval(interval)
   }, [])
+  
+  // 手動更新のハンドラー
+  const handleRefresh = async () => {
+    if (isRefreshing) return
+
+    setIsRefreshing(true)
+    
+    try {
+      // 差分更新を実行
+      await loadIncrementalUpdates()
+      clearNotifications()
+      console.log('🔄 Header refresh completed (incremental)')
+      
+      // 成功フィードバック
+      await new Promise(resolve => setTimeout(resolve, 300))
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const handleLogout = async () => {
     try {
@@ -116,6 +144,26 @@ export function Header() {
               <RealtimeStatus />
             </div>
           </div>
+          
+          {/* 手動更新ボタン */}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-white p-2 relative hover:bg-white/10 mr-2"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+          >
+            <span className={`text-lg ${isRefreshing ? 'animate-spin' : ''}`}>
+              {isRefreshing ? '🔄' : '↻'}
+            </span>
+            {hasNewChanges && changeCount > 0 && !isRefreshing && (
+              <span className="absolute -top-0.5 -right-0.5 bg-blue-500 text-white h-4 w-4 rounded-full text-xs flex items-center justify-center font-bold shadow-md">
+                {changeCount > 9 ? '9+' : changeCount}
+              </span>
+            )}
+          </Button>
+          
+          {/* 通知ボタン */}
           <Button 
             variant="ghost" 
             size="sm" 
