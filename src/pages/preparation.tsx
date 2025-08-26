@@ -586,6 +586,14 @@ export function Preparation() {
   // 数量が2以上の場合は個別に展開
   
   // Orders data loaded successfully
+  
+  // デバッグ: データ状態を確認
+  console.log('🔍 Preparation page debug:', {
+    ordersCount: orders.length,
+    productsCount: products.length,
+    sampleOrder: orders[0],
+    hasOrderItems: orders.some(o => o.items && o.items.length > 0)
+  })
 
   const preparationItems = orders.flatMap(order => {
     if (!order.items || order.items.length === 0) {
@@ -595,12 +603,23 @@ export function Preparation() {
     return order.items
       .filter(item => {
         // 以下の条件で準備待ちと判定
-        // 1. 承認済みの発注でまだ準備完了していない商品
-        // 2. 承認不要（自動承認済み）でまだ準備完了していない商品
+        // 1. 承認済みの発注
+        // 2. まだ準備中の商品（waitingからreadyまでのステータス）
         const isApproved = order.status === 'approved' || item.approval_status === 'not_required'
-        const isNotReady = item.item_processing_status === 'waiting'
+        const isInPreparation = ['waiting', 'preparing', 'assigned'].includes(item.item_processing_status)
         
-        return isApproved && isNotReady
+        console.log('⚙️ Order item filter:', {
+          orderId: order.id,
+          itemId: item.id,
+          orderStatus: order.status,
+          approvalStatus: item.approval_status,
+          processingStatus: item.item_processing_status,
+          isApproved,
+          isInPreparation,
+          willInclude: isApproved && isInPreparation
+        })
+        
+        return isApproved && isInPreparation
       })
       .flatMap(item => {
         const product = products.find(p => p.id === item.product_id)
@@ -612,7 +631,7 @@ export function Preparation() {
           const assignedItemId = item.assigned_item_ids ? item.assigned_item_ids[i] : null
           const isAssigned = assignedItemId !== null && assignedItemId !== undefined
           
-          // 準備完了したアイテムは表示しない
+          // 管理番号未割り当てのアイテムのみ表示（準備待ちタブ用）
           if (isAssigned) {
             continue
           }
@@ -643,6 +662,12 @@ export function Preparation() {
         return individualItems
       })
   })
+  
+  // デバッグ: 準備アイテム数をログ出力
+  console.log('⚙️ preparationItems count:', preparationItems.length)
+  if (preparationItems.length > 0) {
+    console.log('⚙️ First preparationItem:', preparationItems[0])
+  }
 
   // 管理番号割り当て済みのアイテムを取得
   const assignedItems = orders.flatMap(order => {
@@ -652,11 +677,11 @@ export function Preparation() {
     
     return order.items
       .filter(item => {
-        // 承認済みで準備待ちのアイテムのみ
+        // 承認済みで準備中のアイテムのみ
         const isApproved = order.status === 'approved' || item.approval_status === 'not_required'
-        const isNotReady = item.item_processing_status === 'waiting'
+        const isInPreparation = ['waiting', 'preparing', 'assigned'].includes(item.item_processing_status)
         
-        return isApproved && isNotReady
+        return isApproved && isInPreparation
       })
       .flatMap(item => {
         const product = products.find(p => p.id === item.product_id)
@@ -668,7 +693,7 @@ export function Preparation() {
           const assignedItemId = item.assigned_item_ids ? item.assigned_item_ids[i] : null
           const isAssigned = assignedItemId !== null && assignedItemId !== undefined
           
-          // 管理番号割り当て済みのアイテムのみ表示
+          // 管理番号割り当て済みだが準備未完了のアイテムのみ表示
           if (!isAssigned) {
             continue
           }
@@ -699,6 +724,12 @@ export function Preparation() {
         return assignedIndividualItems
       })
   })
+  
+  // デバッグ: 割り当て済みアイテム数をログ出力
+  console.log('⚙️ assignedItems count:', assignedItems.length)
+  if (assignedItems.length > 0) {
+    console.log('⚙️ First assignedItem:', assignedItems[0])
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
