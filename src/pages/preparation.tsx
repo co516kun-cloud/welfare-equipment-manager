@@ -70,25 +70,37 @@ export function Preparation() {
   
   // QRスキャンダイアログを開く
   const handleQRScan = (item: any) => {
+    console.log('📱 Opening QR scan dialog with item:', item)
     setQrScanItem(item)
     setQrCodeInput('')
     setScanError('')
     setCameraError(null)
     setUseCameraScanner(false)
     setShowQRScanDialog(true)
+    console.log('📱 QR scan dialog state updated, qrScanItem set to:', item)
   }
 
   // カメラスキャンの結果を処理
   const handleCameraScanResult = async (qrCode: string) => {
     try {
       console.log('📱 Camera scan result:', qrCode)
+      console.log('📱 Current qrScanItem:', qrScanItem)
+      
       setQrCodeInput(qrCode)
       setUseCameraScanner(false)
       setScanError('') // エラーをクリア
       
+      // qrScanItemの存在確認
+      if (!qrScanItem) {
+        console.error('🔥 qrScanItem is null/undefined at scan result')
+        setScanError('準備対象商品が選択されていません')
+        return
+      }
+      
       // 少し待ってから自動で割り当て処理を実行
       setTimeout(async () => {
         try {
+          console.log('📱 Calling handleQRAssign with qrScanItem:', qrScanItem)
           await handleQRAssign()
         } catch (error) {
           console.error('🔥 Error in auto QR assign:', error)
@@ -115,8 +127,15 @@ export function Preparation() {
   const handleQRAssign = async () => {
     try {
       console.log('🔧 Starting QR assignment process...')
+      console.log('🔧 Current state:', {
+        qrCodeInput: qrCodeInput,
+        qrCodeInputTrim: qrCodeInput.trim(),
+        qrScanItem: qrScanItem,
+        showQRScanDialog: showQRScanDialog
+      })
       
       if (!qrCodeInput.trim()) {
+        console.log('🔧 QRコードが空です')
         setScanError('QRコードを入力してください')
         return
       }
@@ -124,6 +143,7 @@ export function Preparation() {
       setScanError('')
       
       if (!qrScanItem) {
+        console.log('🔧 qrScanItemが空です')
         setScanError('準備対象商品が選択されていません')
         return
       }
