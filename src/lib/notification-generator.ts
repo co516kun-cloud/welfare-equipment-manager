@@ -1,5 +1,6 @@
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useNotificationStore } from '../stores/useNotificationStore'
+import { useAuth } from '../hooks/useAuth'
 import type { ProductItem, Order } from '../types'
 
 // 通知生成の間隔を管理
@@ -9,17 +10,36 @@ export const generateNotifications = () => {
   const inventoryStore = useInventoryStore.getState()
   const notificationStore = useNotificationStore.getState()
   
-  const { items, orders, products } = inventoryStore
+  const { items, orders, products, users } = inventoryStore
   const now = new Date()
   
-  // 1. 準備作業リマインダー
-  checkPreparationReminders(orders, items, products, notificationStore, now)
+  // 現在のユーザー情報を取得
+  let isAdmin = false
+  try {
+    // Supabaseのセッション情報を取得
+    const authData = localStorage.getItem('sb-' + process.env.VITE_SUPABASE_PROJECT_REF + '-auth-token')
+    if (authData) {
+      const userData = JSON.parse(authData)
+      const currentUserEmail = userData.user?.email
+      const currentUser = users.find(u => u.email === currentUserEmail)
+      isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'manager'
+    }
+  } catch (error) {
+    console.warn('Failed to get user info for notifications:', error)
+    // エラーの場合は全ユーザーに通知しない（安全側に倒す）
+    isAdmin = false
+  }
+  
+  // 1. 準備作業リマインダー（管理者のみ）
+  if (isAdmin) {
+    checkPreparationReminders(orders, items, products, notificationStore, now)
+  }
   
   // 2. 異常ステータス通知
   checkAnomalousStatuses(items, products, notificationStore, now)
   
-  // 3. システム通知（リアルタイム同期など）
-  checkSystemStatus(inventoryStore, notificationStore)
+  // 3. システム通知（リアルタイム同期通知を除外）
+  // checkSystemStatus(inventoryStore, notificationStore) // コメントアウト
 }
 
 // 準備作業リマインダー
@@ -153,49 +173,7 @@ function checkAnomalousStatuses(
   }
 }
 
-// システム通知
-function checkSystemStatus(inventoryStore: any, notificationStore: any) {
-  // リアルタイム同期の状態をチェック
-  if (!inventoryStore.isRealtimeEnabled) {
-    const cacheKey = 'realtime-disabled'
-    if (!notificationCache.has(cacheKey)) {
-      notificationStore.addNotification({
-        type: 'system',
-        priority: 'low',
-        title: 'ℹ️ リアルタイム同期が無効',
-        message: 'リアルタイム同期が無効になっています。手動で更新が必要です。',
-        actionUrl: '/settings',
-        actionLabel: '設定を確認',
-        metadata: { type: 'realtime_sync' }
-      })
-      
-      notificationCache.set(cacheKey, new Date().toISOString())
-      setTimeout(() => notificationCache.delete(cacheKey), 60 * 60 * 1000) // 1時間
-    }
-  }
-  
-  // 最後の同期から1時間以上経過している場合
-  const lastSync = inventoryStore.lastSyncTime
-  if (lastSync) {
-    const lastSyncDate = new Date(lastSync)
-    const hoursSinceSync = (Date.now() - lastSyncDate.getTime()) / (1000 * 60 * 60)
-    
-    if (hoursSinceSync > 1) {
-      const cacheKey = 'sync-delay'
-      if (!notificationCache.has(cacheKey)) {
-        notificationStore.addNotification({
-          type: 'system',
-          priority: 'medium',
-          title: '🔄 データ同期の遅延',
-          message: `最後の同期から${Math.floor(hoursSinceSync)}時間経過しています`,
-          actionUrl: '/mypage',
-          actionLabel: '手動同期',
-          metadata: { type: 'sync_delay', hours: hoursSinceSync }
-        })
-        
-        notificationCache.set(cacheKey, new Date().toISOString())
-        setTimeout(() => notificationCache.delete(cacheKey), 30 * 60 * 1000) // 30分
-      }
-    }
-  }
-}
+// システム通知（リアルタイム同期無効通知を削除）
+// function checkSystemStatus(inventoryStore: any, notificationStore: any) {
+//   リアルタイム同期無効通知は不要のためコメントアウト
+// }
