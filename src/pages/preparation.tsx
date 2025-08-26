@@ -75,7 +75,7 @@ export function Preparation() {
     setQrCodeInput('')
     setScanError('')
     setCameraError(null)
-    setUseCameraScanner(false)
+    setUseCameraScanner(true) // カメラモードを初期設定に変更
     setShowQRScanDialog(true)
     console.log('📱 QR scan dialog state updated, qrScanItem set to:', item)
   }
