@@ -79,14 +79,29 @@ export function Preparation() {
   }
 
   // カメラスキャンの結果を処理
-  const handleCameraScanResult = (qrCode: string) => {
-    console.log('📱 Camera scan result:', qrCode)
-    setQrCodeInput(qrCode)
-    setUseCameraScanner(false)
-    // 自動で割り当て処理を実行
-    setTimeout(() => {
-      handleQRAssign()
-    }, 500)
+  const handleCameraScanResult = async (qrCode: string) => {
+    try {
+      console.log('📱 Camera scan result:', qrCode)
+      setQrCodeInput(qrCode)
+      setUseCameraScanner(false)
+      setScanError('') // エラーをクリア
+      
+      // 少し待ってから自動で割り当て処理を実行
+      setTimeout(async () => {
+        try {
+          await handleQRAssign()
+        } catch (error) {
+          console.error('🔥 Error in auto QR assign:', error)
+          setScanError(`QR処理エラー: ${error instanceof Error ? error.message : String(error)}`)
+          // 手動入力モードに切り替え
+          setUseCameraScanner(false)
+        }
+      }, 100) // タイミングを短縮
+    } catch (error) {
+      console.error('🔥 Error in handleCameraScanResult:', error)
+      setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
+      setUseCameraScanner(false)
+    }
   }
 
   // カメラエラーを処理
@@ -98,16 +113,30 @@ export function Preparation() {
 
   // QRコードによる割り当て処理
   const handleQRAssign = async () => {
-    if (!qrCodeInput.trim()) {
-      setScanError('QRコードを入力してください')
-      return
-    }
-
     try {
+      console.log('🔧 Starting QR assignment process...')
+      
+      if (!qrCodeInput.trim()) {
+        setScanError('QRコードを入力してください')
+        return
+      }
+
       setScanError('')
       
+      if (!qrScanItem) {
+        setScanError('準備対象商品が選択されていません')
+        return
+      }
+
+      console.log('🔧 QR Assignment data:', {
+        qrCode: qrCodeInput.trim(),
+        targetItem: qrScanItem
+      })
+      
       // QRコードからアイテムを検索
+      console.log('🔧 Fetching product items...')
       const items = await supabaseDb.getProductItems()
+      console.log('🔧 Found', items.length, 'product items')
       
       const scannedItem = items.find(item => {
         const itemQR = item.qr_code?.trim()
@@ -231,8 +260,11 @@ export function Preparation() {
       alert(`アイテム ${scannedItem.id} を発注に割り当てました`)
 
     } catch (error) {
-      console.error('QR割り当てエラー:', error)
-      setScanError(`割り当て処理中にエラーが発生しました: ${error.message}`)
+      console.error('🔥 QR割り当てエラー:', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setScanError(`割り当て処理中にエラーが発生しました: ${errorMessage}`)
+      // カメラスキャンモードの場合は手動入力に切り替える
+      setUseCameraScanner(false)
     }
   }
 
@@ -1524,7 +1556,7 @@ export function Preparation() {
                     onError={handleCameraError}
                     isActive={useCameraScanner && showQRScanDialog}
                     className="w-full h-full"
-                    continuousMode={false}
+                    continuousMode={true}
                   />
                   {cameraError && (
                     <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
