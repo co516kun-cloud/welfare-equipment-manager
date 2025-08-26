@@ -257,7 +257,7 @@ export function MyPage() {
                     }
 
                     
-                    return {
+                    const itemData = {
                       id: `${order.id}-${item.id}-${index}`,
                       orderId: order.id,
                       itemId: item.id,
@@ -282,6 +282,19 @@ export function MyPage() {
                       orderStatus: order.status,
                       supportHistories: [] // サポート履歴は後で取得
                     }
+
+                    // デバッグ用ログ
+                    console.log('🔍 [DEBUG] displayedItem created:', {
+                      id: itemData.id,
+                      name: itemData.name,
+                      customer: itemData.customer,
+                      orderItemProcessingStatus: item.item_processing_status,
+                      productItemStatus: productItem.status,
+                      readyForDelivery: itemData.readyForDelivery,
+                      assignedItemId: itemData.assignedItemId
+                    })
+
+                    return itemData
                   }
                 }
                 return null
@@ -317,6 +330,18 @@ export function MyPage() {
         }
       })
       
+      // デバッグ用ログ - 最終的な表示アイテムリスト
+      console.log('🔍 [DEBUG] Final displayedItems:', {
+        totalItems: itemsList.length,
+        readyForDeliveryCount: itemsList.filter(item => item.readyForDelivery).length,
+        notReadyForDeliveryCount: itemsList.filter(item => !item.readyForDelivery).length,
+        sampleItems: itemsList.slice(0, 3).map(item => ({
+          id: item.id,
+          name: item.name,
+          readyForDelivery: item.readyForDelivery
+        }))
+      })
+
       setDisplayedItems(itemsList)
     } catch (error) {
       console.error('Error in updateDisplayedItems:', error)
@@ -527,11 +552,26 @@ export function MyPage() {
   // チェックボックス選択関連の関数
   const handleSelectItem = (itemId: string) => {
     const newSelected = new Set(selectedItems)
+    const selectedItem = displayedItems.find(item => item.id === itemId)
+    
     if (newSelected.has(itemId)) {
       newSelected.delete(itemId)
+      console.log('🔍 [DEBUG] Item deselected:', {
+        itemId,
+        name: selectedItem?.name,
+        readyForDelivery: selectedItem?.readyForDelivery
+      })
     } else {
       newSelected.add(itemId)
+      console.log('🔍 [DEBUG] Item selected:', {
+        itemId,
+        name: selectedItem?.name,
+        readyForDelivery: selectedItem?.readyForDelivery,
+        orderItemId: selectedItem?.orderItemId
+      })
     }
+    
+    console.log('🔍 [DEBUG] Total selected items:', newSelected.size)
     setSelectedItems(newSelected)
   }
 
@@ -540,9 +580,19 @@ export function MyPage() {
     // 個別のアイテムIDを使用（orderItemIdではなく）
     const allDeliveryIds = deliveryItems.map(item => item.id).filter(id => id)
     
+    console.log('🔍 [DEBUG] Select All clicked:', {
+      totalDisplayedItems: displayedItems.length,
+      readyForDeliveryItems: deliveryItems.length,
+      currentSelectedCount: selectedItems.size,
+      allDeliveryIdsCount: allDeliveryIds.length,
+      willSelectAll: !(selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0)
+    })
+    
     if (selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0) {
+      console.log('🔍 [DEBUG] Deselecting all items')
       setSelectedItems(new Set())
     } else {
+      console.log('🔍 [DEBUG] Selecting all delivery items:', allDeliveryIds)
       setSelectedItems(new Set(allDeliveryIds))
     }
   }
@@ -557,25 +607,46 @@ export function MyPage() {
     try {
       // 選択されたアイテムを取得（個別のアイテムIDを使用）
       const selectedDisplayItems = displayedItems.filter(item => selectedItems.has(item.id))
+      
+      console.log('🔍 [DEBUG] Batch delivery started:', {
+        selectedItemIds: Array.from(selectedItems),
+        selectedDisplayItemsCount: selectedDisplayItems.length,
+        readyForDeliveryInSelection: selectedDisplayItems.filter(item => item.readyForDelivery).length
+      })
+      
       console.log(`🚚 Batch delivery for ${selectedDisplayItems.length} items:`, selectedDisplayItems.map(item => ({
         id: item.id,
         orderItemId: item.orderItemId,
         name: item.name,
-        customer: item.customer
+        customer: item.customer,
+        readyForDelivery: item.readyForDelivery,
+        assignedItemId: item.assignedItemId
       })))
       
       // 各選択されたアイテムに対して個別に処理
       const processedOrderItemIds = new Set<string>()
       
       for (const item of selectedDisplayItems) {
+        console.log('🔍 [DEBUG] Processing item:', {
+          id: item.id,
+          name: item.name,
+          orderItemId: item.orderItemId,
+          assignedItemId: item.assignedItemId,
+          readyForDelivery: item.readyForDelivery
+        })
+        
         if (item.assignedItemId && item.orderItemId) {
           // 同じorderItemIdは一度だけ処理する
           if (!processedOrderItemIds.has(item.orderItemId)) {
+            console.log('🔍 [DEBUG] Updating order item status:', item.orderItemId, '-> delivered')
             await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
             processedOrderItemIds.add(item.orderItemId)
+          } else {
+            console.log('🔍 [DEBUG] OrderItemId already processed, skipping:', item.orderItemId)
           }
           
           // 商品アイテムのステータスを個別に更新
+          console.log('🔍 [DEBUG] Updating product item status:', item.assignedItemId, '-> rented')
           await updateItemStatus(item.assignedItemId, 'rented')
           
           const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
@@ -607,8 +678,20 @@ export function MyPage() {
               }
             )
           }
+        } else {
+          console.log('🔍 [DEBUG] Item skipped (missing assignedItemId or orderItemId):', {
+            id: item.id,
+            assignedItemId: item.assignedItemId,
+            orderItemId: item.orderItemId
+          })
         }
       }
+      
+      console.log('🔍 [DEBUG] Batch delivery completed:', {
+        totalProcessedItems: selectedDisplayItems.length,
+        uniqueOrderItemsProcessed: processedOrderItemIds.size,
+        processedOrderItemIds: Array.from(processedOrderItemIds)
+      })
       
       setSelectedItems(new Set())
       loadData()
@@ -1113,28 +1196,33 @@ export function MyPage() {
             </h2>
             
             {/* バッチ処理ボタン */}
-            {displayedItems.filter(item => item.readyForDelivery).length > 0 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSelectAllDeliveryItems}
-                  className="text-xs"
-                >
-                  {selectedItems.size === displayedItems.filter(item => item.readyForDelivery).length ? '選択解除' : '全選択'}
-                </Button>
-                {selectedItems.size > 0 && (
+            {(() => {
+              const readyItems = displayedItems.filter(item => item.readyForDelivery)
+              console.log('🔍 [DEBUG] UI Batch buttons - readyItems:', readyItems.length)
+              
+              return readyItems.length > 0 && (
+                <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={handleBatchDelivery}
-                    className="bg-success hover:bg-success/90 text-success-foreground text-xs"
+                    variant="outline"
+                    onClick={handleSelectAllDeliveryItems}
+                    className="text-xs"
                   >
-                    <span className="mr-1">🚚</span>
-                    一括配送完了 ({selectedItems.size})
+                    {selectedItems.size === readyItems.length ? '選択解除' : '全選択'}
                   </Button>
-                )}
-              </div>
-            )}
+                  {selectedItems.size > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleBatchDelivery}
+                      className="bg-success hover:bg-success/90 text-success-foreground text-xs"
+                    >
+                      <span className="mr-1">🚚</span>
+                      一括配送完了 ({selectedItems.size})
+                    </Button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
           
           {(() => {
