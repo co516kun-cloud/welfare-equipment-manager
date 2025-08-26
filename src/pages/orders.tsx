@@ -9,7 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 export function Orders() {
-  const { products, users, items, orders, createOrder, updateItemStatus, getProductAvailableStock, loadData } = useInventoryStore()
+  const { categories, products, users, items, orders, createOrder, updateItemStatus, getProductAvailableStock, loadData } = useInventoryStore()
   const { user } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -851,11 +851,40 @@ export function Orders() {
                             onChange={(e) => updateOrderItem(index, 'productId', e.target.value)}
                             placeholder="商品を選択してください"
                           >
-                            {products.map(product => (
-                              <option key={product.id} value={product.id}>
-                                {product.name} ({product.manufacturer})
-                              </option>
-                            ))}
+                            {(() => {
+                              // カテゴリ順で商品を並び替え
+                              const categoryOrder = [
+                                '特殊寝台',
+                                'マットレス',
+                                '特殊寝台付属品',
+                                '車いす',
+                                '歩行器',
+                                '杖',
+                                '手すり',
+                                '手すり付属品',
+                                'スロープ'
+                              ]
+                              
+                              const sortedProducts = products.sort((a, b) => {
+                                const categoryA = categories.find(c => c.id === a.category_id)
+                                const categoryB = categories.find(c => c.id === b.category_id)
+                                
+                                const orderA = categoryA ? categoryOrder.indexOf(categoryA.name) : 999
+                                const orderB = categoryB ? categoryOrder.indexOf(categoryB.name) : 999
+                                
+                                if (orderA !== orderB) {
+                                  return orderA - orderB
+                                }
+                                // 同じカテゴリ内では商品名でソート
+                                return a.name.localeCompare(b.name)
+                              })
+                              
+                              return sortedProducts.map(product => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name}
+                                </option>
+                              ))
+                            })()}
                           </Select>
                         </div>
                         <div className="w-24">
