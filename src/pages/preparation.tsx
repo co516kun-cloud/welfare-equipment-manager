@@ -2,6 +2,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
+import { QRCameraScanner } from '../components/qr-camera-scanner'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
@@ -55,6 +56,8 @@ export function Preparation() {
   const [qrScanItem, setQrScanItem] = useState<any>(null)
   const [scanError, setScanError] = useState('')
   const [qrCodeInput, setQrCodeInput] = useState('')
+  const [useCameraScanner, setUseCameraScanner] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
   
   useEffect(() => {
     // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
@@ -70,7 +73,27 @@ export function Preparation() {
     setQrScanItem(item)
     setQrCodeInput('')
     setScanError('')
+    setCameraError(null)
+    setUseCameraScanner(false)
     setShowQRScanDialog(true)
+  }
+
+  // カメラスキャンの結果を処理
+  const handleCameraScanResult = (qrCode: string) => {
+    console.log('📱 Camera scan result:', qrCode)
+    setQrCodeInput(qrCode)
+    setUseCameraScanner(false)
+    // 自動で割り当て処理を実行
+    setTimeout(() => {
+      handleQRAssign()
+    }, 500)
+  }
+
+  // カメラエラーを処理
+  const handleCameraError = (error: string) => {
+    console.error('📱 Camera error:', error)
+    setCameraError(error)
+    setUseCameraScanner(false)
   }
 
   // QRコードによる割り当て処理
@@ -1464,31 +1487,101 @@ export function Preparation() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <div className="h-32 bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-              <div className="text-center">
-                <div className="text-4xl mb-2">📱</div>
-                <p className="text-sm text-muted-foreground mb-2">QRコードを入力</p>
-                <p className="text-xs text-muted-foreground">
-                  開発環境
-                </p>
-              </div>
-            </div>
-            
-            {/* 手動入力フォーム */}
-            <div className="space-y-3">
-              <Label htmlFor="qrInput">QRコード（管理番号）</Label>
-              <Input
-                id="qrInput"
-                value={qrCodeInput}
-                onChange={(e) => setQrCodeInput(e.target.value)}
-                placeholder="例: WC-001, BED-001, WK-001"
-                className="text-center"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleQRAssign()
-                  }
+            {/* カメラスキャナーまたは手動入力選択 */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={useCameraScanner ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setUseCameraScanner(true)
+                  setCameraError(null)
+                  setScanError('')
                 }}
-              />
+                className="flex-1"
+              >
+                📷 カメラスキャン
+              </Button>
+              <Button
+                variant={!useCameraScanner ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setUseCameraScanner(false)
+                  setCameraError(null)
+                  setScanError('')
+                }}
+                className="flex-1"
+              >
+                ⌨️ 手動入力
+              </Button>
+            </div>
+
+            {useCameraScanner ? (
+              /* カメラスキャナー */
+              <div className="space-y-4">
+                <div className="aspect-square bg-black rounded-lg overflow-hidden relative">
+                  <QRCameraScanner
+                    onScanResult={handleCameraScanResult}
+                    onError={handleCameraError}
+                    isActive={useCameraScanner && showQRScanDialog}
+                    className="w-full h-full"
+                    continuousMode={false}
+                  />
+                  {cameraError && (
+                    <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                      <div className="text-center text-white p-4">
+                        <div className="text-2xl mb-2">⚠️</div>
+                        <p className="text-sm mb-2">カメラエラー</p>
+                        <p className="text-xs mb-4">{cameraError}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setCameraError(null)
+                            setUseCameraScanner(false)
+                          }}
+                          className="text-white border-white"
+                        >
+                          手動入力に切替
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    QRコードをカメラに向けてスキャンしてください
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* 手動入力 */
+              <div className="h-32 bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">📱</div>
+                  <p className="text-sm text-muted-foreground mb-2">QRコードを入力</p>
+                  <p className="text-xs text-muted-foreground">
+                    手動入力モード
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* 手動入力フォーム（手動入力モード時のみ表示） */}
+            {!useCameraScanner && (
+              <div className="space-y-3">
+                <Label htmlFor="qrInput">QRコード（管理番号）</Label>
+                <Input
+                  id="qrInput"
+                  value={qrCodeInput}
+                  onChange={(e) => setQrCodeInput(e.target.value)}
+                  placeholder="例: WC-001, BED-001, WK-001"
+                  className="text-center"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleQRAssign()
+                    }
+                  }}
+                />
               
               {/* テスト用サンプルボタン - 実際に存在するQRコードを表示 */}
               <div className="grid grid-cols-2 gap-1">
@@ -1548,30 +1641,31 @@ export function Preparation() {
                 </Button>
               </div>
               
-              <Button 
-                onClick={handleQRAssign}
-                className="w-full"
-                disabled={!qrCodeInput.trim()}
-              >
-                QRコードを処理
-              </Button>
-            </div>
-
-            {scanError && (
-              <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
-                <p className="text-xs text-destructive font-medium">エラー</p>
-                <p className="text-xs text-destructive">{scanError}</p>
                 <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-1 h-8 text-xs"
-                  onClick={() => {
-                    setScanError('')
-                    setQrCodeInput('')
-                  }}
+                  onClick={handleQRAssign}
+                  className="w-full"
+                  disabled={!qrCodeInput.trim()}
                 >
-                  再スキャン
+                  QRコードを処理
                 </Button>
+              
+                {scanError && (
+                  <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <p className="text-xs text-destructive font-medium">エラー</p>
+                    <p className="text-xs text-destructive">{scanError}</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-1 h-8 text-xs"
+                      onClick={() => {
+                        setScanError('')
+                        setQrCodeInput('')
+                      }}
+                    >
+                      再スキャン
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             
@@ -1579,17 +1673,19 @@ export function Preparation() {
               <Button variant="outline" onClick={() => setShowQRScanDialog(false)}>
                 キャンセル
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setShowQRScanDialog(false)
-                  if (qrScanItem) {
-                    handleManualAssign(qrScanItem)
-                  }
-                }}
-              >
-                手動入力に切り替え
-              </Button>
+              {!useCameraScanner && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowQRScanDialog(false)
+                    if (qrScanItem) {
+                      handleManualAssign(qrScanItem)
+                    }
+                  }}
+                >
+                  手動割り当て
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>

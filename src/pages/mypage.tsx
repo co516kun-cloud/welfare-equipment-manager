@@ -3,6 +3,7 @@ import { Select } from '../components/ui/select'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
+import { QRCameraScanner } from '../components/qr-camera-scanner'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useAuth } from '../hooks/useAuth'
 import { useEffect, useState } from 'react'
@@ -59,6 +60,8 @@ export function MyPage() {
   const [qrScanItem, setQrScanItem] = useState<any>(null)
   const [scanError, setScanError] = useState('')
   const [manualItemId, setManualItemId] = useState('')
+  const [useCameraScanner, setUseCameraScanner] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
   
   // 営業マン選択モーダル用の状態（モバイル版）
   const [showUserSelectModal, setShowUserSelectModal] = useState(false)
@@ -361,7 +364,27 @@ export function MyPage() {
     setQrScanItem(item)
     setScanError('')
     setManualItemId('')
+    setCameraError(null)
+    setUseCameraScanner(false)
     setShowQRScanDialog(true)
+  }
+
+  // カメラスキャンの結果を処理
+  const handleCameraScanResult = (qrCode: string) => {
+    console.log('📱 Camera scan result:', qrCode)
+    setManualItemId(qrCode)
+    setUseCameraScanner(false)
+    // 自動で配送処理を実行
+    setTimeout(() => {
+      handleQRScanResult(qrCode)
+    }, 500)
+  }
+
+  // カメラエラーを処理
+  const handleCameraError = (error: string) => {
+    console.error('📱 Camera error:', error)
+    setCameraError(error)
+    setUseCameraScanner(false)
   }
 
   // QRスキャン結果の処理
