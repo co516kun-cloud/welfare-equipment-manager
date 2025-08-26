@@ -537,7 +537,8 @@ export function MyPage() {
 
   const handleSelectAllDeliveryItems = () => {
     const deliveryItems = displayedItems.filter(item => item.readyForDelivery)
-    const allDeliveryIds = deliveryItems.map(item => item.orderItemId).filter(id => id)
+    // 個別のアイテムIDを使用（orderItemIdではなく）
+    const allDeliveryIds = deliveryItems.map(item => item.id).filter(id => id)
     
     if (selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0) {
       setSelectedItems(new Set())
@@ -554,14 +555,27 @@ export function MyPage() {
     }
 
     try {
-      const orderItemIds = Array.from(selectedItems)
-      console.log(`🚚 Batch delivery for ${orderItemIds.length} items:`, orderItemIds)
+      // 選択されたアイテムを取得（個別のアイテムIDを使用）
+      const selectedDisplayItems = displayedItems.filter(item => selectedItems.has(item.id))
+      console.log(`🚚 Batch delivery for ${selectedDisplayItems.length} items:`, selectedDisplayItems.map(item => ({
+        id: item.id,
+        orderItemId: item.orderItemId,
+        name: item.name,
+        customer: item.customer
+      })))
       
-      await supabaseDb.batchUpdateOrderItemStatus(orderItemIds, 'delivered', currentUser)
+      // 各選択されたアイテムに対して個別に処理
+      const processedOrderItemIds = new Set<string>()
       
-      // 選択されたアイテムの商品アイテムのステータスも更新
-      for (const item of displayedItems.filter(item => selectedItems.has(item.orderItemId))) {
-        if (item.assignedItemId) {
+      for (const item of selectedDisplayItems) {
+        if (item.assignedItemId && item.orderItemId) {
+          // 同じorderItemIdは一度だけ処理する
+          if (!processedOrderItemIds.has(item.orderItemId)) {
+            await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
+            processedOrderItemIds.add(item.orderItemId)
+          }
+          
+          // 商品アイテムのステータスを個別に更新
           await updateItemStatus(item.assignedItemId, 'rented')
           
           const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
@@ -598,7 +612,7 @@ export function MyPage() {
       
       setSelectedItems(new Set())
       loadData()
-      alert(`${orderItemIds.length}件の項目が配送完了しました`)
+      alert(`${selectedDisplayItems.length}件の項目が配送完了しました`)
     } catch (error) {
       console.error('Batch delivery error:', error)
       alert('一括配送完了処理中にエラーが発生しました')
@@ -924,12 +938,12 @@ export function MyPage() {
                   <div className="flex items-center justify-center mb-2">
                     <input
                       type="checkbox"
-                      checked={selectedItems.has(item.orderItemId)}
-                      onChange={() => handleSelectItem(item.orderItemId)}
+                      checked={selectedItems.has(item.id)}
+                      onChange={() => handleSelectItem(item.id)}
                       className="w-4 h-4 mr-2"
-                      id={`checkbox-${item.orderItemId}`}
+                      id={`checkbox-${item.id}`}
                     />
-                    <label htmlFor={`checkbox-${item.orderItemId}`} className="text-xs text-gray-600">
+                    <label htmlFor={`checkbox-${item.id}`} className="text-xs text-gray-600">
                       一括処理用
                     </label>
                   </div>
@@ -1273,12 +1287,12 @@ export function MyPage() {
                                           <div className="flex items-center justify-center mb-2">
                                             <input
                                               type="checkbox"
-                                              checked={selectedItems.has(item.orderItemId)}
-                                              onChange={() => handleSelectItem(item.orderItemId)}
+                                              checked={selectedItems.has(item.id)}
+                                              onChange={() => handleSelectItem(item.id)}
                                               className="w-4 h-4 mr-2"
-                                              id={`checkbox-mobile-${item.orderItemId}`}
+                                              id={`checkbox-mobile-${item.id}`}
                                             />
-                                            <label htmlFor={`checkbox-mobile-${item.orderItemId}`} className="text-xs text-gray-600">
+                                            <label htmlFor={`checkbox-mobile-${item.id}`} className="text-xs text-gray-600">
                                               一括処理用
                                             </label>
                                           </div>
