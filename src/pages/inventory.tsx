@@ -191,7 +191,35 @@ export function Inventory() {
   }
 
   // Filter data based on current view and status filter
-  const filteredCategories = categories
+  const filteredCategories = (() => {
+    const categoryOrder = [
+      '特殊寝台',
+      'マットレス',
+      '特殊寝台付属品',
+      '車いす',
+      '歩行器',
+      '杖',
+      '手すり',
+      '手すり付属品',
+      'スロープ'
+    ]
+    
+    return categories.sort((a, b) => {
+      const orderA = categoryOrder.indexOf(a.name)
+      const orderB = categoryOrder.indexOf(b.name)
+      
+      // カスタム順序にある場合はその順序で
+      if (orderA !== -1 && orderB !== -1) {
+        return orderA - orderB
+      }
+      // カスタム順序にない場合は名前でソート
+      if (orderA === -1 && orderB === -1) {
+        return a.name.localeCompare(b.name)
+      }
+      // カスタム順序にあるものを優先
+      return orderA !== -1 ? -1 : 1
+    })
+  })()
   const filteredProducts = selectedCategory 
     ? products.filter(p => p.category_id === selectedCategory)
     : products
@@ -758,7 +786,7 @@ export function Inventory() {
             >
               すべて
             </Button>
-            {categories.map(category => (
+            {filteredCategories.map(category => (
               <Button
                 key={category.id}
                 onClick={() => setMobileCategoryFilter(category.id)}
