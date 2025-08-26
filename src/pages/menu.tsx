@@ -179,17 +179,7 @@ export function Menu() {
     }).length,
   }
   
-  // デバッグ: 統計情報をログ出力
-  console.log('📊 Menu stats debug:', {
-    totalOrders: orders.length,
-    approvedOrders: orders.filter(o => o.status === 'approved').length,
-    pendingOrders: orders.filter(o => o.status === 'pending').length,
-    preparationItemsCount: stats.ready,
-    sampleApprovedOrder: orders.find(o => o.status === 'approved'),
-    itemsWithPreparationStatus: orders.flatMap(o => o.items || []).filter(item => 
-      ['waiting', 'preparing', 'assigned'].includes(item.item_processing_status)
-    ).length
-  })
+  // デバッグログを削除（無限ループを防ぐため）
 
   // 認証ユーザーから現在のユーザー名を取得（バッジ用）
   const currentUser = getCurrentUserName()
