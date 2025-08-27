@@ -51,7 +51,7 @@ const QRInputField = memo(({ onSubmit }: {
 })
 
 function ScanComponent() {
-  const { loadData, orders, users, items, products } = useInventoryStore()
+  const { loadData, orders, users, items, products, productItems } = useInventoryStore()
   
   const { user } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
