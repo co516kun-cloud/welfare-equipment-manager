@@ -161,13 +161,23 @@ export function DataImport() {
           const products = await supabaseDb.getProducts()
           const existingProductIds = new Set(products.map(p => p.id))
           
+          console.log(`商品マスタに登録されている商品ID数: ${existingProductIds.size}`)
+          console.log('商品マスタの最初の5件:', Array.from(existingProductIds).slice(0, 5))
+          
+          const missingProductIds = new Set()
           data.forEach(row => {
             if (row.product_id && !existingProductIds.has(row.product_id)) {
               newErrors.push(`行 ${row._rowIndex}: 商品ID「${row.product_id}」が商品マスタに存在しません`)
+              missingProductIds.add(row.product_id)
             }
           })
+          
+          if (missingProductIds.size > 0) {
+            console.log('存在しない商品ID:', Array.from(missingProductIds).slice(0, 10))
+          }
         } catch (error) {
           newErrors.push('商品マスタの確認に失敗しました')
+          console.error('商品マスタ確認エラー:', error)
         }
         break
       case 'product':
