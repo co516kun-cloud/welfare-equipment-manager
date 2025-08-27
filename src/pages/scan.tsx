@@ -117,6 +117,10 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
+    // QRコードに対応するアイテムを検索
+    const item = productItems.find(item => 
+      item.qr_code?.toLowerCase() === qrCode.toLowerCase()
+    )
     
     if (item) {
       // ストアのproductsデータから商品情報を取得
