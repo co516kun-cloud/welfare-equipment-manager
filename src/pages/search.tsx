@@ -45,8 +45,14 @@ export function Search() {
   const [isSearching, setIsSearching] = useState(false)
   const [hasSearched, setHasSearched] = useState(false)
   
-  // 表示モード
-  const [viewMode, setViewMode] = useState<'list' | 'card'>('list')
+  // 表示モード（モバイルでは初期値をカード、デスクトップではリスト）
+  const [viewMode, setViewMode] = useState<'list' | 'card'>(() => {
+    // モバイル判定（768px未満）
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'card'
+    }
+    return 'list'
+  })
   
   
   // 商品検索ページはproduct_itemsのみを使用（App.tsxで初期化済み）
