@@ -338,11 +338,20 @@ export function MyPage() {
         totalItems: itemsList.length,
         readyForDeliveryCount: itemsList.filter(item => item.readyForDelivery).length,
         notReadyForDeliveryCount: itemsList.filter(item => !item.readyForDelivery).length,
-        sampleItems: itemsList.slice(0, 3).map(item => ({
+        itemsDetailDebug: itemsList.map(item => ({
           id: item.id,
           name: item.name,
-          readyForDelivery: item.readyForDelivery
-        }))
+          customer: item.customer,
+          readyForDelivery: item.readyForDelivery,
+          assignedItemId: item.assignedItemId,
+          orderItemId: item.orderItemId,
+          productItemStatus: item.productItem?.status
+        })),
+        duplicateCheck: itemsList.reduce((acc, item) => {
+          const key = `${item.orderItemId}-${item.customer}`
+          acc[key] = (acc[key] || 0) + 1
+          return acc
+        }, {})
       })
 
       setDisplayedItems(itemsList)
