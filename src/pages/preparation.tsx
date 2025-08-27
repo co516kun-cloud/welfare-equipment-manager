@@ -58,6 +58,7 @@ export function Preparation() {
   const [qrCodeInput, setQrCodeInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  const [isProcessingQR, setIsProcessingQR] = useState(false)
   
   useEffect(() => {
     // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
@@ -86,6 +87,13 @@ export function Preparation() {
       console.log('📱 Camera scan result:', qrCode)
       console.log('📱 Current qrScanItem:', qrScanItem)
       
+      // 既に処理中の場合は無視（重複実行防止）
+      if (isProcessingQR) {
+        console.log('📱 QR processing already in progress, ignoring duplicate scan')
+        return
+      }
+      
+      setIsProcessingQR(true)
       setQrCodeInput(qrCode)
       setUseCameraScanner(false)
       setScanError('') // エラーをクリア
@@ -94,6 +102,7 @@ export function Preparation() {
       if (!qrScanItem) {
         console.error('🔥 qrScanItem is null/undefined at scan result')
         setScanError('準備対象商品が選択されていません')
+        setIsProcessingQR(false)
         return
       }
       
@@ -105,6 +114,8 @@ export function Preparation() {
       console.error('🔥 Error in handleCameraScanResult:', error)
       setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
       setUseCameraScanner(false)
+    } finally {
+      setIsProcessingQR(false)
     }
   }
 
@@ -1721,7 +1732,7 @@ export function Preparation() {
                     onError={handleCameraError}
                     isActive={useCameraScanner && showQRScanDialog}
                     className="w-full h-full"
-                    continuousMode={true}
+                    continuousMode={false}
                   />
                   {cameraError && (
                     <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
