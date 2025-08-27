@@ -28,16 +28,32 @@ import Notifications from './pages/notifications'
 
 // デフォルトページを画面サイズに応じて決定するコンポーネント
 function DefaultRoute() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  const [isMobile, setIsMobile] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
   
   useEffect(() => {
+    // 初期化時に画面サイズを判定
+    const checkScreenSize = () => {
+      const mobile = typeof window !== 'undefined' && window.innerWidth < 768
+      setIsMobile(mobile)
+      setIsInitialized(true)
+    }
+    
+    checkScreenSize()
+    
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768)
+      const mobile = window.innerWidth < 768
+      setIsMobile(mobile)
     }
     
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+  
+  // 初期化が完了するまで待機
+  if (!isInitialized) {
+    return <div>Loading...</div>
+  }
   
   // モバイルならマイページ、デスクトップならメニュー
   return <Navigate to={isMobile ? "/mypage" : "/menu"} replace />
