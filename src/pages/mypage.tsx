@@ -1468,7 +1468,18 @@ export function MyPage() {
                             <h3 className="font-semibold text-foreground">{group.customer}様</h3>
                             <div className="flex items-center space-x-2 mt-1">
                               <span className="text-xs text-muted-foreground">
-                                {group.items.length}件の商品
+                                {(() => {
+                                  console.log('🔍 [DEBUG] Group items count:', {
+                                    groupKey: `${group.priority}-${group.customer}`,
+                                    groupItemsLength: group.items.length,
+                                    groupItems: group.items.map(item => ({
+                                      id: item.id, 
+                                      name: item.name,
+                                      readyForDelivery: item.readyForDelivery
+                                    }))
+                                  })
+                                  return group.items.length
+                                })()}件の商品
                               </span>
                               {!isOwnItem && (
                                 <span className="text-xs font-medium text-orange-600">
@@ -2109,7 +2120,15 @@ export function MyPage() {
           </h3>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 text-xs md:text-sm">
             <span className="text-white/70">
-              配送準備完了: <span className="font-semibold text-white">{displayedItems.filter(item => item.readyForDelivery).length}</span>
+              配送準備完了: <span className="font-semibold text-white">{(() => {
+                const readyCount = displayedItems.filter(item => item.readyForDelivery).length
+                console.log('🔍 [DEBUG] Badge display count:', {
+                  readyCount,
+                  totalDisplayedItems: displayedItems.length,
+                  timestamp: new Date().toISOString()
+                })
+                return readyCount
+              })()}</span>
             </span>
             <span className="text-white/70">
               総数: <span className="font-semibold text-white">{displayedItems.length}</span>
