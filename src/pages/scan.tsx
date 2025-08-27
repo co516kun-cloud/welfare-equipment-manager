@@ -175,7 +175,7 @@ function ScanComponent() {
     setTimeout(() => {
       window.scrollTo(0, scrollPosition)
     }, 0)
-  }, [items, products, orders])
+  }, [productItems, products])
   
   // handleScanResultへの最新参照を保持
   const handleScanResultRef = useRef(handleScanResult)
@@ -400,6 +400,25 @@ function ScanComponent() {
         {/* Scanner */}
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground mb-4">QRコードをスキャン</h2>
+          
+          {/* デバッグ用テストボタン（カメラモード時も表示） */}
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-800 mb-2">テスト用QRコード:</p>
+            <div className="flex flex-wrap gap-2">
+              {['WC-001', 'BED-001', 'WK-001', 'CANE-001'].map((sample) => (
+                <Button
+                  key={sample}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDesktopCameraScanResult(sample)}
+                  className="text-xs"
+                >
+                  {sample}
+                </Button>
+              ))}
+            </div>
+          </div>
+          
           <div className="aspect-square bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
             {useCameraScanner && isScanning && !cameraError ? (
               <QRCameraScanner
