@@ -55,7 +55,6 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
         // 差分更新を実行
         await loadIncrementalUpdates()
         clearNotifications()
-        console.log('🔄 Pull refresh completed (incremental)')
         
         // 成功フィードバック
         await new Promise(resolve => setTimeout(resolve, 500))

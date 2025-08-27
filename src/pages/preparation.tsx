@@ -89,8 +89,7 @@ export function Preparation() {
       
       // 既に処理中の場合は無視（重複実行防止）
       if (isProcessingQR) {
-        console.log('📱 QR processing already in progress, ignoring duplicate scan')
-        return
+          return
       }
       
       setIsProcessingQR(true)

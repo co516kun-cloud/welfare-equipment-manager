@@ -103,12 +103,10 @@ function ScanComponent() {
   // カメラ関連の関数（モバイル用）
   const toggleTorch = () => {
     // トーチのトグル機能（実装は後で追加可能）
-    console.log('Toggle torch')
   }
   
   const switchCamera = () => {
     // カメラの切り替え機能（実装は後で追加可能）
-    console.log('Switch camera')
   }
 
 
@@ -119,25 +117,10 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
-    console.log('🔍 Scanning QR Code:', qrCode)
-    console.log('📊 Store data available:', {
-      itemsCount: items.length,
-      productsCount: products.length,
-      ordersCount: orders.length
-    })
-    
-    // スクロール位置を保存
-    const scrollPosition = window.scrollY
-    
-    // ストアのitemsデータからアイテムを検索（高速・確実）
-    const item = items.find(item => item.qr_code === qrCode)
-    console.log('🔍 Found item:', item)
     
     if (item) {
       // ストアのproductsデータから商品情報を取得
       const product = products.find(p => p.id === item.product_id)
-      console.log('📦 Found product:', product)
-      console.log('🏷️ Item status:', item.status)
       
       const result: ScanResult = {
         id: `scan-${Date.now()}`,
@@ -153,11 +136,9 @@ function ScanComponent() {
       // selectedItemにproductも含めて設定
       const selectedItemWithProduct = { ...item, product }
       setSelectedItem(selectedItemWithProduct)
-      console.log('✅ Selected item set:', selectedItemWithProduct)
       
       // 利用可能なアクションをログ出力
       const availableActions = getAvailableActions(item.status)
-      console.log('🎬 Available actions for status', item.status, ':', availableActions)
       
       // スキャン履歴を更新
       setScanHistory(prev => [{
@@ -166,7 +147,6 @@ function ScanComponent() {
         action: 'スキャン完了'
       }, ...prev.slice(0, 9)])
     } else {
-      console.log('❌ Item not found for QR code:', qrCode)
       const result: ScanResult = {
         id: `scan-${Date.now()}`,
         qrCode,

@@ -123,9 +123,6 @@ export function DataImport() {
     })
     
     // デバッグ情報
-    console.log('Headers:', headers)
-    console.log('First row data:', data[0])
-    console.log('All data:', data)
     
     setPreview(data.slice(0, 10)) // 最初の10件のみプレビュー
     
@@ -149,8 +146,6 @@ export function DataImport() {
     }
     
     // デバッグ用ログ
-    console.log('Parsed IDs:', ids)
-    console.log('Duplicate IDs:', duplicateIds)
     
     // 型別バリデーション
     switch (type) {

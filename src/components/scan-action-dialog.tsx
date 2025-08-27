@@ -96,7 +96,6 @@ export function ScanActionDialog({
   // チェックリスト完了処理
   const handleChecklistComplete = (result: ChecklistResult) => {
     setChecklistResult(result)
-    console.log('Checklist completed:', result)
   }
   
   // チェックリストボタンの処理

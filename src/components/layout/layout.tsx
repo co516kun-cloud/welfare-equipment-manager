@@ -12,7 +12,6 @@ export function Layout() {
       try {
         const newIsMobile = window.innerWidth < 768
         if (newIsMobile !== isMobile) {
-          console.log('Display mode changed:', newIsMobile ? 'Mobile' : 'Desktop')
           setIsMobile(newIsMobile)
           // 表示モード変更時のデータ再読み込みは削除（不要）
         }

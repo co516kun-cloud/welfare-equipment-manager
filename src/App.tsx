@@ -57,7 +57,6 @@ function App() {
           initializeRealtimeNotifications()
           
           setDataInitialized(true)
-          console.log('✅ App initialization complete')
           
         } catch (error) {
           console.error('❌ App initialization failed:', error)

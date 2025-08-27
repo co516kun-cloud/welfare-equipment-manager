@@ -25,7 +25,6 @@ export function StockAlert() {
         // 最新のカテゴリデータを取得
         const currentCategories = await supabaseDb.getCategories()
         
-        console.log(`📦 Loading items for ${currentCategories.length} categories for stock alert`)
         
         // 各カテゴリのアイテムを並行して読み込み
         const categoryItemsPromises = currentCategories.map(category => 
@@ -36,7 +35,6 @@ export function StockAlert() {
         
         // 全てのアイテムを統合
         const allItemsData = categoryItemsResults.flat()
-        console.log(`✅ Loaded ${allItemsData.length} total items for stock alert`)
         
         setAllItems(allItemsData)
       } catch (error) {
@@ -124,7 +122,6 @@ export function StockAlert() {
       // 最新のカテゴリデータを取得
       const currentCategories = await supabaseDb.getCategories()
       
-      console.log(`🔄 Refreshing items for ${currentCategories.length} categories`)
       
       // 各カテゴリのアイテムを並行して読み込み
       const categoryItemsPromises = currentCategories.map(category => 
@@ -135,7 +132,6 @@ export function StockAlert() {
       
       // 全てのアイテムを統合
       const allItemsData = categoryItemsResults.flat()
-      console.log(`✅ Refreshed ${allItemsData.length} total items`)
       
       setAllItems(allItemsData)
     } catch (error) {

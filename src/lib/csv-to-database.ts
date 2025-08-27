@@ -37,15 +37,12 @@ function parseCSVLine(line: string): string[] {
 
 // Categories.csvからカテゴリデータを作成
 export function processCategories(csvData: string): ProductCategory[] {
-  console.log('Processing categories CSV:', csvData.substring(0, 200))
   const lines = csvData.split('\n').filter(line => line.trim())
-  console.log('Categories lines:', lines.length)
   const categories: ProductCategory[] = []
   
   // ヘッダー行をスキップ
   for (let i = 1; i < lines.length; i++) {
     const fields = parseCSVLine(lines[i])
-    console.log(`Category line ${i}:`, fields)
     if (fields.length >= 2 && fields[0] && fields[1]) {
       const id = fields[0].replace(/^\uFEFF/, '') // BOM除去
       const name = fields[1]

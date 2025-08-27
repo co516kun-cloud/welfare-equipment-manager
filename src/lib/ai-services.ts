@@ -193,7 +193,6 @@ class AIServices {
       // 実際の実装では、フィードバックを学習データとして蓄積
       // モデルの再訓練や回答品質の改善に活用
       
-      console.log(`FAQ ${faqId} にフィードバック: ${feedback}`)
       
     } catch (error) {
       console.error('FAQフィードバック更新エラー:', error)

@@ -50,7 +50,6 @@ export function Approval() {
   useEffect(() => {
     // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
     if (!isDataInitialized && (orders.length === 0 || products.length === 0)) {
-      console.log('🔄 Approval page: Data not initialized, loading basic data...')
       loadData()
     }
   }, [orders.length, products.length, isDataInitialized, loadData])
@@ -119,7 +118,6 @@ export function Approval() {
     if (!selectedOrder) return
 
     try {
-      console.log('🎯 Starting approval submit:', { action: approvalForm.action, orderId: selectedOrder.id })
 
       // 全体承認の場合は、承認待ちのアイテムを一括処理
       const updatedItems = selectedOrder.items.map(item => {
@@ -145,13 +143,10 @@ export function Approval() {
         approval_notes: approvalForm.notes
       }
 
-      console.log('💾 Saving updated order:', updatedOrder)
       await supabaseDb.saveOrder(updatedOrder)
       
-      console.log('🔄 Reloading data...')
       await loadData()
       
-      console.log('✅ Approval submit completed, closing dialog')
       setShowApprovalDialog(false)
       setSelectedOrder(null)
       setApprovalForm({ action: '', notes: '' })

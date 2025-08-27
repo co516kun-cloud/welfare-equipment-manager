@@ -36,11 +36,9 @@ export function Deposits() {
     try {
       setIsLoading(true)
       setLoadError(null)
-      console.log('📦 Loading deposit items...')
       const data = await supabaseDb.getDepositItems()
       setDepositItems(data)
       setFilteredItems(data)
-      console.log(`✅ Loaded ${data.length} deposit items`)
     } catch (error) {
       console.error('Error loading deposit items:', error)
       setLoadError('預かり物データの読み込みに失敗しました')

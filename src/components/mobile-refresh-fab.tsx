@@ -20,7 +20,6 @@ export function MobileRefreshFab({ className = '' }: MobileRefreshFabProps) {
       // 差分更新を実行
       await loadIncrementalUpdates()
       clearNotifications()
-      console.log('🔄 Mobile refresh completed (incremental)')
       
       // 成功フィードバック
       await new Promise(resolve => setTimeout(resolve, 300))

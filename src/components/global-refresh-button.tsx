@@ -21,7 +21,6 @@ export function GlobalRefreshButton({ className = '' }: GlobalRefreshButtonProps
       // 差分更新を実行
       await loadIncrementalUpdates()
       clearNotifications()
-      console.log('🔄 Manual refresh completed (incremental)')
     } catch (error) {
       console.error('Error refreshing data:', error)
     } finally {

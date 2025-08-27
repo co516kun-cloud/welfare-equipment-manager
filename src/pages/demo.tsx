@@ -37,10 +37,8 @@ export function Demo() {
     try {
       setIsLoading(true)
       setLoadError(null)
-      console.log('📦 Loading demo equipment...')
       const data = await supabaseDb.getDemoEquipment()
       setDemoEquipment(data)
-      console.log(`✅ Loaded ${data.length} demo equipment`)
     } catch (error) {
       console.error('Error loading demo equipment:', error)
       setLoadError('デモ機器データの読み込みに失敗しました')

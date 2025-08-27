@@ -86,7 +86,6 @@ export function QRCameraScanner({
         const qrScanner = new QrScanner(
           videoRef.current!,
           (result) => {
-            console.log('QR Code detected:', result.data)
             
             // 連続モードでない場合は一時的にスキャンを停止
             if (!continuousMode) {
