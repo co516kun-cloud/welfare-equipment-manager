@@ -115,7 +115,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<MyPage />} />
+          <Route index element={<Menu />} />
           <Route path="scan" element={<Scan />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="orders" element={<Orders />} />
