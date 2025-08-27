@@ -13,6 +13,8 @@ export function ItemDetail() {
   const [histories, setHistories] = useState<ItemHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedChecklist, setExpandedChecklist] = useState<string | null>(null)
+  const [showAllHistories, setShowAllHistories] = useState(false)
+  const [currentOrder, setCurrentOrder] = useState<any>(null)
 
   useEffect(() => {
     if (itemId) {
@@ -36,6 +38,19 @@ export function ItemDetail() {
           new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
         )
         setHistories(sortedHistories)
+        
+        // 貸与中の場合、対応する発注を検索
+        if (itemData.status === 'rented') {
+          const orders = await supabaseDb.getOrders()
+          const relatedOrder = orders.find(order =>
+            order.items.some(orderItem =>
+              orderItem.assigned_item_ids?.includes(itemData.id)
+            )
+          )
+          setCurrentOrder(relatedOrder)
+        } else {
+          setCurrentOrder(null)
+        }
       }
     } catch (error) {
       console.error('Error loading item data:', error)
@@ -360,6 +375,28 @@ export function ItemDetail() {
                     })()}
                   </p>
                 </div>
+                {currentOrder && (
+                  <>
+                    <div>
+                      <p className="text-sm text-muted-foreground">貸与先顧客</p>
+                      <p className="font-medium text-foreground">{currentOrder.customer_name}様</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">担当者</p>
+                      <p className="font-medium text-foreground">{currentOrder.assigned_to}</p>
+                    </div>
+                    {currentOrder.carried_by && currentOrder.carried_by !== currentOrder.assigned_to && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">持出者</p>
+                        <p className="font-medium text-foreground">{currentOrder.carried_by}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-muted-foreground">発注ID</p>
+                      <p className="font-medium text-foreground text-xs">{currentOrder.id}</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -376,7 +413,7 @@ export function ItemDetail() {
               </p>
             ) : (
               <div className="space-y-4">
-                {histories.map((history, index) => (
+                {(showAllHistories ? histories : histories.slice(0, 5)).map((history, index) => (
                   <div key={history.id} className="relative">
                     {index !== histories.length - 1 && (
                       <div className="absolute left-5 top-12 w-0.5 h-8 bg-border"></div>
@@ -439,6 +476,23 @@ export function ItemDetail() {
                     </div>
                   </div>
                 ))}
+                
+                {/* もっと見る / 閉じる ボタン */}
+                {histories.length > 5 && (
+                  <div className="flex justify-center pt-4 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAllHistories(!showAllHistories)}
+                      className="text-sm"
+                    >
+                      {showAllHistories 
+                        ? `📈 履歴を閉じる (${histories.length - 5}件を非表示)`
+                        : `📈 もっと見る (${histories.length - 5}件の履歴)`
+                      }
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
