@@ -589,7 +589,7 @@ export function Orders() {
                             />
                           </td>
                           <td className="py-3 px-4 text-foreground">{order.customer_name}様</td>
-                          <td className="py-3 px-4 text-foreground">{productName}（{item.quantity}個） [ID: {item.id || 'no-id'}]</td>
+                          <td className="py-3 px-4 text-foreground">{productName}</td>
                           <td className="py-3 px-4 text-foreground">{order.assigned_to}</td>
                           <td className="py-3 px-4 text-foreground">{order.carried_by}</td>
                           <td className="py-3 px-4 whitespace-nowrap">
@@ -683,7 +683,7 @@ export function Orders() {
                             </div>
                             
                             <div className="text-xs text-muted-foreground truncate">
-                              {productName}（{item.quantity}個）
+                              {productName}
                             </div>
                             
                             <div className="flex items-center justify-between text-xs text-muted-foreground">
