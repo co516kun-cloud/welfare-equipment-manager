@@ -88,14 +88,13 @@ export function QRCameraScanner({
           (result) => {
             console.log('QR Code detected:', result.data)
             
-            // 連続モードでない場合は一時的にスキャンを停止
+            // 連続モードでない場合はスキャナーを即座に停止
             if (!continuousMode) {
+              console.log('🔐 Non-continuous mode: stopping scanner immediately')
               setIsScanning(false)
-              setTimeout(() => {
-                if (qrScannerRef.current) {
-                  setIsScanning(true)
-                }
-              }, 2000) // 2秒後に再開
+              if (qrScannerRef.current) {
+                qrScannerRef.current.stop()
+              }
             }
             
             onScanResultRef.current(result.data)
@@ -108,7 +107,7 @@ export function QRCameraScanner({
             highlightScanRegion: true,
             highlightCodeOutline: true,
             preferredCamera: facingMode,
-            maxScansPerSecond: 5,
+            maxScansPerSecond: continuousMode ? 5 : 1, // 非連続モードでは1回/秒に制限
           }
         )
 

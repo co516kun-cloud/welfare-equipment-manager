@@ -59,6 +59,7 @@ export function Preparation() {
   const [useCameraScanner, setUseCameraScanner] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isProcessingQR, setIsProcessingQR] = useState(false)
+  const [lastProcessedQR, setLastProcessedQR] = useState<string>('')
   
   useEffect(() => {
     // データが初期化されていない場合、または基本データが空の場合のみ再読み込み
@@ -78,6 +79,7 @@ export function Preparation() {
     setCameraError(null)
     setUseCameraScanner(true) // カメラモードを初期設定に変更
     setIsProcessingQR(false) // 処理フラグをリセット
+    setLastProcessedQR('') // 最後に処理したQRコードをリセット
     setShowQRScanDialog(true)
     console.log('📱 QR scan dialog state updated, qrScanItem set to:', item)
   }
@@ -87,6 +89,7 @@ export function Preparation() {
     try {
       console.log('📱 Camera scan result:', qrCode)
       console.log('📱 Current qrScanItem:', qrScanItem)
+      console.log('📱 Last processed QR:', lastProcessedQR)
       
       // 既に処理中の場合は無視（重複実行防止）
       if (isProcessingQR) {
@@ -94,7 +97,14 @@ export function Preparation() {
         return
       }
       
+      // 同じQRコードが短時間内に再度処理されるのを防ぐ
+      if (lastProcessedQR === qrCode) {
+        console.log('🔐 Same QR code processed recently, ignoring:', qrCode)
+        return
+      }
+      
       setIsProcessingQR(true)
+      setLastProcessedQR(qrCode)
       
       // ダイアログを即座に閉じて重複を防ぐ
       setShowQRScanDialog(false)
@@ -122,6 +132,10 @@ export function Preparation() {
       setShowQRScanDialog(true) // エラー時はダイアログを再表示
     } finally {
       setIsProcessingQR(false)
+      // 3秒後にlastProcessedQRをクリア（同じQRコードを再度処理可能にする）
+      setTimeout(() => {
+        setLastProcessedQR('')
+      }, 3000)
     }
   }
 
