@@ -286,17 +286,6 @@ export function MyPage() {
                       supportHistories: [] // サポート履歴は後で取得
                     }
 
-                    // デバッグ用ログ
-                    console.log('🔍 [DEBUG] displayedItem created:', {
-                      id: itemData.id,
-                      name: itemData.name,
-                      customer: itemData.customer,
-                      orderItemProcessingStatus: item.item_processing_status,
-                      productItemStatus: productItem.status,
-                      readyForDelivery: itemData.readyForDelivery,
-                      assignedItemId: itemData.assignedItemId
-                    })
-
                     return itemData
                   }
                 }
@@ -333,26 +322,6 @@ export function MyPage() {
         }
       })
       
-      // デバッグ用ログ - 最終的な表示アイテムリスト
-      console.log('🔍 [DEBUG] Final displayedItems:', {
-        totalItems: itemsList.length,
-        readyForDeliveryCount: itemsList.filter(item => item.readyForDelivery).length,
-        notReadyForDeliveryCount: itemsList.filter(item => !item.readyForDelivery).length,
-        itemsDetailDebug: itemsList.map(item => ({
-          id: item.id,
-          name: item.name,
-          customer: item.customer,
-          readyForDelivery: item.readyForDelivery,
-          assignedItemId: item.assignedItemId,
-          orderItemId: item.orderItemId,
-          productItemStatus: item.productItem?.status
-        })),
-        duplicateCheck: itemsList.reduce((acc, item) => {
-          const key = `${item.orderItemId}-${item.customer}`
-          acc[key] = (acc[key] || 0) + 1
-          return acc
-        }, {})
-      })
 
       setDisplayedItems(itemsList)
     } catch (error) {
@@ -709,22 +678,10 @@ export function MyPage() {
     
     if (newSelected.has(itemId)) {
       newSelected.delete(itemId)
-      console.log('🔍 [DEBUG] Item deselected:', {
-        itemId,
-        name: selectedItem?.name,
-        readyForDelivery: selectedItem?.readyForDelivery
-      })
     } else {
       newSelected.add(itemId)
-      console.log('🔍 [DEBUG] Item selected:', {
-        itemId,
-        name: selectedItem?.name,
-        readyForDelivery: selectedItem?.readyForDelivery,
-        orderItemId: selectedItem?.orderItemId
-      })
     }
     
-    console.log('🔍 [DEBUG] Total selected items:', newSelected.size)
     setSelectedItems(newSelected)
   }
 
@@ -733,19 +690,10 @@ export function MyPage() {
     // 個別のアイテムIDを使用（orderItemIdではなく）
     const allDeliveryIds = deliveryItems.map(item => item.id).filter(id => id)
     
-    console.log('🔍 [DEBUG] Select All clicked:', {
-      totalDisplayedItems: displayedItems.length,
-      readyForDeliveryItems: deliveryItems.length,
-      currentSelectedCount: selectedItems.size,
-      allDeliveryIdsCount: allDeliveryIds.length,
-      willSelectAll: !(selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0)
-    })
     
     if (selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0) {
-      console.log('🔍 [DEBUG] Deselecting all items')
       setSelectedItems(new Set())
     } else {
-      console.log('🔍 [DEBUG] Selecting all delivery items:', allDeliveryIds)
       setSelectedItems(new Set(allDeliveryIds))
     }
   }
@@ -761,11 +709,6 @@ export function MyPage() {
       // 選択されたアイテムを取得（個別のアイテムIDを使用）
       const selectedDisplayItems = displayedItems.filter(item => selectedItems.has(item.id))
       
-      console.log('🔍 [DEBUG] Batch delivery started:', {
-        selectedItemIds: Array.from(selectedItems),
-        selectedDisplayItemsCount: selectedDisplayItems.length,
-        readyForDeliveryInSelection: selectedDisplayItems.filter(item => item.readyForDelivery).length
-      })
       
       console.log(`🚚 Batch delivery for ${selectedDisplayItems.length} items:`, selectedDisplayItems.map(item => ({
         id: item.id,
@@ -780,27 +723,16 @@ export function MyPage() {
       const processedOrderItemIds = new Set<string>()
       
       for (const item of selectedDisplayItems) {
-        console.log('🔍 [DEBUG] Processing item:', {
-          id: item.id,
-          name: item.name,
-          orderItemId: item.orderItemId,
-          assignedItemId: item.assignedItemId,
-          readyForDelivery: item.readyForDelivery,
-          isOwnItem: selectedUser === currentUser
-        })
         
         if (item.assignedItemId && item.orderItemId) {
           // 同じorderItemIdは一度だけ処理する
           if (!processedOrderItemIds.has(item.orderItemId)) {
-            console.log('🔍 [DEBUG] Updating order item status:', item.orderItemId, '-> delivered')
             await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
             processedOrderItemIds.add(item.orderItemId)
           } else {
-            console.log('🔍 [DEBUG] OrderItemId already processed, skipping:', item.orderItemId)
           }
           
           // 商品アイテムのステータスを個別に更新
-          console.log('🔍 [DEBUG] Updating product item status:', item.assignedItemId, '-> rented')
           await updateItemStatus(item.assignedItemId, 'rented')
           
           const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
@@ -840,19 +772,9 @@ export function MyPage() {
             )
           }
         } else {
-          console.log('🔍 [DEBUG] Item skipped (missing assignedItemId or orderItemId):', {
-            id: item.id,
-            assignedItemId: item.assignedItemId,
-            orderItemId: item.orderItemId
-          })
         }
       }
       
-      console.log('🔍 [DEBUG] Batch delivery completed:', {
-        totalProcessedItems: selectedDisplayItems.length,
-        uniqueOrderItemsProcessed: processedOrderItemIds.size,
-        processedOrderItemIds: Array.from(processedOrderItemIds)
-      })
       
       const isOwnDelivery = selectedUser === currentUser
       const completionMessage = isOwnDelivery 
@@ -1382,7 +1304,6 @@ export function MyPage() {
             {/* バッチ処理ボタン */}
             {(() => {
               const readyItems = displayedItems.filter(item => item.readyForDelivery)
-              console.log('🔍 [DEBUG] UI Batch buttons - readyItems:', readyItems.length)
               
               return readyItems.length > 0 && (
                 <div className="flex items-center gap-2">
@@ -1468,18 +1389,7 @@ export function MyPage() {
                             <h3 className="font-semibold text-foreground">{group.customer}様</h3>
                             <div className="flex items-center space-x-2 mt-1">
                               <span className="text-xs text-muted-foreground">
-                                {(() => {
-                                  console.log('🔍 [DEBUG] Group items count:', {
-                                    groupKey: `${group.priority}-${group.customer}`,
-                                    groupItemsLength: group.items.length,
-                                    groupItems: group.items.map(item => ({
-                                      id: item.id, 
-                                      name: item.name,
-                                      readyForDelivery: item.readyForDelivery
-                                    }))
-                                  })
-                                  return group.items.length
-                                })()}件の商品
+{group.items.length}件の商品
                               </span>
                               {!isOwnItem && (
                                 <span className="text-xs font-medium text-orange-600">
@@ -2120,15 +2030,7 @@ export function MyPage() {
           </h3>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 text-xs md:text-sm">
             <span className="text-white/70">
-              配送準備完了: <span className="font-semibold text-white">{(() => {
-                const readyCount = displayedItems.filter(item => item.readyForDelivery).length
-                console.log('🔍 [DEBUG] Badge display count:', {
-                  readyCount,
-                  totalDisplayedItems: displayedItems.length,
-                  timestamp: new Date().toISOString()
-                })
-                return readyCount
-              })()}</span>
+              配送準備完了: <span className="font-semibold text-white">{displayedItems.filter(item => item.readyForDelivery).length}</span>
             </span>
             <span className="text-white/70">
               総数: <span className="font-semibold text-white">{displayedItems.length}</span>
@@ -2139,7 +2041,6 @@ export function MyPage() {
         {/* デスクトップ版一括処理ボタン */}
         {(() => {
           const readyItems = displayedItems.filter(item => item.readyForDelivery)
-          console.log('🔍 [DEBUG] Desktop Batch buttons - readyItems:', readyItems.length)
           
           return readyItems.length > 0 && (
             <div className="flex items-center justify-center gap-3 mb-6 p-4 bg-white/10 rounded-lg border border-white/20">

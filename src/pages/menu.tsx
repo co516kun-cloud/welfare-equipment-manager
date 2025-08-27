@@ -202,15 +202,6 @@ export function Menu() {
             return false
           })
           
-          console.log('🔍 [DEBUG] Menu myPageCount calculation:', {
-            orderId: order.id,
-            itemId: item.id,
-            customerName: order.customer_name,
-            itemProcessingStatus: item.item_processing_status,
-            assignedItemIds: item.assigned_item_ids,
-            hasReadyForDeliveryItems,
-            willCount: hasReadyForDeliveryItems ? 1 : 0
-          })
           
           return itemTotal + (hasReadyForDeliveryItems ? 1 : 0)
         }
