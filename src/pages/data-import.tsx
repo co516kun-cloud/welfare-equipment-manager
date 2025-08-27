@@ -155,7 +155,20 @@ export function DataImport() {
           if (!row.id) newErrors.push(`行 ${row._rowIndex}: IDが必須です`)
           if (!row.product_id) newErrors.push(`行 ${row._rowIndex}: 商品IDが必須です`)
         })
-        // TODO: 商品ID存在チェック（実際のインポート時に実施）
+        
+        // 商品ID存在チェック
+        try {
+          const products = await supabaseDb.getProducts()
+          const existingProductIds = new Set(products.map(p => p.id))
+          
+          data.forEach(row => {
+            if (row.product_id && !existingProductIds.has(row.product_id)) {
+              newErrors.push(`行 ${row._rowIndex}: 商品ID「${row.product_id}」が商品マスタに存在しません`)
+            }
+          })
+        } catch (error) {
+          newErrors.push('商品マスタの確認に失敗しました')
+        }
         break
       case 'product':
         data.forEach(row => {
@@ -358,7 +371,13 @@ export function DataImport() {
       condition_notes: row.condition_notes || null
     }))
     
-    await supabaseDb.upsertProductItems(items)
+    try {
+      await supabaseDb.upsertProductItems(items)
+    } catch (error) {
+      console.error('Product items upsert failed:', error)
+      console.error('Failed items:', items.map(item => ({ id: item.id, product_id: item.product_id })))
+      throw new Error(`商品アイテムの保存に失敗しました: ${error.message}`)
+    }
   }
 
   // ユーザーインポート
