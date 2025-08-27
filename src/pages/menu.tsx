@@ -185,25 +185,40 @@ export function Menu() {
   const currentUser = getCurrentUserName()
   
   // マイページの配送準備完了件数を計算（PC版用）
-  const myPageCount = orders.flatMap(order => {
+  // 発注アイテムベースでカウント（個別商品ではなく発注単位）
+  const myPageCount = orders.reduce((total, order) => {
     // 自分が担当者または持出者の発注のみ
     if (order.assigned_to === currentUser || order.carried_by === currentUser) {
-      return order.items.flatMap(item => {
-        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 && order.status !== 'delivered') {
-          // 割り当てられた商品アイテムの中でready_for_deliveryのもののみカウント
-          return item.assigned_item_ids.map(assignedItemId => {
+      return total + order.items.reduce((itemTotal, item) => {
+        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 && 
+            order.status !== 'delivered' && item.item_processing_status === 'ready') {
+          
+          // この発注アイテムが配送準備完了かチェック
+          const hasReadyForDeliveryItems = item.assigned_item_ids.some(assignedItemId => {
             if (assignedItemId) {
               const productItem = items.find(pi => pi.id === assignedItemId)
-              return productItem && productItem.status === 'ready_for_delivery' ? 1 : 0
+              return productItem && productItem.status === 'ready_for_delivery'
             }
-            return 0
+            return false
           })
+          
+          console.log('🔍 [DEBUG] Menu myPageCount calculation:', {
+            orderId: order.id,
+            itemId: item.id,
+            customerName: order.customer_name,
+            itemProcessingStatus: item.item_processing_status,
+            assignedItemIds: item.assigned_item_ids,
+            hasReadyForDeliveryItems,
+            willCount: hasReadyForDeliveryItems ? 1 : 0
+          })
+          
+          return itemTotal + (hasReadyForDeliveryItems ? 1 : 0)
         }
-        return []
-      })
+        return itemTotal
+      }, 0)
     }
-    return []
-  }).reduce((total, count) => total + count, 0)
+    return total
+  }, 0)
 
   // バッジの値を取得
   const getBadgeValue = (badgeType: string) => {
