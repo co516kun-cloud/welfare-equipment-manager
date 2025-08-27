@@ -124,7 +124,7 @@ export function DataImport() {
     
     // デバッグ情報
     
-    setPreview(data.slice(0, 10)) // 最初の10件のみプレビュー
+    setPreview(data.slice(0, 50)) // 最初の50件のみプレビュー
     
     // バリデーション
     validateData(selectedType, data)
@@ -134,8 +134,8 @@ export function DataImport() {
   const validateData = async (type: ImportType, data: any[]) => {
     const newErrors: string[] = []
     
-    if (data.length > 3000) {
-      newErrors.push('エラー: 最大3000件までインポート可能です')
+    if (data.length > 2000) {
+      newErrors.push('エラー: 最大2000件までインポート可能です')
     }
     
     // 重複チェック
@@ -218,8 +218,8 @@ export function DataImport() {
         return row
       })
       
-      // バッチ処理（100件ずつ）
-      const batchSize = 100
+      // バッチ処理（50件ずつ）
+      const batchSize = 50
       const totalBatches = Math.ceil(data.length / batchSize)
       
       for (let i = 0; i < totalBatches; i++) {
@@ -468,7 +468,7 @@ export function DataImport() {
             {/* プレビュー */}
             {preview.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-lg font-bold text-white mb-3">プレビュー（最初の10件）</h3>
+                <h3 className="text-lg font-bold text-white mb-3">プレビュー（最初の50件）</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-white">
                     <thead>
