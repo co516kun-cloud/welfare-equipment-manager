@@ -28,35 +28,29 @@ import Notifications from './pages/notifications'
 
 // デフォルトページを画面サイズに応じて決定するコンポーネント
 function DefaultRoute() {
-  const [isMobile, setIsMobile] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
-  
-  useEffect(() => {
-    // 初期化時に画面サイズを判定
-    const checkScreenSize = () => {
-      const mobile = typeof window !== 'undefined' && window.innerWidth < 768
-      setIsMobile(mobile)
-      setIsInitialized(true)
-    }
+  // User-Agent文字列でモバイル判定（より確実）
+  const isMobileDevice = () => {
+    if (typeof navigator === 'undefined') return false
     
-    checkScreenSize()
+    const userAgent = navigator.userAgent.toLowerCase()
+    const mobileKeywords = [
+      'android', 'iphone', 'ipad', 'ipod', 'blackberry', 
+      'windows phone', 'mobile', 'opera mini'
+    ]
     
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768
-      setIsMobile(mobile)
-    }
-    
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-  
-  // 初期化が完了するまで待機
-  if (!isInitialized) {
-    return <div>Loading...</div>
+    return mobileKeywords.some(keyword => userAgent.includes(keyword))
   }
   
-  // モバイルならマイページ、デスクトップならメニュー
-  return <Navigate to={isMobile ? "/mypage" : "/menu"} replace />
+  // 画面サイズでの判定も併用
+  const isSmallScreen = () => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768
+  }
+  
+  // モバイルデバイスまたは小さい画面の場合はマイページ
+  const shouldShowMyPage = isMobileDevice() || isSmallScreen()
+  
+  return <Navigate to={shouldShowMyPage ? "/mypage" : "/menu"} replace />
 }
 
 function App() {
