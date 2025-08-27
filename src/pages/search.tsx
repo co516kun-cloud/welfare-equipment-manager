@@ -46,13 +46,17 @@ export function Search() {
   const [hasSearched, setHasSearched] = useState(false)
   
   // 表示モード（モバイルでは初期値をカード、デスクトップではリスト）
-  const [viewMode, setViewMode] = useState<'list' | 'card'>(() => {
-    // モバイル判定（768px未満）
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
-      return 'card'
+  const [viewMode, setViewMode] = useState<'list' | 'card'>('list')
+  
+  // モバイル判定とデフォルト表示モード設定
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768
+    if (isMobile) {
+      setViewMode('card')
+    } else {
+      setViewMode('list')
     }
-    return 'list'
-  })
+  }, [])
   
   
   // 商品検索ページはproduct_itemsのみを使用（App.tsxで初期化済み）
