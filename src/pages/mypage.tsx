@@ -361,23 +361,42 @@ export function MyPage() {
 
   // QRスキャン開始
   const handleQRScan = (item: any) => {
+    console.log('📱 Opening QR scan dialog with item:', item)
     setQrScanItem(item)
     setScanError('')
     setManualItemId('')
     setCameraError(null)
-    setUseCameraScanner(false)
+    setUseCameraScanner(true) // カメラモードを初期設定に変更
     setShowQRScanDialog(true)
+    console.log('📱 QR scan dialog state updated, qrScanItem set to:', item)
   }
 
   // カメラスキャンの結果を処理
-  const handleCameraScanResult = (qrCode: string) => {
-    console.log('📱 Camera scan result:', qrCode)
-    setManualItemId(qrCode)
-    setUseCameraScanner(false)
-    // 自動で配送処理を実行
-    setTimeout(() => {
-      handleQRScanResult(qrCode)
-    }, 500)
+  const handleCameraScanResult = async (qrCode: string) => {
+    try {
+      console.log('📱 Camera scan result:', qrCode)
+      console.log('📱 Current qrScanItem:', qrScanItem)
+      
+      setManualItemId(qrCode)
+      setUseCameraScanner(false)
+      setScanError('') // エラーをクリア
+      
+      // qrScanItemの存在確認
+      if (!qrScanItem) {
+        console.error('🔥 qrScanItem is null/undefined at scan result')
+        setScanError('配送対象商品が選択されていません')
+        return
+      }
+      
+      // 状態更新のタイミング問題を回避するため、QRコードを直接渡す
+      console.log('📱 Calling handleQRScanResultWithCode with:', { qrCode, qrScanItem })
+      await handleQRScanResultWithCode(qrCode, qrScanItem)
+      
+    } catch (error) {
+      console.error('🔥 Error in handleCameraScanResult:', error)
+      setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
+      setUseCameraScanner(false)
+    }
   }
 
   // カメラエラーを処理
@@ -385,6 +404,108 @@ export function MyPage() {
     console.error('📱 Camera error:', error)
     setCameraError(error)
     setUseCameraScanner(false)
+  }
+
+  // QRコードと対象アイテムを直接受け取る配送処理（状態更新タイミング問題を回避）
+  const handleQRScanResultWithCode = async (qrCode: string, targetItem: any) => {
+    try {
+      console.log('🔧 Starting QR delivery process with direct params:', {
+        qrCode,
+        targetItem
+      })
+      
+      if (!qrCode.trim()) {
+        setScanError('QRコードを入力してください')
+        return
+      }
+
+      if (!targetItem) {
+        setScanError('配送対象商品が選択されていません')
+        return
+      }
+
+      setScanError('')
+      
+      // QRコードから商品アイテムを検索
+      console.log('🔧 Fetching product items...')
+      const items = await supabaseDb.getProductItems()
+      console.log('🔧 Found', items.length, 'product items')
+      
+      const scannedItem = items.find(item => {
+        const itemQR = item.qr_code?.trim()
+        const inputQR = qrCode.trim()
+        // 大文字小文字を無視して比較
+        return itemQR && itemQR.toLowerCase() === inputQR.toLowerCase()
+      })
+      
+      if (!scannedItem) {
+        setScanError('QRコードに対応するアイテムが見つかりません')
+        return
+      }
+
+      // 配送対象アイテムと一致するかチェック
+      if (scannedItem.id !== targetItem.assignedItemId) {
+        setScanError(`配送対象商品と異なります。期待: ${targetItem.assignedItemId}, 実際: ${scannedItem.id}`)
+        return
+      }
+
+      // 配送準備完了状態かチェック
+      if (scannedItem.status !== 'ready_for_delivery') {
+        setScanError(`このアイテムは配送準備未完了です (状態: ${scannedItem.status})`)
+        return
+      }
+
+      console.log('🔧 Scanned item validation passed, processing delivery...')
+
+      // 配送完了処理を実行
+      await supabaseDb.updateOrderItemStatus(targetItem.orderItemId, 'delivered', currentUser)
+
+      // 商品ステータスを 'rented' に更新
+      await updateItemStatus(scannedItem.id, 'rented')
+
+      const updatedProductItem = {
+        ...scannedItem,
+        status: 'rented' as const,
+        customer_name: targetItem.customer,
+        loan_start_date: new Date().toISOString().split('T')[0]
+      }
+      await supabaseDb.saveProductItem(updatedProductItem)
+
+      // 配送完了の履歴を記録
+      await supabaseDb.createItemHistory(
+        scannedItem.id,
+        'QR配送完了（貸与開始）',
+        'ready_for_delivery',
+        'rented' as const,
+        currentUser,
+        {
+          location: `${targetItem.customer}様宅`,
+          customer_name: targetItem.customer,
+          metadata: {
+            orderId: targetItem.orderId,
+            deliveryType: 'qr_scan',
+            deliverer: currentUser,
+            deliveryDate: new Date().toISOString()
+          }
+        }
+      )
+
+      // データ再読み込み
+      await loadData()
+      
+      // ダイアログを閉じる
+      setShowQRScanDialog(false)
+      setQrScanItem(null)
+      setManualItemId('')
+      
+      alert(`アイテム ${scannedItem.id} の配送が完了しました`)
+
+    } catch (error) {
+      console.error('🔥 QR配送処理エラー (direct params):', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setScanError(`配送処理中にエラーが発生しました: ${errorMessage}`)
+      setUseCameraScanner(false)
+    }
   }
 
   // QRスキャン結果の処理
@@ -1738,15 +1859,84 @@ export function MyPage() {
             </DialogHeader>
             
             <div className="space-y-4">
-              <div className="aspect-square bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">📱</div>
-                  <p className="text-muted-foreground mb-4">QRコードを手動で入力してください</p>
-                  <p className="text-xs text-muted-foreground">
-                    開発環境のため、QRコードの文字列を直接入力してください
-                  </p>
-                </div>
+              {/* カメラスキャナーまたは手動入力選択 */}
+              <div className="flex gap-2 mb-4">
+                <Button
+                  variant={useCameraScanner ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setUseCameraScanner(true)
+                    setCameraError(null)
+                    setScanError('')
+                  }}
+                  className="flex-1"
+                >
+                  📷 カメラスキャン
+                </Button>
+                <Button
+                  variant={!useCameraScanner ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setUseCameraScanner(false)
+                    setCameraError(null)
+                    setScanError('')
+                  }}
+                  className="flex-1"
+                >
+                  ⌨️ 手動入力
+                </Button>
               </div>
+
+              {useCameraScanner ? (
+                // カメラスキャナー
+                <div className="space-y-4">
+                  <div className="aspect-square bg-black rounded-lg overflow-hidden relative">
+                    <QRCameraScanner
+                      onScanResult={handleCameraScanResult}
+                      onError={handleCameraError}
+                      isActive={useCameraScanner && showQRScanDialog}
+                      className="w-full h-full"
+                      continuousMode={true}
+                    />
+                    {cameraError && (
+                      <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                        <div className="text-center text-white p-4">
+                          <div className="text-2xl mb-2">⚠️</div>
+                          <p className="text-sm mb-2">カメラエラー</p>
+                          <p className="text-xs mb-4">{cameraError}</p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setCameraError(null)
+                              setUseCameraScanner(false)
+                            }}
+                            className="text-white border-white"
+                          >
+                            手動入力に切替
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">
+                      配送商品のQRコードをカメラに向けてスキャンしてください
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* 手動入力 */
+                <div className="aspect-square bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+                  <div className="text-center">
+                    <div className="text-6xl mb-4">📱</div>
+                    <p className="text-muted-foreground mb-4">QRコードを手動で入力してください</p>
+                    <p className="text-xs text-muted-foreground">
+                      手動入力モード
+                    </p>
+                  </div>
+                </div>
+              )}
               
               {/* 手動入力フォーム */}
               <div className="space-y-3">
@@ -2051,137 +2241,6 @@ export function MyPage() {
         </DialogContent>
       </Dialog>
 
-      {/* QRスキャンダイアログ */}
-      <Dialog open={showQRScanDialog} onOpenChange={setShowQRScanDialog}>
-        <DialogContent className="max-w-sm mx-4 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>QRコードスキャン - 配送確認</DialogTitle>
-            <DialogDescription>
-              {qrScanItem && (
-                <>
-                  <strong>{qrScanItem.name}</strong> の配送確認<br />
-                  顧客: <strong>{qrScanItem.customer}様</strong><br />
-                  管理番号: <strong>{qrScanItem.assignedItemId}</strong><br />
-                  {qrScanItem.totalQuantity > 1 && (
-                    <span className="text-blue-600">
-                      ({qrScanItem.individualIndex + 1}/{qrScanItem.totalQuantity}個目)
-                    </span>
-                  )}
-                  <br />
-                  商品のQRコードをスキャンして配送を確認してください
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="aspect-square bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
-              <div className="text-center">
-                <div className="text-6xl mb-4">📱</div>
-                <p className="text-muted-foreground mb-4">QRコードを手動で入力してください</p>
-                <p className="text-xs text-muted-foreground">
-                  開発環境のため、QRコードの文字列を直接入力してください
-                </p>
-              </div>
-            </div>
-            
-            {/* 手動入力フォーム */}
-            <div className="space-y-3">
-              <Label htmlFor="qrInput">QRコード（管理番号）</Label>
-              <Input
-                id="qrInput"
-                value={manualItemId}
-                onChange={(e) => setManualItemId(e.target.value)}
-                placeholder={`例: ${qrScanItem?.assignedItemId || 'WC-001'}, QR-${qrScanItem?.assignedItemId || 'WC-001'}`}
-                className="text-center"
-              />
-              
-              {/* テスト用サンプルボタン */}
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQRScanResult('QR-WC-001')}
-                  className="text-xs"
-                >
-                  QR-WC-001
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQRScanResult('QR-WC-002')}
-                  className="text-xs"
-                >
-                  QR-WC-002
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQRScanResult('QR-BD-001')}
-                  className="text-xs"
-                >
-                  QR-BD-001
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQRScanResult('QR-WK-001')}
-                  className="text-xs"
-                >
-                  QR-WK-001
-                </Button>
-              </div>
-              
-              <Button 
-                onClick={() => {
-                  if (manualItemId.trim()) {
-                    handleQRScanResult(manualItemId.trim())
-                  }
-                }}
-                className="w-full"
-                disabled={!manualItemId.trim()}
-              >
-                QRコードを処理
-              </Button>
-              
-              {/* 商品の管理番号でも試行 */}
-              {qrScanItem && (
-                <Button 
-                  variant="outline"
-                  onClick={() => handleQRScanResult(qrScanItem.assignedItemId)}
-                  className="w-full"
-                >
-                  この商品のQRコードでテスト ({qrScanItem.assignedItemId})
-                </Button>
-              )}
-            </div>
-
-            {scanError && (
-              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                <p className="text-sm text-destructive font-medium">エラー</p>
-                <p className="text-sm text-destructive">{scanError}</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-2"
-                  onClick={() => {
-                    setScanError('')
-                    setManualItemId('')
-                  }}
-                >
-                  再スキャン
-                </Button>
-              </div>
-            )}
-            
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setShowQRScanDialog(false)}>
-                キャンセル
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
       </div>
     </div>
   )
