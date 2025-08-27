@@ -77,6 +77,7 @@ export function Preparation() {
     setScanError('')
     setCameraError(null)
     setUseCameraScanner(true) // カメラモードを初期設定に変更
+    setIsProcessingQR(false) // 処理フラグをリセット
     setShowQRScanDialog(true)
     console.log('📱 QR scan dialog state updated, qrScanItem set to:', item)
   }
@@ -89,10 +90,15 @@ export function Preparation() {
       
       // 既に処理中の場合は無視（重複実行防止）
       if (isProcessingQR) {
-          return
+        console.log('🔐 Already processing QR, ignoring duplicate scan')
+        return
       }
       
       setIsProcessingQR(true)
+      
+      // ダイアログを即座に閉じて重複を防ぐ
+      setShowQRScanDialog(false)
+      
       setQrCodeInput(qrCode)
       setUseCameraScanner(false)
       setScanError('') // エラーをクリア
@@ -113,6 +119,7 @@ export function Preparation() {
       console.error('🔥 Error in handleCameraScanResult:', error)
       setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
       setUseCameraScanner(false)
+      setShowQRScanDialog(true) // エラー時はダイアログを再表示
     } finally {
       setIsProcessingQR(false)
     }
@@ -263,8 +270,7 @@ export function Preparation() {
       // データ再読み込み
       await loadData()
       
-      // ダイアログを閉じる
-      setShowQRScanDialog(false)
+      // 状態をリセット（ダイアログは既にhandleCameraScanResultで閉じている）
       setQrScanItem(null)
       setQrCodeInput('')
       
@@ -427,7 +433,7 @@ export function Preparation() {
       // データ再読み込み
       await loadData()
       
-      // ダイアログを閉じる
+      // ダイアログを閉じる（手動入力の場合のみ）
       setShowQRScanDialog(false)
       setQrScanItem(null)
       setQrCodeInput('')
