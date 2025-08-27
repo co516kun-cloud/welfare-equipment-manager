@@ -4,6 +4,7 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select } from '../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
+import { QRCameraScanner } from '../components/qr-camera-scanner'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -189,6 +190,10 @@ export function Search() {
     requiredDate: new Date().toISOString().split('T')[0]
   })
   const [orderError, setOrderError] = useState('')
+  
+  // QRスキャン関連
+  const [showQRScanner, setShowQRScanner] = useState(false)
+  const [qrScanError, setQrScanError] = useState('')
   
   // ステータス変更ダイアログを開く
   const handleStatusChange = (item: any) => {
@@ -452,6 +457,29 @@ export function Search() {
     }
   }
   
+  // QRスキャン結果を処理
+  const handleQRScanResult = async (qrCode: string) => {
+    try {
+      setQrScanError('')
+      
+      // QRコードで商品アイテムを検索
+      const foundItem = items.find(item => item.qr_code === qrCode || item.id === qrCode)
+      
+      if (foundItem) {
+        // 商品詳細ページに遷移
+        setShowQRScanner(false)
+        navigate(`/item/${foundItem.id}`, {
+          state: { from: '/search' }
+        })
+      } else {
+        setQrScanError(`QRコード「${qrCode}」に該当する商品が見つかりません`)
+      }
+    } catch (error) {
+      console.error('QRスキャンエラー:', error)
+      setQrScanError('QRコードの処理中にエラーが発生しました')
+    }
+  }
+  
   // ステータスの色を取得
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -534,7 +562,17 @@ export function Search() {
         
         {/* 検索フィルター */}
         <div className="bg-card rounded-xl border border-border shadow-sm p-4 md:p-6">
-          <h2 className="text-lg font-semibold text-foreground mb-4">検索条件</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-foreground">検索条件</h2>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowQRScanner(true)}
+              className="border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
+            >
+              📱 QRスキャン
+            </Button>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* フリーワード検索 */}
@@ -1083,6 +1121,38 @@ export function Search() {
                   className="bg-primary hover:bg-primary/90"
                 >
                   発注実行
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        
+        {/* QRスキャナーダイアログ */}
+        <Dialog open={showQRScanner} onOpenChange={setShowQRScanner}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>QRコードスキャン</DialogTitle>
+              <DialogDescription>
+                商品のQRコードをスキャンして詳細ページを開きます
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {qrScanError && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-sm text-destructive">{qrScanError}</p>
+                </div>
+              )}
+              
+              <QRCameraScanner
+                onScanResult={handleQRScanResult}
+                continuousMode={false}
+                className="w-full"
+              />
+              
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setShowQRScanner(false)}>
+                  キャンセル
                 </Button>
               </div>
             </div>

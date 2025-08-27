@@ -1,13 +1,22 @@
 import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Select } from '../components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 import { getChecklistConfig } from '../lib/maintenance-checklist-config'
+import { useAuth } from '../hooks/useAuth'
+import { useInventoryStore } from '../stores/useInventoryStore'
 import type { ProductItem, Product, ItemHistory } from '../types'
 
 export function ItemDetail() {
   const { itemId } = useParams<{ itemId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { users, updateItemStatus } = useInventoryStore()
+  
   const [item, setItem] = useState<ProductItem | null>(null)
   const [product, setProduct] = useState<Product | null>(null)
   const [histories, setHistories] = useState<ItemHistory[]>([])
@@ -15,6 +24,17 @@ export function ItemDetail() {
   const [expandedChecklist, setExpandedChecklist] = useState<string | null>(null)
   const [showAllHistories, setShowAllHistories] = useState(false)
   const [currentOrder, setCurrentOrder] = useState<any>(null)
+  
+  // 編集関連
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editForm, setEditForm] = useState({
+    status: '',
+    condition: '',
+    location: '',
+    customerName: '',
+    loanStartDate: '',
+    notes: ''
+  })
 
   useEffect(() => {
     if (itemId) {
@@ -56,6 +76,89 @@ export function ItemDetail() {
       console.error('Error loading item data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  // 現在のユーザー名を取得
+  const getCurrentUserName = () => {
+    if (!user) return '管理者'
+    
+    // Supabaseのusersテーブルから名前を取得
+    const dbUser = users.find(u => u.email === user.email)
+    if (dbUser) return dbUser.name
+    
+    // なければuser_metadataから取得
+    return user.user_metadata?.name || user.email?.split('@')[0] || user.email || 'ユーザー'
+  }
+  
+  // 編集ダイアログを開く
+  const handleEdit = () => {
+    if (!item) return
+    
+    setEditForm({
+      status: item.status,
+      condition: item.condition,
+      location: item.location || '',
+      customerName: item.customer_name || '',
+      loanStartDate: item.loan_start_date || '',
+      notes: item.condition_notes || ''
+    })
+    setShowEditDialog(true)
+  }
+  
+  // 編集を実行
+  const handleEditSubmit = async () => {
+    if (!item) return
+    
+    try {
+      const updatedItem = {
+        id: item.id,
+        qr_code: item.qr_code,
+        product_id: item.product_id,
+        status: editForm.status,
+        condition: editForm.condition,
+        location: editForm.location || item.location,
+        customer_name: editForm.customerName || undefined,
+        loan_start_date: editForm.loanStartDate || undefined,
+        condition_notes: editForm.notes
+      }
+      
+      // 楽観的更新でステータスを即座に反映
+      await updateItemStatus(item.id, updatedItem.status)
+      
+      // ステータス以外の属性も更新
+      await supabaseDb.saveProductItem(updatedItem)
+      
+      // 履歴を記録
+      await supabaseDb.createItemHistory(
+        item.id,
+        '商品情報更新',
+        item.status,
+        editForm.status,
+        getCurrentUserName(),
+        {
+          location: editForm.location,
+          condition: editForm.condition,
+          notes: editForm.notes,
+          customerName: editForm.customerName,
+          metadata: {
+            updateType: 'item_detail_edit',
+            previousLocation: item.location,
+            previousCondition: item.condition,
+            previousCustomerName: item.customer_name,
+            previousNotes: item.condition_notes
+          }
+        }
+      )
+      
+      setShowEditDialog(false)
+      
+      // データを再読み込み
+      await loadItemData(item.id)
+      alert('商品情報を更新しました')
+    } catch (error) {
+      console.error('編集エラー:', error)
+      alert('編集中にエラーが発生しました')
     }
   }
 
@@ -283,10 +386,19 @@ export function ItemDetail() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
-        <Button variant="outline" onClick={() => navigate(-1)}>
-          <span className="mr-2">←</span>
-          戻る
-        </Button>
+        <div className="flex space-x-2">
+          <Button 
+            variant="outline" 
+            onClick={handleEdit}
+            className="border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+          >
+            ✏️ 編集
+          </Button>
+          <Button variant="outline" onClick={() => navigate(-1)}>
+            <span className="mr-2">←</span>
+            戻る
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -529,6 +641,109 @@ export function ItemDetail() {
           </div>
         </div>
       </div>
+      
+      {/* 編集ダイアログ */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>商品情報編集</DialogTitle>
+            <DialogDescription>
+              {item && `${item.id} の情報を編集します`}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="status">ステータス</Label>
+              <Select
+                id="status"
+                value={editForm.status}
+                onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                className="mt-1"
+              >
+                <option value="available">利用可能</option>
+                <option value="reserved">予約済み</option>
+                <option value="ready_for_delivery">配送準備完了</option>
+                <option value="rented">貸与中</option>
+                <option value="returned">返却済み</option>
+                <option value="cleaning">清掃中</option>
+                <option value="maintenance">メンテナンス中</option>
+                <option value="out_of_order">故障中</option>
+                <option value="unknown">不明</option>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="condition">コンディション</Label>
+              <Select
+                id="condition"
+                value={editForm.condition}
+                onChange={(e) => setEditForm(prev => ({ ...prev, condition: e.target.value }))}
+                className="mt-1"
+              >
+                <option value="excellent">優良</option>
+                <option value="good">良好</option>
+                <option value="fair">普通</option>
+                <option value="needs_repair">要修理</option>
+                <option value="unknown">不明</option>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="location">保管場所</Label>
+              <Input
+                id="location"
+                value={editForm.location}
+                onChange={(e) => setEditForm(prev => ({ ...prev, location: e.target.value }))}
+                placeholder="保管場所を入力"
+                className="mt-1"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="customerName">顧客名</Label>
+              <Input
+                id="customerName"
+                value={editForm.customerName}
+                onChange={(e) => setEditForm(prev => ({ ...prev, customerName: e.target.value }))}
+                placeholder="顧客名を入力"
+                className="mt-1"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="loanStartDate">貸与開始日</Label>
+              <Input
+                id="loanStartDate"
+                type="date"
+                value={editForm.loanStartDate}
+                onChange={(e) => setEditForm(prev => ({ ...prev, loanStartDate: e.target.value }))}
+                className="mt-1"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="notes">備考・メモ</Label>
+              <Input
+                id="notes"
+                value={editForm.notes}
+                onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="備考やメモを入力"
+                className="mt-1"
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                キャンセル
+              </Button>
+              <Button onClick={handleEditSubmit}>
+                更新
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
