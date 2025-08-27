@@ -232,7 +232,7 @@ export function DataImport() {
       })
       
       // バッチ処理（50件ずつ）
-      const batchSize = 50
+      const batchSize = 20
       const totalBatches = Math.ceil(data.length / batchSize)
       
       for (let i = 0; i < totalBatches; i++) {
@@ -376,7 +376,10 @@ export function DataImport() {
     } catch (error) {
       console.error('Product items upsert failed:', error)
       console.error('Failed items:', items.map(item => ({ id: item.id, product_id: item.product_id })))
-      throw new Error(`商品アイテムの保存に失敗しました: ${error.message}`)
+      console.error('Error code:', error.code)
+      console.error('Error details:', error.details)
+      console.error('Error hint:', error.hint)
+      throw new Error(`商品アイテムの保存に失敗しました: ${error.message || error.toString()} (Code: ${error.code || 'Unknown'})`)
     }
   }
 

@@ -947,10 +947,14 @@ export class SupabaseDatabase {
     
     const { error } = await supabase
       .from('product_items')
-      .upsert(items, { onConflict: 'id' })
+      .upsert(items, { 
+        onConflict: 'id',
+        ignoreDuplicates: false // 重複時は更新する
+      })
     
     if (error) {
       console.error('Error batch upserting product items:', error)
+      console.error('Error details:', error.details, error.hint, error.code)
       throw error
     }
   }
