@@ -51,7 +51,7 @@ const QRInputField = memo(({ onSubmit }: {
 })
 
 function ScanComponent() {
-  const { loadData, orders, users, items, products, productItems } = useInventoryStore()
+  const { loadData, orders, users, items: productItems, products } = useInventoryStore()
   
   const { user } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
@@ -117,6 +117,12 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
+    // データが読み込まれていない場合は処理しない
+    if (!productItems || !products) {
+      console.warn('Data not loaded yet, skipping scan result:', qrCode)
+      return
+    }
+
     // QRコードに対応するアイテムを検索
     const item = productItems.find(item => 
       item.qr_code?.toLowerCase() === qrCode.toLowerCase()
