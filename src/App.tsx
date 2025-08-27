@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
@@ -25,6 +25,23 @@ import { DataImport } from './pages/data-import'
 import Notifications from './pages/notifications'
 // import { CSVImport } from './pages/csv-import'
 // import { Import } from './pages/import' // Disabled due to installation issues
+
+// デフォルトページを画面サイズに応じて決定するコンポーネント
+function DefaultRoute() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
+  
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+  
+  // モバイルならマイページ、デスクトップならメニュー
+  return <Navigate to={isMobile ? "/mypage" : "/menu"} replace />
+}
 
 function App() {
   // Supabase環境変数をチェック
@@ -115,7 +132,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<Menu />} />
+          <Route index element={<DefaultRoute />} />
           <Route path="scan" element={<Scan />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="orders" element={<Orders />} />
