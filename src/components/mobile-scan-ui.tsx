@@ -179,33 +179,15 @@ export function MobileScanUI({
             </div>
           </div>
         ) : (
-          /* 最近のスキャン履歴 */
+          /* QRスキャン待機 */
           <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg">
-            <h2 className="text-lg font-bold text-slate-800 mb-3">最近のスキャン</h2>
-            <div className="space-y-2">
-              {scanHistory.slice(0, 3).map((scan, index) => (
-                <div key={index} className="bg-slate-50 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-slate-800 text-sm">{scan.qrCode}</p>
-                      <p className="text-xs text-slate-600">{scan.timestamp}</p>
-                    </div>
-                    <span className="text-sm text-slate-500">{scan.action}</span>
-                  </div>
-                </div>
-              ))}
-              
-              {scanHistory.length === 0 && (
-                <div className="text-center py-4 text-slate-500">
-                  スキャン履歴がありません
-                </div>
-              )}
-              
-              {scanHistory.length > 3 && (
-                <button className="w-full text-center text-blue-500 text-sm py-2">
-                  すべて表示 ({scanHistory.length}件)
-                </button>
-              )}
+            <h2 className="text-lg font-bold text-slate-800 mb-3">QRスキャン</h2>
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">📱</div>
+              <p className="text-slate-600">
+                QRコードをスキャンまたは<br />
+                手動入力してください
+              </p>
             </div>
           </div>
         )}

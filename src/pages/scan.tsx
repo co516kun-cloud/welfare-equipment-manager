@@ -56,12 +56,6 @@ function ScanComponent() {
   const { user } = useAuth()
   const [isMobile, setIsMobile] = useState(false)
   
-  const [scanHistory, setScanHistory] = useState<Array<{
-    qrCode: string
-    timestamp: string
-    action: string
-  }>>([])
-
   useEffect(() => {
     const checkMobile = () => {
       const newIsMobile = window.innerWidth < 768
@@ -150,12 +144,6 @@ function ScanComponent() {
       // 利用可能なアクションをログ出力
       const availableActions = getAvailableActions(item.status)
       
-      // スキャン履歴を更新
-      setScanHistory(prev => [{
-        qrCode,
-        timestamp: new Date().toLocaleString('ja-JP'),
-        action: 'スキャン完了'
-      }, ...prev.slice(0, 9)])
     } else {
       const result: ScanResult = {
         id: `scan-${Date.now()}`,
@@ -168,13 +156,6 @@ function ScanComponent() {
       
       setScanResults(prev => [result, ...prev.slice(0, 9)])
       setSelectedItem(null)
-      
-      // スキャン履歴を更新
-      setScanHistory(prev => [{
-        qrCode,
-        timestamp: new Date().toLocaleString('ja-JP'),
-        action: 'エラー'
-      }, ...prev.slice(0, 9)])
     }
     
     // スクロール位置を復元（次のフレームで実行）
@@ -520,42 +501,14 @@ function ScanComponent() {
           </div>
         ) : (
           <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-foreground mb-4">スキャン履歴</h2>
-            <div className="space-y-3">
-              {scanResults.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">
-                  まだスキャンされていません
+            <h2 className="text-lg font-semibold text-foreground mb-4">QRスキャンを開始</h2>
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="text-6xl mb-4">📱</div>
+                <p className="text-muted-foreground">
+                  QRコードをスキャンしてアイテム情報を表示
                 </p>
-              ) : (
-                scanResults.map((result) => (
-                  <div 
-                    key={result.id}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border ${
-                      result.status === 'success' ? 'bg-success/10 border-success/20' :
-                      result.status === 'error' ? 'bg-destructive/10 border-destructive/20' :
-                      'bg-warning/10 border-warning/20'
-                    }`}
-                  >
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                      result.status === 'success' ? 'bg-success/20' :
-                      result.status === 'error' ? 'bg-destructive/20' :
-                      'bg-warning/20'
-                    }`}>
-                      <span className={`text-sm ${
-                        result.status === 'success' ? 'text-success' :
-                        result.status === 'error' ? 'text-destructive' :
-                        'text-warning'
-                      }`}>
-                        {result.status === 'success' ? '✓' : result.status === 'error' ? '✗' : '⚠'}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{result.itemName}</p>
-                      <p className="text-xs text-muted-foreground">{result.timestamp} • {result.action}</p>
-                    </div>
-                  </div>
-                ))
-              )}
+              </div>
             </div>
           </div>
         )}
@@ -580,7 +533,7 @@ function ScanComponent() {
       {/* UI分岐 */}
       {isMobile ? (
         <MobileScanUI 
-          scanHistory={scanHistory}
+          scanHistory={[]}
           onScanResult={handleMobileScanResult}
           onToggleTorch={toggleTorch}
           onSwitchCamera={switchCamera}
