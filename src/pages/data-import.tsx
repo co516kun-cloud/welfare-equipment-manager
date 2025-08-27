@@ -381,6 +381,27 @@ export function DataImport() {
       condition_notes: row.condition_notes || null
     }))
     
+    // インポート直前の最終チェック
+    try {
+      const products = await supabaseDb.getProducts()
+      const existingProductIds = new Set(products.map(p => p.id))
+      
+      console.log(`=== インポート直前チェック ===`)
+      console.log(`商品マスタ件数: ${existingProductIds.size}`)
+      console.log('商品マスタサンプル:', Array.from(existingProductIds).slice(0, 5))
+      
+      const invalidItems = items.filter(item => !existingProductIds.has(item.product_id))
+      if (invalidItems.length > 0) {
+        console.error('存在しない商品IDを持つアイテム:', invalidItems.slice(0, 10).map(item => ({ id: item.id, product_id: item.product_id })))
+        throw new Error(`${invalidItems.length}件のアイテムが存在しない商品IDを参照しています`)
+      }
+    } catch (error) {
+      if (error.message.includes('件のアイテムが存在しない商品ID')) {
+        throw error
+      }
+      console.error('商品ID事前チェックエラー:', error)
+    }
+    
     try {
       await supabaseDb.upsertProductItems(items)
     } catch (error) {
