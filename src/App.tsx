@@ -26,36 +26,6 @@ import Notifications from './pages/notifications'
 // import { CSVImport } from './pages/csv-import'
 // import { Import } from './pages/import' // Disabled due to installation issues
 
-// デフォルトページを画面サイズに応じて決定するコンポーネント
-function DefaultRoute() {
-  // User-Agent文字列でモバイル判定
-  const isMobileDevice = () => {
-    if (typeof navigator === 'undefined') return false
-    
-    const userAgent = navigator.userAgent.toLowerCase()
-    const mobileKeywords = [
-      'android', 'iphone', 'ipad', 'ipod', 'blackberry', 
-      'windows phone', 'mobile', 'opera mini'
-    ]
-    
-    return mobileKeywords.some(keyword => userAgent.includes(keyword))
-  }
-  
-  // 画面サイズでの判定も併用
-  const isSmallScreen = () => {
-    if (typeof window === 'undefined') return false
-    return window.innerWidth < 768
-  }
-  
-  // モバイルデバイスまたは小さい画面の場合はマイページを直接表示
-  const shouldShowMyPage = isMobileDevice() || isSmallScreen()
-  
-  if (shouldShowMyPage) {
-    return <MyPage />
-  }
-  
-  return <Menu />
-}
 
 function App() {
   // Supabase環境変数をチェック
@@ -146,7 +116,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<DefaultRoute />} />
+          <Route index element={<MyPage />} />
           <Route path="scan" element={<Scan />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="orders" element={<Orders />} />
