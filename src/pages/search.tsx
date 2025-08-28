@@ -513,9 +513,9 @@ export function Search() {
   // コンディションの色を取得
   const getConditionColor = (condition: string) => {
     switch (condition) {
-      case 'excellent': return 'bg-success text-success-foreground'
-      case 'good': return 'bg-info text-info-foreground'
-      case 'fair': return 'bg-warning text-warning-foreground'
+      case 'good': return 'bg-success text-success-foreground'
+      case 'fair': return 'bg-info text-info-foreground'
+      case 'caution': return 'bg-orange-500 text-white'
       case 'needs_repair': return 'bg-destructive text-destructive-foreground'
       case 'unknown': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
@@ -525,9 +525,9 @@ export function Search() {
   // コンディションのテキストを取得
   const getConditionText = (condition: string) => {
     switch (condition) {
-      case 'excellent': return '優良'
       case 'good': return '良好'
       case 'fair': return '普通'
+      case 'caution': return '注意'
       case 'needs_repair': return '要修理'
       case 'unknown': return '不明'
       default: return condition
@@ -1007,9 +1007,9 @@ export function Search() {
                   onChange={(e) => setEditForm(prev => ({ ...prev, condition: e.target.value }))}
                   className="mt-1"
                 >
-                  <option value="excellent">優良</option>
                   <option value="good">良好</option>
                   <option value="fair">普通</option>
+                  <option value="caution">注意</option>
                   <option value="needs_repair">要修理</option>
                   <option value="unknown">不明</option>
                 </Select>

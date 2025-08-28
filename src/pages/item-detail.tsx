@@ -30,6 +30,7 @@ export function ItemDetail() {
   const [editForm, setEditForm] = useState({
     status: '',
     condition: '',
+    conditionNotes: '',
     location: '',
     customerName: '',
     loanStartDate: '',
@@ -98,10 +99,11 @@ export function ItemDetail() {
     setEditForm({
       status: item.status,
       condition: item.condition,
+      conditionNotes: item.condition_notes || '',
       location: item.location || '',
       customerName: item.customer_name || '',
       loanStartDate: item.loan_start_date || '',
-      notes: item.condition_notes || ''
+      notes: item.notes || ''
     })
     setShowEditDialog(true)
   }
@@ -120,7 +122,8 @@ export function ItemDetail() {
         location: editForm.location || item.location,
         customer_name: editForm.customerName || undefined,
         loan_start_date: editForm.loanStartDate || undefined,
-        condition_notes: editForm.notes
+        condition_notes: editForm.conditionNotes,
+        notes: editForm.notes
       }
       
       // 楽観的更新でステータスを即座に反映
@@ -140,13 +143,15 @@ export function ItemDetail() {
           location: editForm.location,
           condition: editForm.condition,
           notes: editForm.notes,
+          conditionNotes: editForm.conditionNotes,
           customerName: editForm.customerName,
           metadata: {
             updateType: 'item_detail_edit',
             previousLocation: item.location,
             previousCondition: item.condition,
             previousCustomerName: item.customer_name,
-            previousNotes: item.condition_notes
+            previousNotes: item.notes,
+            previousConditionNotes: item.condition_notes
           }
         }
       )
@@ -190,9 +195,8 @@ export function ItemDetail() {
 
   const getConditionColor = (condition: string) => {
     switch (condition) {
-      case 'excellent': return 'bg-success text-success-foreground'
-      case 'good': return 'bg-info text-info-foreground'
-      case 'fair': return 'bg-warning text-warning-foreground'
+      case 'good': return 'bg-success text-success-foreground'
+      case 'fair': return 'bg-info text-info-foreground'
       case 'caution': return 'bg-orange-500 text-white'
       case 'needs_repair': return 'bg-destructive text-destructive-foreground'
       case 'unknown': return 'bg-muted text-muted-foreground'
@@ -202,7 +206,6 @@ export function ItemDetail() {
 
   const getConditionText = (condition: string) => {
     switch (condition) {
-      case 'excellent': return '優良'
       case 'good': return '良好'
       case 'fair': return '普通'
       case 'caution': return '注意'
@@ -681,12 +684,23 @@ export function ItemDetail() {
                 onChange={(e) => setEditForm(prev => ({ ...prev, condition: e.target.value }))}
                 className="mt-1"
               >
-                <option value="excellent">優良</option>
                 <option value="good">良好</option>
                 <option value="fair">普通</option>
+                <option value="caution">注意</option>
                 <option value="needs_repair">要修理</option>
                 <option value="unknown">不明</option>
               </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="conditionNotes">コンディションメモ</Label>
+              <Input
+                id="conditionNotes"
+                value={editForm.conditionNotes}
+                onChange={(e) => setEditForm(prev => ({ ...prev, conditionNotes: e.target.value }))}
+                placeholder="コンディションに関するメモを入力"
+                className="mt-1"
+              />
             </div>
             
             <div>
