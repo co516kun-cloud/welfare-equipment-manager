@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
@@ -28,7 +28,7 @@ import Notifications from './pages/notifications'
 
 // デフォルトページを画面サイズに応じて決定するコンポーネント
 function DefaultRoute() {
-  // User-Agent文字列でモバイル判定（より確実）
+  // User-Agent文字列でモバイル判定
   const isMobileDevice = () => {
     if (typeof navigator === 'undefined') return false
     
@@ -47,10 +47,14 @@ function DefaultRoute() {
     return window.innerWidth < 768
   }
   
-  // モバイルデバイスまたは小さい画面の場合はマイページ
+  // モバイルデバイスまたは小さい画面の場合はマイページを直接表示
   const shouldShowMyPage = isMobileDevice() || isSmallScreen()
   
-  return <Navigate to={shouldShowMyPage ? "/mypage" : "/menu"} replace />
+  if (shouldShowMyPage) {
+    return <MyPage />
+  }
+  
+  return <Menu />
 }
 
 function App() {
