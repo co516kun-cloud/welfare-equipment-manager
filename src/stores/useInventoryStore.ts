@@ -52,7 +52,7 @@ interface InventoryState {
   createPreparationTask: (task: Omit<PreparationTask, 'id'>) => Promise<void>
   updatePreparationTaskStatus: (taskId: string, status: PreparationTask['status']) => Promise<void>
   addProduct: (product: Omit<Product, 'id'>) => Promise<void>
-  addProductItem: (item: Omit<ProductItem, 'id'>) => Promise<void>
+  addProductItem: (item: Omit<ProductItem, 'id'>, customId?: string) => Promise<void>
   addCategory: (category: Omit<ProductCategory, 'id'>) => Promise<void>
   getInventoryStats: () => any
   
@@ -470,11 +470,11 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     }
   },
   
-  addProductItem: async (itemData) => {
+  addProductItem: async (itemData, customId) => {
     try {
       const newItem: ProductItem = {
         ...itemData,
-        id: `ITM-${Date.now()}`,
+        id: customId || `ITM-${Date.now()}`,
       }
       await supabaseDb.saveProductItem(newItem)
       

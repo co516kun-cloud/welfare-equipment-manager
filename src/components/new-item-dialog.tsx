@@ -127,9 +127,9 @@ export function NewItemDialog({
         notes: newItemForm.notes || ''
       }
       
-      await addProductItem(newItemData)
+      await addProductItem(newItemData, newItemForm.managementId.trim())
       
-      // idを取得するために生成されたアイテムIDを作成
+      // ユーザー指定のIDで作成されたアイテム
       const newItem: ProductItem = {
         id: newItemForm.managementId.trim(),
         ...newItemData
