@@ -15,6 +15,12 @@ export function Layout() {
           setIsMobile(newIsMobile)
           // 表示モード変更時のデータ再読み込みは削除（不要）
         }
+        
+        // モバイル時の動的viewport設定
+        if (newIsMobile) {
+          const vh = window.innerHeight * 0.01
+          document.documentElement.style.setProperty('--vh', `${vh}px`)
+        }
       } catch (error) {
         console.error('Error checking mobile:', error)
       }
@@ -30,12 +36,12 @@ export function Layout() {
   // 手動更新は更新ボタンで行う
 
   if (isMobile) {
-    // モバイル専用レイアウト
+    // モバイル専用レイアウト（画面サイズ最適化）
     return (
-      <div className="flex flex-col h-screen bg-background">
+      <div className="mobile-optimized flex flex-col bg-background">
         <ApprovalBanner />
         <Header />
-        <main className="flex-1 overflow-auto pb-16">
+        <main className="mobile-content flex-1 overflow-auto pb-16">
           <Outlet />
         </main>
         <MobileBottomNav />
