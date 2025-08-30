@@ -158,11 +158,32 @@ export function MobileScanUI({
           </div>
         </div>
 
-        {/* 選択されたアイテムの詳細 */}
-        {selectedItem ? (
-          <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 mb-4 shadow-lg">
-            <h2 className="text-lg font-bold text-slate-800 mb-3">スキャン結果</h2>
-            <div className="space-y-3">
+        {/* QRスキャン待機メッセージのみ表示（結果はダイアログで表示） */}
+        <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg">
+          <h2 className="text-lg font-bold text-slate-800 mb-3">QRスキャン</h2>
+          <div className="text-center py-8">
+            <div className="text-4xl mb-3">📱</div>
+            <p className="text-slate-600">
+              QRコードをスキャンまたは<br />
+              手動入力してください
+            </p>
+          </div>
+        </div>
+      </div>
+      
+      {/* スキャン結果ダイアログ - カメラビューの上にオーバーレイ */}
+      {selectedItem && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+          {/* 背景オーバーレイ */}
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {/* 背景クリックで閉じる場合はここに処理を追加 */}}
+          />
+          
+          {/* スキャン結果ダイアログ */}
+          <div className="relative bg-white rounded-xl p-6 shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">スキャン結果</h2>
+            <div className="space-y-4">
               <div>
                 <p className="font-medium text-slate-800">{selectedItem.product?.name || 'Unknown Product'}</p>
                 <p className="text-sm text-slate-600">管理番号: {selectedItem.id}</p>
@@ -183,7 +204,7 @@ export function MobileScanUI({
               {/* アクションボタン */}
               {getAvailableActions && onActionSelect && (
                 <div className="pt-3 border-t">
-                  <p className="text-sm font-medium text-slate-700 mb-2">実行可能な操作:</p>
+                  <p className="text-sm font-medium text-slate-700 mb-3">実行可能な操作:</p>
                   <div className="flex flex-wrap gap-2">
                     {getAvailableActions(selectedItem.status).map((action) => (
                       <button
@@ -199,24 +220,12 @@ export function MobileScanUI({
               )}
             </div>
           </div>
-        ) : (
-          /* QRスキャン待機 */
-          <div className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg">
-            <h2 className="text-lg font-bold text-slate-800 mb-3">QRスキャン</h2>
-            <div className="text-center py-8">
-              <div className="text-4xl mb-3">📱</div>
-              <p className="text-slate-600">
-                QRコードをスキャンまたは<br />
-                手動入力してください
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
       
       {/* Action Dialog - カメラビューの上にオーバーレイ */}
       {showActionDialog && onActionDialogChange && onActionSuccess && getCurrentUserName && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center">
+        <div className="fixed inset-0 z-[999998] flex items-center justify-center">
           <ScanActionDialog
             open={showActionDialog}
             onOpenChange={onActionDialogChange}
