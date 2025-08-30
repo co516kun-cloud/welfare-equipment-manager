@@ -288,7 +288,7 @@ export function ScanActionDialog({
         resetForm()
       }
     }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md scan-action-dialog">
         <DialogHeader>
           <DialogTitle>
             {actionType === 'return' && '返却処理'}
