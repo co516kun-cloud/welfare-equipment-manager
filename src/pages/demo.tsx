@@ -388,128 +388,162 @@ export function Demo() {
       </div>
 
       {/* デモ開始ダイアログ */}
-      <Dialog open={showLoanDialog} onOpenChange={setShowLoanDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>デモ機貸出</DialogTitle>
-            <DialogDescription>
-              {selectedEquipment && (
-                <>
-                  <strong>{selectedEquipment.name}</strong> のデモ貸出を開始します。<br />
-                  顧客情報を入力してください。
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
+      {showLoanDialog && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+          {/* 背景オーバーレイ */}
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowLoanDialog(false)}
+          />
           
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="customerName">顧客名 <span className="text-destructive">*</span></Label>
-              <Input
-                id="customerName"
-                value={loanForm.customerName}
-                onChange={(e) => setLoanForm(prev => ({ ...prev, customerName: e.target.value }))}
-                placeholder="例: 田中太郎"
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="loanDate">貸出日 <span className="text-destructive">*</span></Label>
-              <Input
-                id="loanDate"
-                type="date"
-                value={loanForm.loanDate}
-                onChange={(e) => setLoanForm(prev => ({ ...prev, loanDate: e.target.value }))}
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="notes">備考</Label>
-              <Input
-                id="notes"
-                value={loanForm.notes}
-                onChange={(e) => setLoanForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="特記事項があれば入力してください"
-                className="mt-1"
-              />
-            </div>
-
-            {formError && (
-              <p className="text-sm text-destructive">{formError}</p>
-            )}
+          {/* ダイアログ */}
+          <div className="relative bg-white rounded-xl p-6 shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* 閉じるボタン */}
+            <button
+              onClick={() => setShowLoanDialog(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
+            >
+              ✕
+            </button>
             
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowLoanDialog(false)}
-              >
-                キャンセル
-              </Button>
-              <Button onClick={handleLoanSubmit}>
-                貸出開始
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* 新規デモ機登録ダイアログ */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>新規デモ機登録</DialogTitle>
-            <DialogDescription>
-              新しい入浴用具デモ機を登録します。<br />
-              デモ機名を入力してください。
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="equipmentName">デモ機名 <span className="text-destructive">*</span></Label>
-              <Input
-                id="equipmentName"
-                value={addForm.name}
-                onChange={(e) => setAddForm(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="例: 浴槽台、滑り止めマット"
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="managementNumber">管理番号 <span className="text-destructive">*</span></Label>
-              <Input
-                id="managementNumber"
-                value={addForm.managementNumber}
-                onChange={(e) => setAddForm(prev => ({ ...prev, managementNumber: e.target.value }))}
-                placeholder="例: ①、②、③... または A、B、C..."
-                className="mt-1"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                他のデモ機と重複しない管理番号を入力してください
+            <div className="pr-8">
+              <h2 className="text-lg font-bold text-slate-800 mb-2">デモ機貸出</h2>
+              <p className="text-sm text-slate-600 mb-6">
+                {selectedEquipment && (
+                  <>
+                    <strong>{selectedEquipment.name}</strong> のデモ貸出を開始します。<br />
+                    顧客情報を入力してください。
+                  </>
+                )}
               </p>
             </div>
-
-            {addError && (
-              <p className="text-sm text-destructive">{addError}</p>
-            )}
             
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowAddDialog(false)}
-              >
-                キャンセル
-              </Button>
-              <Button onClick={handleAddSubmit}>
-                登録
-              </Button>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="customerName">顧客名 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="customerName"
+                  value={loanForm.customerName}
+                  onChange={(e) => setLoanForm(prev => ({ ...prev, customerName: e.target.value }))}
+                  placeholder="例: 田中太郎"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="loanDate">貸出日 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="loanDate"
+                  type="date"
+                  value={loanForm.loanDate}
+                  onChange={(e) => setLoanForm(prev => ({ ...prev, loanDate: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="notes">備考</Label>
+                <Input
+                  id="notes"
+                  value={loanForm.notes}
+                  onChange={(e) => setLoanForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="特記事項があれば入力してください"
+                  className="mt-1"
+                />
+              </div>
+
+              {formError && (
+                <p className="text-sm text-red-500">{formError}</p>
+              )}
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowLoanDialog(false)}
+                >
+                  キャンセル
+                </Button>
+                <Button onClick={handleLoanSubmit}>
+                  貸出開始
+                </Button>
+              </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
+
+      {/* 新規デモ機登録ダイアログ */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
+          {/* 背景オーバーレイ */}
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowAddDialog(false)}
+          />
+          
+          {/* ダイアログ */}
+          <div className="relative bg-white rounded-xl p-6 shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* 閉じるボタン */}
+            <button
+              onClick={() => setShowAddDialog(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
+            >
+              ✕
+            </button>
+            
+            <div className="pr-8">
+              <h2 className="text-lg font-bold text-slate-800 mb-2">新規デモ機登録</h2>
+              <p className="text-sm text-slate-600 mb-6">
+                新しい入浴用具デモ機を登録します。<br />
+                デモ機名を入力してください。
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="equipmentName">デモ機名 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="equipmentName"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="例: 浴槽台、滑り止めマット"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="managementNumber">管理番号 <span className="text-red-500">*</span></Label>
+                <Input
+                  id="managementNumber"
+                  value={addForm.managementNumber}
+                  onChange={(e) => setAddForm(prev => ({ ...prev, managementNumber: e.target.value }))}
+                  placeholder="例: ①、②、③... または A、B、C..."
+                  className="mt-1"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  他のデモ機と重複しない管理番号を入力してください
+                </p>
+              </div>
+
+              {addError && (
+                <p className="text-sm text-red-500">{addError}</p>
+              )}
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowAddDialog(false)}
+                >
+                  キャンセル
+                </Button>
+                <Button onClick={handleAddSubmit}>
+                  登録
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )
