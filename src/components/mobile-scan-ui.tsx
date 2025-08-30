@@ -1,6 +1,12 @@
 import { useState, useRef } from 'react'
 import { Input } from './ui/input'
 import { QRCameraScanner } from './qr-camera-scanner'
+import { ScanActionDialog } from './scan-action-dialog'
+import type { ProductItem, Product, Order, OrderItem } from '../types'
+
+interface SelectedItem extends ProductItem {
+  product?: Product
+}
 
 interface MobileScanUIProps {
   scanHistory: Array<{
@@ -12,11 +18,19 @@ interface MobileScanUIProps {
   onToggleTorch: () => void
   onSwitchCamera: () => void
   continuousMode?: boolean
-  selectedItem?: any
+  selectedItem?: SelectedItem
   onActionSelect?: (action: any) => void
   getAvailableActions?: (status: string) => any[]
   getStatusColor?: (status: string) => string
   getStatusText?: (status: string) => string
+  // ダイアログ制御用のprops
+  showActionDialog?: boolean
+  onActionDialogChange?: (open: boolean) => void
+  actionType?: string
+  availableOrders?: {order: Order, item: OrderItem, product: Product}[]
+  onActionSuccess?: () => void
+  getCurrentUserName?: () => string
+  orders?: Order[]
 }
 
 export function MobileScanUI({ 
@@ -29,7 +43,14 @@ export function MobileScanUI({
   onActionSelect,
   getAvailableActions,
   getStatusColor,
-  getStatusText
+  getStatusText,
+  showActionDialog = false,
+  onActionDialogChange,
+  actionType = '',
+  availableOrders = [],
+  onActionSuccess,
+  getCurrentUserName,
+  orders = []
 }: MobileScanUIProps) {
   const [localQrInput, setLocalQrInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(true)
@@ -192,6 +213,22 @@ export function MobileScanUI({
           </div>
         )}
       </div>
+      
+      {/* Action Dialog - カメラビューの上にオーバーレイ */}
+      {showActionDialog && onActionDialogChange && onActionSuccess && getCurrentUserName && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center">
+          <ScanActionDialog
+            open={showActionDialog}
+            onOpenChange={onActionDialogChange}
+            selectedItem={selectedItem}
+            actionType={actionType}
+            availableOrders={availableOrders}
+            onSuccess={onActionSuccess}
+            getCurrentUserName={getCurrentUserName}
+            orders={orders}
+          />
+        </div>
+      )}
     </div>
   )
 }

@@ -543,22 +543,30 @@ function ScanComponent() {
           getAvailableActions={getAvailableActions}
           getStatusColor={getStatusColor}
           getStatusText={getStatusText}
+          showActionDialog={showActionDialog}
+          onActionDialogChange={setShowActionDialog}
+          actionType={actionType}
+          availableOrders={availableOrders}
+          onActionSuccess={handleActionSuccess}
+          getCurrentUserName={getCurrentUserName}
+          orders={orders}
         />
       ) : (
-        <DesktopScanUI />
+        <>
+          <DesktopScanUI />
+          {/* Action Dialog - デスクトップ版のみ */}
+          <ScanActionDialog
+            open={showActionDialog}
+            onOpenChange={setShowActionDialog}
+            selectedItem={selectedItem}
+            actionType={actionType}
+            availableOrders={availableOrders}
+            onSuccess={handleActionSuccess}
+            getCurrentUserName={getCurrentUserName}
+            orders={orders}
+          />
+        </>
       )}
-      
-      {/* Action Dialog - モバイル・デスクトップ共通 */}
-      <ScanActionDialog
-        open={showActionDialog}
-        onOpenChange={setShowActionDialog}
-        selectedItem={selectedItem}
-        actionType={actionType}
-        availableOrders={availableOrders}
-        onSuccess={handleActionSuccess}
-        getCurrentUserName={getCurrentUserName}
-        orders={orders}
-      />
     </>
   )
 }
