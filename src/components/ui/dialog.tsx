@@ -23,12 +23,33 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[100] mobile-dialog-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div 
+      className="fixed mobile-dialog-overlay" 
+      style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 999999,
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        margin: 0,
+        padding: 0
+      }}
+    >
       <div 
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
+        style={{ zIndex: 999998 }}
       />
-      <div className="relative z-10 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto mobile-dialog-content">
+      <div 
+        className="relative w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto mobile-dialog-content"
+        style={{ zIndex: 999999 }}
+      >
         {children}
       </div>
     </div>

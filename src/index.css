@@ -108,10 +108,17 @@
       display: flex !important;
       align-items: center !important;
       justify-content: center !important;
-      z-index: 9999 !important;
+      z-index: 999999 !important; /* 非常に高いz-index */
       /* viewportに対して絶対配置 */
       height: 100vh !important;
       height: 100dvh !important;
+      /* 他の要素の影響を完全に無視 */
+      width: 100vw !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      /* すべてのレイアウト制約を無視 */
+      transform: none !important;
+      contain: none !important;
     }
     
     .mobile-dialog-content {
@@ -120,7 +127,8 @@
       max-height: 80dvh !important;
       margin: auto !important;
       /* 中央配置を確実にする */
-      transform: translateY(0) !important;
+      transform: none !important;
+      z-index: 999999 !important;
     }
     
     /* QRスキャン後のダイアログ専用最適化 */
