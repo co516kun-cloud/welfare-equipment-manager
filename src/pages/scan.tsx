@@ -543,6 +543,7 @@ function ScanComponent() {
           getAvailableActions={getAvailableActions}
           getStatusColor={getStatusColor}
           getStatusText={getStatusText}
+          onClearSelectedItem={() => setSelectedItem(null)}
           showActionDialog={showActionDialog}
           onActionDialogChange={setShowActionDialog}
           actionType={actionType}

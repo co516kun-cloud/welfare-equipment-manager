@@ -23,7 +23,9 @@ interface MobileScanUIProps {
   getAvailableActions?: (status: string) => any[]
   getStatusColor?: (status: string) => string
   getStatusText?: (status: string) => string
-  // ダイアログ制御用のprops
+  // スキャン結果ダイアログ制御用
+  onClearSelectedItem?: () => void
+  // アクションダイアログ制御用のprops
   showActionDialog?: boolean
   onActionDialogChange?: (open: boolean) => void
   actionType?: string
@@ -44,6 +46,7 @@ export function MobileScanUI({
   getAvailableActions,
   getStatusColor,
   getStatusText,
+  onClearSelectedItem,
   showActionDialog = false,
   onActionDialogChange,
   actionType = '',
@@ -177,12 +180,20 @@ export function MobileScanUI({
           {/* 背景オーバーレイ */}
           <div 
             className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => {/* 背景クリックで閉じる場合はここに処理を追加 */}}
+            onClick={() => onClearSelectedItem?.()}
           />
           
           {/* スキャン結果ダイアログ */}
           <div className="relative bg-white rounded-xl p-6 shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">スキャン結果</h2>
+            {/* 閉じるボタン */}
+            <button
+              onClick={() => onClearSelectedItem?.()}
+              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
+            >
+              ✕
+            </button>
+            
+            <h2 className="text-lg font-bold text-slate-800 mb-4 pr-8">スキャン結果</h2>
             <div className="space-y-4">
               <div>
                 <p className="font-medium text-slate-800">{selectedItem.product?.name || 'Unknown Product'}</p>
