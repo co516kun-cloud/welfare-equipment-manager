@@ -174,8 +174,8 @@ export function MobileScanUI({
         </div>
       </div>
       
-      {/* スキャン結果ダイアログ - カメラビューの上にオーバーレイ */}
-      {selectedItem && (
+      {/* スキャン結果ダイアログ - カメラビューの上にオーバーレイ（アクションダイアログが開いていない時のみ） */}
+      {selectedItem && !showActionDialog && (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
           {/* 背景オーバーレイ */}
           <div 
