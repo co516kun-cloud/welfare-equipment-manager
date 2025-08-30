@@ -537,6 +537,7 @@ export function Orders() {
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">担当者</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">持出者</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">ステータス</th>
+                    <th className="text-left py-3 px-4 font-medium text-muted-foreground">管理番号</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">発注日</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">希望日</th>
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">作成者</th>
@@ -565,6 +566,7 @@ export function Orders() {
                               {getStatusText(order.status)}
                             </span>
                           </td>
+                          <td className="py-3 px-4 text-foreground text-muted-foreground">-</td>
                           <td className="py-3 px-4 text-foreground">{order.order_date}</td>
                           <td className="py-3 px-4 text-foreground">{order.required_date}</td>
                           <td className="py-3 px-4 text-foreground">{order.created_by}</td>
@@ -577,6 +579,18 @@ export function Orders() {
                       const productName = product?.name || '商品名不明'
                       const displayKey = `${order.id}-${item.id || itemIndex}`
                       
+                      // 割り当てられた管理番号を取得
+                      const getAssignedManagementId = () => {
+                        if (item.assigned_item_ids && item.assigned_item_ids.length > 0) {
+                          // 割り当てられたアイテムIDから管理番号を取得
+                          const assignedItemId = item.assigned_item_ids[0] // 個別管理なので最初の1つを取得
+                          const assignedItem = items.find(productItem => productItem.id === assignedItemId)
+                          return assignedItem ? assignedItem.id : '未確定'
+                        }
+                        return '未割り当て'
+                      }
+                      
+                      const managementId = getAssignedManagementId()
                                       
                       return (
                         <tr key={displayKey} className="border-b border-border hover:bg-accent/50">
@@ -595,6 +609,11 @@ export function Orders() {
                           <td className="py-3 px-4 whitespace-nowrap">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.item_processing_status || order.status)}`}>
                               {getStatusText(item.item_processing_status || order.status)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-foreground">
+                            <span className={`text-sm ${managementId === '未割り当て' ? 'text-muted-foreground' : 'text-foreground font-medium'}`}>
+                              {managementId}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-foreground">{order.order_date}</td>
@@ -657,6 +676,18 @@ export function Orders() {
                   const product = products.find(p => p.id === item.product_id)
                   const productName = product?.name || '商品名不明'
                   
+                  // 割り当てられた管理番号を取得（モバイル版）
+                  const getAssignedManagementId = () => {
+                    if (item.assigned_item_ids && item.assigned_item_ids.length > 0) {
+                      const assignedItemId = item.assigned_item_ids[0]
+                      const assignedItem = items.find(productItem => productItem.id === assignedItemId)
+                      return assignedItem ? assignedItem.id : '未確定'
+                    }
+                    return '未割り当て'
+                  }
+                  
+                  const managementId = getAssignedManagementId()
+                  
                   return (
                     <div key={`${order.id}-${item.id || itemIndex}`} className="border border-border rounded-lg p-3 hover:bg-accent/30 transition-colors">
                       <div className="flex items-center space-x-3">
@@ -684,6 +715,10 @@ export function Orders() {
                             
                             <div className="text-xs text-muted-foreground truncate">
                               {productName}
+                            </div>
+                            
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>管理番号: <span className={managementId === '未割り当て' ? 'text-muted-foreground' : 'text-foreground font-medium'}>{managementId}</span></span>
                             </div>
                             
                             <div className="flex items-center justify-between text-xs text-muted-foreground">
