@@ -25,6 +25,7 @@ export interface ProductItem {
   qr_code: string
   // notes フィールドを削除 - メモの記録は無しとする
   condition_notes?: string // メンテナンス済み・入庫処理時の状態メモ（記録される）
+  current_setting?: string // 現在の設定 (例: "2M", "3M") - 楽匠プラスなどの設定変更可能商品用
 }
 
 
@@ -59,6 +60,7 @@ export interface OrderItem {
   approved_date?: string // 承認日
   approval_notes?: string // 承認時の備考
   item_processing_status: 'waiting' | 'ready' | 'delivered' | 'cancelled' // 商品処理ステータス
+  requested_setting?: string // 発注時に要求された設定 (例: "2M", "3M")
 }
 
 export interface PreparationTask {

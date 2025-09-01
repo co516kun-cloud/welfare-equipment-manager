@@ -50,7 +50,7 @@ export function Orders() {
     carriedBy: '',
     requiredDate: new Date().toISOString().split('T')[0],
     notes: '',
-    items: [{ productId: '', quantity: 1 }]
+    items: [{ productId: '', quantity: 1, requestedSetting: '' }]
   })
 
   // URLパラメータをチェックして新規発注ダイアログを自動的に開く
@@ -66,7 +66,7 @@ export function Orders() {
   const addOrderItem = () => {
     setOrderForm(prev => ({
       ...prev,
-      items: [...prev.items, { productId: '', quantity: 1 }]
+      items: [...prev.items, { productId: '', quantity: 1, requestedSetting: '' }]
     }))
   }
 
@@ -84,6 +84,12 @@ export function Orders() {
         i === index ? { ...item, [field]: value } : item
       )
     }))
+  }
+
+  // 楽匠プラス系商品かどうかを判定
+  const isRakushouPlus = (productId: string) => {
+    const product = products.find(p => p.id === productId)
+    return product?.name?.includes('楽匠プラス')
   }
 
   // 商品ステータスに基づいて承認が必要かどうかを判定（予約枠を考慮）
@@ -133,6 +139,15 @@ export function Orders() {
         return
       }
 
+      // 楽匠プラス系商品で設定が選択されていない場合はエラー
+      const rakushouPlusItemsWithoutSetting = orderForm.items.filter(item => 
+        isRakushouPlus(item.productId) && !item.requestedSetting
+      )
+      if (rakushouPlusItemsWithoutSetting.length > 0) {
+        alert('楽匠プラス系商品の設定（2M/3M）を選択してください')
+        return
+      }
+
     // 在庫チェック - 発注不可能な商品があるかチェック
     const invalidItems = orderForm.items.filter(item => {
       const details = getOrderItemDetails(item.productId, item.quantity)
@@ -167,7 +182,8 @@ export function Orders() {
             needs_approval: false,
             item_status: 'available' as const,
             approval_status: 'not_required' as const,
-            item_processing_status: 'waiting' as const
+            item_processing_status: 'waiting' as const,
+            requested_setting: item.requestedSetting || undefined
           })
         }
       }
@@ -185,7 +201,8 @@ export function Orders() {
             needs_approval: true,
             item_status: 'maintenance' as const,
             approval_status: 'pending' as const,
-            item_processing_status: 'waiting' as const
+            item_processing_status: 'waiting' as const,
+            requested_setting: item.requestedSetting || undefined
           })
         }
       }
@@ -259,7 +276,7 @@ export function Orders() {
         carriedBy: '',
         requiredDate: new Date().toISOString().split('T')[0],
         notes: '',
-        items: [{ productId: '', quantity: 1 }]
+        items: [{ productId: '', quantity: 1, requestedSetting: '' }]
       })
       setShowNewOrderDialog(false)
       
@@ -576,7 +593,8 @@ export function Orders() {
 
                     return order.items.map((item, itemIndex) => {
                       const product = products.find(p => p.id === item.product_id)
-                      const productName = product?.name || '商品名不明'
+                      const baseName = product?.name || '商品名不明'
+                      const productName = item.requested_setting ? `${baseName}（${item.requested_setting}）` : baseName
                       const displayKey = `${order.id}-${item.id || itemIndex}`
                       
                       // 割り当てられた管理番号を取得
@@ -674,7 +692,8 @@ export function Orders() {
 
                 return order.items.map((item, itemIndex) => {
                   const product = products.find(p => p.id === item.product_id)
-                  const productName = product?.name || '商品名不明'
+                  const baseName = product?.name || '商品名不明'
+                  const productName = item.requested_setting ? `${baseName}（${item.requested_setting}）` : baseName
                   
                   // 割り当てられた管理番号を取得（モバイル版）
                   const getAssignedManagementId = () => {
@@ -974,6 +993,46 @@ export function Orders() {
                           </Button>
                         )}
                       </div>
+
+                      {/* 楽匠プラス系商品の場合は設定選択を表示 */}
+                      {isRakushouPlus(item.productId) && (
+                        <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <span className="text-sm font-medium text-blue-900">設定選択:</span>
+                            <div className="flex items-center space-x-4">
+                              <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={item.requestedSetting === '2M'}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateOrderItem(index, 'requestedSetting', '2M')
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-blue-900">2Mモード</span>
+                              </label>
+                              <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={item.requestedSetting === '3M'}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      updateOrderItem(index, 'requestedSetting', '3M')
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-blue-900">3Mモード</span>
+                              </label>
+                            </div>
+                          </div>
+                          {!item.requestedSetting && (
+                            <p className="text-xs text-orange-600 mt-2">⚠️ 設定を選択してください</p>
+                          )}
+                        </div>
+                      )}
                       
                       {item.productId && (
                         <div className="text-sm space-y-2">
