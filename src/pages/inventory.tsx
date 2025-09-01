@@ -742,24 +742,17 @@ export function Inventory() {
 
   // モバイル版UIコンポーネント
   const MobileInventoryUI = () => {
-    // 利用可能な商品のみフィルタリング
-    const availableItems = items.filter(item => item.status === 'available')
+    // カテゴリーでフィルタリングされた商品を取得
+    const filteredProducts = mobileCategoryFilter === 'all' 
+      ? products
+      : products.filter(product => product.category_id === mobileCategoryFilter)
     
-    // カテゴリーでフィルタリング
-    const filteredAvailableItems = mobileCategoryFilter === 'all' 
-      ? availableItems
-      : availableItems.filter(item => {
-          const product = products.find(p => p.id === item.product_id)
-          return product?.category_id === mobileCategoryFilter
-        })
-    
-    // 商品ごとにグループ化
-    const groupedItems = filteredAvailableItems.reduce((acc, item) => {
-      const productId = item.product_id
-      if (!acc[productId]) {
-        acc[productId] = []
-      }
-      acc[productId].push(item)
+    // 商品ごとに利用可能なアイテム数をカウント
+    const groupedItems = filteredProducts.reduce((acc, product) => {
+      const availableItems = items.filter(item => 
+        item.product_id === product.id && item.status === 'available'
+      )
+      acc[product.id] = availableItems
       return acc
     }, {} as Record<string, ProductItem[]>)
     
@@ -770,7 +763,7 @@ export function Inventory() {
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-slate-800">在庫一覧</h1>
             <div className="bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-              {Object.keys(groupedItems).length} 種類
+              {filteredProducts.length} 種類
             </div>
           </div>
           
@@ -804,54 +797,70 @@ export function Inventory() {
             const product = products.find(p => p.id === productId)
             if (!product) return null
             
+            const hasStock = items.length > 0
+            
             return (
               <div 
                 key={productId}
-                className="bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg cursor-pointer"
+                className={`bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg ${
+                  hasStock ? 'cursor-pointer' : 'cursor-default opacity-60'
+                }`}
                 onClick={() => {
-                  setSelectedProductItems(items)
-                  setShowManagementNumbers(true)
+                  if (hasStock) {
+                    setSelectedProductItems(items)
+                    setShowManagementNumbers(true)
+                  }
                 }}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1">
-                    <h3 className="font-bold text-slate-800 text-sm mb-1">
+                    <h3 className={`font-bold text-sm mb-1 ${hasStock ? 'text-slate-800' : 'text-slate-500'}`}>
                       {product.name}
                     </h3>
-                    <p className="text-xs text-slate-600">
+                    <p className={`text-xs ${hasStock ? 'text-slate-600' : 'text-slate-400'}`}>
                       {product.manufacturer} - {product.model}
                     </p>
                   </div>
-                  <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
+                  <div className={`px-3 py-1 rounded-full ${
+                    hasStock 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-slate-100 text-slate-500'
+                  }`}>
                     <span className="text-sm font-bold">{items.length}</span>
                     <span className="text-xs ml-1">台</span>
                   </div>
                 </div>
                 
                 {/* 管理番号リスト */}
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  {items.slice(0, 4).map(item => (
-                    <div 
-                      key={item.id}
-                      className="bg-slate-50 rounded-lg px-3 py-2 text-xs font-mono text-slate-700"
-                    >
-                      {item.id}
-                    </div>
-                  ))}
-                  {items.length > 4 && (
-                    <div className="bg-slate-50 rounded-lg px-3 py-2 text-xs text-slate-500 text-center col-span-2">
-                      他 {items.length - 4} 台
-                    </div>
-                  )}
-                </div>
+                {hasStock ? (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {items.slice(0, 4).map(item => (
+                      <div 
+                        key={item.id}
+                        className="bg-slate-50 rounded-lg px-3 py-2 text-xs font-mono text-slate-700"
+                      >
+                        {item.id}
+                      </div>
+                    ))}
+                    {items.length > 4 && (
+                      <div className="bg-slate-50 rounded-lg px-3 py-2 text-xs text-slate-500 text-center col-span-2">
+                        他 {items.length - 4} 台
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-center py-4">
+                    <div className="text-slate-400 text-sm">在庫なし</div>
+                  </div>
+                )}
               </div>
             )
           })}
           
-          {Object.keys(groupedItems).length === 0 && (
+          {filteredProducts.length === 0 && (
             <div className="text-center py-8 text-white/60">
               <div className="text-4xl mb-2">📦</div>
-              <p>利用可能な商品がありません</p>
+              <p>商品がありません</p>
             </div>
           )}
         </div>
