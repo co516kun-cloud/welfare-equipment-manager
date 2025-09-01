@@ -223,11 +223,40 @@ export function NewItemDialog({
                 className="mt-1"
               >
                 <option value="">商品を選択してください</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.name}
-                  </option>
-                ))}
+                {(() => {
+                  // カテゴリ順で商品を並び替え
+                  const categoryOrder = [
+                    '特殊寝台',
+                    'マットレス',
+                    '特殊寝台付属品',
+                    '車いす',
+                    '歩行器',
+                    '杖',
+                    '手すり',
+                    '手すり付属品',
+                    'スロープ'
+                  ]
+                  
+                  const sortedProducts = products.sort((a, b) => {
+                    const categoryA = categories.find(c => c.id === a.category_id)
+                    const categoryB = categories.find(c => c.id === b.category_id)
+                    
+                    const orderA = categoryA ? categoryOrder.indexOf(categoryA.name) : 999
+                    const orderB = categoryB ? categoryOrder.indexOf(categoryB.name) : 999
+                    
+                    if (orderA !== orderB) {
+                      return orderA - orderB
+                    }
+                    // 同じカテゴリ内では商品名でソート
+                    return a.name.localeCompare(b.name)
+                  })
+                  
+                  return sortedProducts.map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))
+                })()}
               </Select>
             </div>
           )}
@@ -325,9 +354,9 @@ export function NewItemDialog({
                 value={newItemForm.condition}
                 onChange={(e) => setNewItemForm(prev => ({ ...prev, condition: e.target.value as ProductItem['condition'] }))}
               >
-                <option value="excellent">優良</option>
                 <option value="good">良好</option>
                 <option value="fair">普通</option>
+                <option value="caution">注意</option>
                 <option value="needs_repair">要修理</option>
               </Select>
             </div>
