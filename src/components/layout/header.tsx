@@ -134,13 +134,12 @@ export function Header() {
             )}
           </div>
           
-          <div className="flex items-center space-x-3 flex-1">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
-              <span className="text-white font-bold text-sm">福</span>
-            </div>
-            <div className="flex flex-col">
+          <div className="flex items-center justify-center flex-1">
+            <div className="flex items-center space-x-3">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center shadow-md">
+                <span className="text-white font-bold text-sm">福</span>
+              </div>
               <h1 className="text-lg font-semibold text-white">福祉用具管理</h1>
-              <RealtimeStatus />
             </div>
           </div>
           
