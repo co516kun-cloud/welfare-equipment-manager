@@ -24,6 +24,9 @@ export function ItemDetail() {
   const [expandedChecklist, setExpandedChecklist] = useState<string | null>(null)
   const [showAllHistories, setShowAllHistories] = useState(false)
   const [currentOrder, setCurrentOrder] = useState<any>(null)
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null)
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
   
   // 編集関連
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -83,13 +86,63 @@ export function ItemDetail() {
   // 現在のユーザー名を取得
   const getCurrentUserName = () => {
     if (!user) return '管理者'
-    
+
     // Supabaseのusersテーブルから名前を取得
     const dbUser = users.find(u => u.email === user.email)
     if (dbUser) return dbUser.name
-    
+
     // なければuser_metadataから取得
     return user.user_metadata?.name || user.email?.split('@')[0] || user.email || 'ユーザー'
+  }
+
+  // ラベル印刷待ちに追加
+  const handleAddLabelPrintQueue = async () => {
+    if (!item || !product) return
+
+    if (!confirm('この商品をラベル印刷待ちに追加しますか？')) {
+      return
+    }
+
+    try {
+      await supabaseDb.addLabelPrintQueue({
+        item_id: item.id,
+        product_name: product.name,
+        management_id: item.id,
+        condition_notes: item.condition_notes || '',
+        status: 'pending',
+        created_by: getCurrentUserName()
+      })
+
+      alert('✅ 印刷待ちキューに追加しました')
+    } catch (error) {
+      console.error('印刷キューへの追加エラー:', error)
+      alert('❌ 印刷待ちキューへの追加に失敗しました')
+    }
+  }
+
+  // スワイプジェスチャー処理
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd || !item?.photos) return
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > 50
+    const isRightSwipe = distance < -50
+
+    if (isLeftSwipe && selectedPhotoIndex !== null && selectedPhotoIndex < item.photos.length - 1) {
+      setSelectedPhotoIndex(selectedPhotoIndex + 1)
+    }
+    if (isRightSwipe && selectedPhotoIndex !== null && selectedPhotoIndex > 0) {
+      setSelectedPhotoIndex(selectedPhotoIndex - 1)
+    }
   }
   
   // 編集ダイアログを開く
@@ -390,8 +443,15 @@ export function ItemDetail() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
         <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
+            onClick={handleAddLabelPrintQueue}
+            className="border-blue-500 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+          >
+            🏷️ ラベル印刷
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleEdit}
             className="border-orange-500 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
           >
@@ -468,6 +528,43 @@ export function ItemDetail() {
               </div>
             </div>
           </div>
+
+          {/* Photos Section */}
+          {item.photos && item.photos.length > 0 && (
+            <div className="bg-card rounded-xl border border-border p-3 sm:p-6 shadow-sm">
+              <h2 className="text-base sm:text-lg font-semibold text-foreground mb-3 sm:mb-4">メンテナンス時の写真</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-4">
+                {item.photos.map((photo, index) => (
+                  <div key={index} className="relative group">
+                    <div
+                      className="aspect-square bg-gray-100 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity active:scale-95"
+                      onClick={() => setSelectedPhotoIndex(index)}
+                    >
+                      <img
+                        src={photo}
+                        alt={`メンテナンス写真 ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    {/* モバイルではホバー効果を無効化 */}
+                    <div className="hidden sm:block absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded-lg flex items-center justify-center">
+                      <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
+                        拡大表示
+                      </span>
+                    </div>
+                    {/* モバイル用のタップインジケーター */}
+                    <div className="sm:hidden absolute top-1 right-1 bg-black bg-opacity-50 rounded-full p-1">
+                      <span className="text-white text-xs">🔍</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 sm:mt-3">
+                写真をタップすると拡大表示されます（{item.photos.length}枚）
+              </p>
+            </div>
+          )}
 
           {/* Loan Information */}
           {item.loan_start_date && (
@@ -758,6 +855,84 @@ export function ItemDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Photo Modal */}
+      {selectedPhotoIndex !== null && item?.photos && (
+        <Dialog open={selectedPhotoIndex !== null} onOpenChange={() => setSelectedPhotoIndex(null)}>
+          <DialogContent className="max-w-4xl h-[95vh] sm:h-[90vh] p-0 overflow-hidden w-full mx-2 sm:mx-auto flex flex-col">
+            <DialogHeader className="p-3 sm:p-6 pb-2 sm:pb-0 flex-shrink-0">
+              <DialogTitle className="text-sm sm:text-base text-center">
+                メンテナンス写真 {selectedPhotoIndex + 1} / {item.photos.length}
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div 
+              className="relative flex-1 flex items-center justify-center p-2 sm:p-6 min-h-0"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <img
+                src={item.photos[selectedPhotoIndex]}
+                alt={`メンテナンス写真 ${selectedPhotoIndex + 1}`}
+                className="max-w-full max-h-full object-contain rounded-lg select-none"
+              />
+              
+              {/* Navigation Buttons */}
+              {item.photos.length > 1 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedPhotoIndex(selectedPhotoIndex === 0 ? item.photos!.length - 1 : selectedPhotoIndex - 1)
+                    }}
+                    className="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 sm:p-3 rounded-full hover:bg-opacity-70 active:bg-opacity-80 transition-opacity touch-manipulation"
+                  >
+                    <span className="text-lg sm:text-xl">←</span>
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedPhotoIndex(selectedPhotoIndex === item.photos!.length - 1 ? 0 : selectedPhotoIndex + 1)
+                    }}
+                    className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 sm:p-3 rounded-full hover:bg-opacity-70 active:bg-opacity-80 transition-opacity touch-manipulation"
+                  >
+                    <span className="text-lg sm:text-xl">→</span>
+                  </button>
+                </>
+              )}
+            </div>
+            
+            {/* Photo Navigation Dots */}
+            {item.photos.length > 1 && (
+              <div className="flex justify-center space-x-2 p-2 sm:p-4 overflow-x-auto flex-shrink-0">
+                <div className="flex space-x-2 min-w-max">
+                  {item.photos.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedPhotoIndex(index)}
+                      className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full transition-colors touch-manipulation ${
+                        index === selectedPhotoIndex ? 'bg-primary' : 'bg-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-center pb-3 sm:pb-6 px-3 flex-shrink-0">
+              <Button 
+                onClick={() => setSelectedPhotoIndex(null)} 
+                variant="outline"
+                className="w-full sm:w-auto touch-manipulation"
+              >
+                閉じる
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

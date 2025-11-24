@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect, ReactNode } from 'react'
-import { useRealtimeNotificationStore } from '../stores/useRealtimeNotificationStore'
 import { useInventoryStore } from '../stores/useInventoryStore'
 
 interface MobilePullRefreshProps {
@@ -14,8 +13,7 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
   const [startY, setStartY] = useState(0)
   
   const containerRef = useRef<HTMLDivElement>(null)
-  const { clearNotifications } = useRealtimeNotificationStore()
-  const { loadIncrementalUpdates } = useInventoryStore()
+  const { forceSync } = useInventoryStore()
 
   const PULL_THRESHOLD = 80 // プルリフレッシュが発動する距離
   const MAX_PULL_DISTANCE = 120 // 最大プル距離
@@ -52,9 +50,8 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
       setIsRefreshing(true)
       
       try {
-        // 差分更新を実行
-        await loadIncrementalUpdates()
-        clearNotifications()
+        // 手動更新を実行
+        await forceSync()
         
         // 成功フィードバック
         await new Promise(resolve => setTimeout(resolve, 500))
@@ -66,7 +63,7 @@ export function MobilePullRefresh({ children, className = '' }: MobilePullRefres
     }
 
     setPullDistance(0)
-  }, [isPulling, pullDistance, isRefreshing, loadIncrementalUpdates, clearNotifications])
+  }, [isPulling, pullDistance, isRefreshing, forceSync])
 
   useEffect(() => {
     const container = containerRef.current

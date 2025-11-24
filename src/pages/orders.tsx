@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { useAuth } from '../hooks/useAuth'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { supabaseDb } from '../lib/supabase-database'
 
 export function Orders() {
   const { categories, products, users, items, orders, createOrder, updateItemStatus, getProductAvailableStock, loadData } = useInventoryStore()
@@ -389,16 +390,114 @@ export function Orders() {
   
   const confirmDeleteOrders = async () => {
     try {
-      // 選択されたorder_itemを削除（実装は後で必要に応じて）
-      
+      const selectedCount = selectedOrders.size
+      console.log('🗑️ Deleting selected orders:', Array.from(selectedOrders))
+
+      const processedOrderIds = new Set<string>()
+
+      // 選択された発注を削除
+      for (const selectedId of selectedOrders) {
+        console.log('Processing selected ID:', selectedId)
+
+        // 実際のID形式: "ORD-1759800566743-OI-1759800625083-9t6w5lkie"
+        // この形式を解析して処理
+        if (selectedId.includes('-OI-')) {
+          // Order Item形式：ORD-{orderTimestamp}-OI-{itemTimestamp}-{itemId}
+          const [orderPart, , itemPart] = selectedId.split('-OI-')
+          const baseOrderId = orderPart // "ORD-1759800566743"
+
+          console.log(`Order Item detected: baseOrderId=${baseOrderId}, selectedId=${selectedId}`)
+
+          if (!processedOrderIds.has(selectedId)) {
+            // 特定のorder_itemを削除
+            const order = orders.find(o => o.id === baseOrderId)
+            if (order) {
+              console.log('Found order:', order)
+              console.log('Order items:', order.items)
+
+              // selectedIdから削除対象のアイテムを特定
+              // 形式: "ORD-1759800566743-OI-1759800625083-9t6w5lkie"
+              const itemIdToDelete = selectedId
+
+              const updatedItems = order.items.filter((item, index) => {
+                // item.idの形式を確認して適切にマッチング
+                let itemKey = ''
+
+                if (item.id && item.id.startsWith('OI-')) {
+                  // item.idが既に"OI-1759801386072-h0b80n2ki"の形式の場合
+                  itemKey = `${baseOrderId}-${item.id}`
+                } else if (item.id) {
+                  // item.idが他の形式の場合
+                  itemKey = `${baseOrderId}-OI-${item.id}`
+                } else {
+                  // item.idがない場合はインデックスベース
+                  itemKey = `${baseOrderId}-OI-${index}`
+                }
+
+                console.log(`Checking item ${index}:`, {
+                  item,
+                  itemKey,
+                  selectedId,
+                  match: itemKey === selectedId
+                })
+
+                // マッチしたら除外（削除）
+                return itemKey !== selectedId
+              })
+
+              console.log(`Original items: ${order.items.length}, Updated items: ${updatedItems.length}`)
+
+              if (updatedItems.length === 0) {
+                // 全てのアイテムが削除された場合、注文全体を削除
+                await supabaseDb.deleteOrder(baseOrderId)
+                console.log(`Deleted entire order: ${baseOrderId}`)
+              } else {
+                // 一部のアイテムのみ削除
+                const updatedOrder = { ...order, items: updatedItems }
+                await supabaseDb.saveOrder(updatedOrder)
+                console.log(`Updated order: ${baseOrderId}`)
+              }
+              processedOrderIds.add(selectedId)
+            }
+          }
+        }
+        // 通常の発注ID形式（ORD-{timestamp}）
+        else if (selectedId.startsWith('ORD-')) {
+          if (!processedOrderIds.has(selectedId)) {
+            const order = orders.find(o => o.id === selectedId)
+            if (order) {
+              await supabaseDb.deleteOrder(selectedId)
+              console.log(`Deleted order: ${selectedId}`)
+              processedOrderIds.add(selectedId)
+            }
+          }
+        }
+        // その他の形式
+        else {
+          console.log(`Unknown ID format: ${selectedId}`)
+          // とりあえず発注IDとして試す
+          if (!processedOrderIds.has(selectedId)) {
+            const order = orders.find(o => o.id === selectedId)
+            if (order) {
+              await supabaseDb.deleteOrder(selectedId)
+              console.log(`Deleted order: ${selectedId}`)
+              processedOrderIds.add(selectedId)
+            }
+          }
+        }
+      }
+
+      // データを再読み込み
+      await loadData()
+
       // 選択状態をクリア
       setSelectedOrders(new Set())
       setShowDeleteDialog(false)
-      
-      alert(`${selectedOrders.size}件の項目を削除しました（実装予定）`)
+
+      alert(`${selectedCount}件の項目を削除しました`)
     } catch (error) {
       console.error('Error deleting order items:', error)
-      alert('項目の削除中にエラーが発生しました')
+      alert(`項目の削除中にエラーが発生しました: ${error.message || error}`)
     }
   }
 

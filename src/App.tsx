@@ -4,7 +4,6 @@ import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
 import { useAuth } from './hooks/useAuth'
 import { useInventoryStore } from './stores/useInventoryStore'
-import { useRealtimeNotificationStore } from './stores/useRealtimeNotificationStore'
 import { DebugApp } from './components/debug/debug-app'
 import { Scan } from './pages/scan'
 import { Inventory } from './pages/inventory'
@@ -23,6 +22,7 @@ import { Search } from './pages/search'
 import { StockAlert } from './pages/stock-alert'
 import { DataImport } from './pages/data-import'
 import Notifications from './pages/notifications'
+import { LabelQueuePage } from './pages/label-queue'
 // import { CSVImport } from './pages/csv-import'
 // import { Import } from './pages/import' // Disabled due to installation issues
 
@@ -41,7 +41,6 @@ function App() {
   
   // ストアの関数を取得
   const { loadInitialData } = useInventoryStore()
-  const { initializeRealtimeNotifications, cleanup } = useRealtimeNotificationStore()
   
   // 認証完了後にデータを初期化
   useEffect(() => {
@@ -54,8 +53,6 @@ function App() {
           // シンプルな一括読み込み（カテゴリー分けなし）
           await loadInitialData()
           
-          // リアルタイム通知システムを初期化（データ同期はしない軽量版）
-          initializeRealtimeNotifications()
           
           setDataInitialized(true)
           
@@ -69,14 +66,8 @@ function App() {
     }
     
     initializeApp()
-  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadInitialData, initializeRealtimeNotifications])
+  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadInitialData])
 
-  // クリーンアップ処理
-  useEffect(() => {
-    return () => {
-      cleanup()
-    }
-  }, [cleanup])
   
   // 環境変数がない場合はデバッグモードで起動
   if (!hasSupabaseConfig) {
@@ -134,6 +125,7 @@ function App() {
           <Route path="data-import" element={<DataImport />} />
           <Route path="manual-import" element={<ManualImport />} />
           <Route path="notifications" element={<Notifications />} />
+          <Route path="label-queue" element={<LabelQueuePage />} />
           {/* <Route path="csv-import" element={<CSVImport />} />
           <Route path="import" element={<Import />} /> Disabled due to installation issues */}
         </Route>

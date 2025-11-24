@@ -17,6 +17,7 @@ export function Inventory() {
     products,
     items,
     users,
+    orders,
     viewMode,
     selectedCategory,
     selectedProduct,
@@ -186,6 +187,43 @@ export function Inventory() {
       case 'unknown': return '不明'
       default: return condition
     }
+  }
+
+  // 実質利用可能在庫数を計算する関数
+  const getEffectiveStock = (productId: string) => {
+    // 物理在庫数（利用可能ステータスの商品個体数）
+    const physicalStock = items.filter(item => 
+      item.product_id === productId && item.status === 'available'
+    ).length
+
+    // 未完了発注数（pending, approved, preparing ステータスの注文）
+    // ただし、管理番号が割り当て済みの分は除外
+    const pendingOrders = orders
+      .filter(order => ['pending', 'approved', 'preparing'].includes(order.status))
+      .reduce((count, order) => {
+        const productItems = order.items.filter(item => item.product_id === productId)
+        return count + productItems.reduce((sum, item) => {
+          // 管理番号が割り当て済みの数量を計算
+          const assignedCount = item.assigned_item_ids?.filter(id => id !== null && id !== undefined).length || 0
+          // 未割り当ての数量のみカウント
+          const unassignedCount = Math.max(0, item.quantity - assignedCount)
+          return sum + unassignedCount
+        }, 0)
+      }, 0)
+
+    // 実質利用可能在庫 = 物理在庫 - 未完了発注
+    return {
+      effectiveStock: Math.max(0, physicalStock - pendingOrders),
+      physicalStock,
+      pendingOrders
+    }
+  }
+
+  // 在庫不足判定（実質在庫ベース）
+  const isLowStock = (productId: string) => {
+    const product = products.find(p => p.id === productId)
+    const { effectiveStock } = getEffectiveStock(productId)
+    return effectiveStock <= (product?.minimum_stock || 0)
   }
 
   // Filter data based on current view and status filter
@@ -523,14 +561,35 @@ export function Inventory() {
               </div>
             </div>
             <div className="space-y-1">
-              {summary && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">在庫数:</span>
-                  <span className={`font-bold ml-1 ${summary.availableStock > 0 ? 'text-success' : 'text-destructive'}`}>
-                    {summary.availableStock}台
-                  </span>
-                </div>
-              )}
+              {(() => {
+                const { effectiveStock, physicalStock, pendingOrders } = getEffectiveStock(product.id)
+                const isLow = isLowStock(product.id)
+                
+                return (
+                  <div className="text-sm space-y-1">
+                    {/* メイン表示：実質在庫数 */}
+                    <div>
+                      <span className="text-muted-foreground">実質在庫:</span>
+                      <span className={`font-bold ml-1 ${
+                        effectiveStock === 0 ? 'text-destructive' : 
+                        isLow ? 'text-amber-600' : 'text-success'
+                      }`}>
+                        {effectiveStock}台
+                      </span>
+                      {isLow && effectiveStock > 0 && (
+                        <span className="ml-1 text-xs text-amber-600 font-medium">在庫不足</span>
+                      )}
+                    </div>
+                    
+                    {/* 詳細情報（発注中がある場合のみ表示） */}
+                    {pendingOrders > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        (物理: {physicalStock}台 - 発注中: {pendingOrders}台)
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )
@@ -621,16 +680,36 @@ export function Inventory() {
                         >
                           編集
                         </Button>
-                        {item.status === 'available' && (
-                          <Button 
-                            variant="default" 
-                            size="sm"
-                            onClick={() => handleOrder(item)}
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            発注
-                          </Button>
-                        )}
+                        {item.status === 'available' && (() => {
+                          const product = products.find(p => p.id === item.product_id)
+                          if (!product) return null
+                          
+                          const { effectiveStock, pendingOrders } = getEffectiveStock(product.id)
+                          
+                          if (effectiveStock === 0) {
+                            return (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                disabled
+                                className="bg-gray-100 text-gray-400 border-gray-200"
+                              >
+                                {pendingOrders > 0 ? '発注中' : '在庫なし'}
+                              </Button>
+                            )
+                          }
+                          
+                          return (
+                            <Button 
+                              variant="default" 
+                              size="sm"
+                              onClick={() => handleOrder(item)}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              発注 (残り{effectiveStock}台)
+                            </Button>
+                          )
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -721,16 +800,36 @@ export function Inventory() {
                 >
                   編集
                 </Button>
-                {item.status === 'available' && (
-                  <Button 
-                    variant="default" 
-                    size="sm"
-                    onClick={() => handleOrder(item)}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    発注
-                  </Button>
-                )}
+                {item.status === 'available' && (() => {
+                  const product = products.find(p => p.id === item.product_id)
+                  if (!product) return null
+                  
+                  const { effectiveStock, pendingOrders } = getEffectiveStock(product.id)
+                  
+                  if (effectiveStock === 0) {
+                    return (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        disabled
+                        className="bg-gray-100 text-gray-400 border-gray-200"
+                      >
+                        {pendingOrders > 0 ? '発注中' : '在庫なし'}
+                      </Button>
+                    )
+                  }
+                  
+                  return (
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      onClick={() => handleOrder(item)}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      発注 (残り{effectiveStock}台)
+                    </Button>
+                  )
+                })()}
               </div>
             </div>
           )
@@ -947,11 +1046,38 @@ export function Inventory() {
                             onClick={(e) => {
                               e.stopPropagation()
                               setShowManagementNumbers(false)
-                              handleOrder(item)
+                              const product = products.find(p => p.id === item.product_id)
+                              if (product) {
+                                const { effectiveStock } = getEffectiveStock(product.id)
+                                if (effectiveStock > 0) {
+                                  handleOrder(item)
+                                }
+                              }
                             }}
-                            className="bg-green-600 hover:bg-green-700 text-white text-xs"
+                            disabled={(() => {
+                              const product = products.find(p => p.id === item.product_id)
+                              if (!product) return true
+                              const { effectiveStock } = getEffectiveStock(product.id)
+                              return effectiveStock === 0
+                            })()}
+                            className={(() => {
+                              const product = products.find(p => p.id === item.product_id)
+                              if (!product) return "bg-gray-400 text-white text-xs"
+                              const { effectiveStock, pendingOrders } = getEffectiveStock(product.id)
+                              return effectiveStock === 0 
+                                ? "bg-gray-400 text-white text-xs" 
+                                : "bg-green-600 hover:bg-green-700 text-white text-xs"
+                            })()}
                           >
-                            発注
+                            {(() => {
+                              const product = products.find(p => p.id === item.product_id)
+                              if (!product) return "発注"
+                              const { effectiveStock, pendingOrders } = getEffectiveStock(product.id)
+                              if (effectiveStock === 0) {
+                                return pendingOrders > 0 ? '発注中' : '在庫なし'
+                              }
+                              return `発注 (${effectiveStock})`
+                            })()}
                           </Button>
                         )}
                         {item.status !== 'available' && (

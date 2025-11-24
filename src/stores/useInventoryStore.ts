@@ -25,9 +25,6 @@ interface InventoryState {
   selectedProduct: string | null
   viewMode: 'category' | 'product' | 'item'
   
-  // Realtime state
-  isRealtimeEnabled: boolean
-  lastSyncTime: string | null
   
   // Initialization state
   isDataInitialized: boolean
@@ -61,9 +58,7 @@ interface InventoryState {
   getProductAvailableStock: (productId: string) => number
   getReservations: () => Map<string, ReservationInfo>
   
-  // Realtime actions
-  enableRealtime: () => void
-  disableRealtime: () => void
+  // Manual sync actions
   forceSync: () => Promise<void>
   
   // Daily sync actions
@@ -73,8 +68,6 @@ interface InventoryState {
   resetUIState: () => void
 }
 
-// リアルタイム接続の管理
-let realtimeSubscriptions: any[] = []
 
 export const useInventoryStore = create<InventoryState>((set, get) => ({
   // Initial data
@@ -96,9 +89,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   selectedProduct: null,
   viewMode: 'category',
   
-  // Initial realtime state
-  isRealtimeEnabled: false,
-  lastSyncTime: null,
   
   // Initial initialization state
   isDataInitialized: false,
@@ -531,38 +521,73 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     return calculateReservations(orders)
   },
 
-  // Realtime functions
-  enableRealtime: () => {
-    // リアルタイム同期は無効化（軽量通知システムを代わりに使用）
-    console.log('ℹ️ Realtime synchronization is disabled - using lightweight notification system')
-  },
-
-  disableRealtime: () => {
-    console.log('🛑 Disabling realtime synchronization...')
-    
-    // 全ての接続を切断
-    realtimeSubscriptions.forEach(sub => {
-      if (sub && sub.unsubscribe) {
-        sub.unsubscribe()
-      }
-    })
-    realtimeSubscriptions = []
-
-    set({ 
-      isRealtimeEnabled: false,
-      lastSyncTime: null
-    })
-    
-    console.log('✅ Realtime synchronization disabled!')
-  },
 
   forceSync: async () => {
-    console.log('🔄 Force syncing data with category-wise approach...')
-    const { loadAllDataOnStartup, clearItemsCache } = get()
-    clearItemsCache() // 強制同期時はキャッシュをクリア
-    await loadAllDataOnStartup()
-    set({ lastSyncTime: new Date().toISOString() })
-    console.log('✅ Force sync completed!')
+    console.log('🔄 Performing incremental sync...')
+    const { lastFullSyncTime, items, orders } = get()
+
+    try {
+      if (!lastFullSyncTime) {
+        // 初回は必要最小限のデータのみ取得
+        console.log('📅 First sync - loading essential data only...')
+        const [productItems, ordersData] = await Promise.all([
+          supabaseDb.getAllProductItems(),
+          supabaseDb.getOrders()
+        ])
+
+        const syncTime = new Date().toISOString()
+        set({
+          items: productItems,
+          orders: ordersData,
+          lastFullSyncTime: syncTime
+        })
+
+        console.log(`✅ Initial sync completed: ${productItems.length} items, ${ordersData.length} orders`)
+      } else {
+        // 差分のみ取得してマージ
+        console.log(`🔄 Loading changes since ${lastFullSyncTime}...`)
+        const [updatedItems, updatedOrders] = await Promise.all([
+          supabaseDb.getRecentlyUpdatedProductItems(lastFullSyncTime),
+          supabaseDb.getRecentlyUpdatedOrders(lastFullSyncTime)
+        ])
+
+        // 既存データとマージ
+        let mergedItems = [...items]
+        let mergedOrders = [...orders]
+
+        // アイテムのマージ
+        updatedItems.forEach(updatedItem => {
+          const existingIndex = mergedItems.findIndex(item => item.id === updatedItem.id)
+          if (existingIndex >= 0) {
+            mergedItems[existingIndex] = updatedItem
+          } else {
+            mergedItems.push(updatedItem)
+          }
+        })
+
+        // オーダーのマージ
+        updatedOrders.forEach(updatedOrder => {
+          const existingIndex = mergedOrders.findIndex(order => order.id === updatedOrder.id)
+          if (existingIndex >= 0) {
+            mergedOrders[existingIndex] = updatedOrder
+          } else {
+            mergedOrders.push(updatedOrder)
+          }
+        })
+
+        const syncTime = new Date().toISOString()
+        set({
+          items: mergedItems,
+          orders: mergedOrders,
+          lastFullSyncTime: syncTime
+        })
+
+        console.log(`✅ Incremental sync completed: ${updatedItems.length} updated items, ${updatedOrders.length} updated orders`)
+      }
+    } catch (error) {
+      console.error('❌ Force sync failed:', error)
+      throw error
+    }
   },
 
   checkAndPerformDailySync: async () => {
@@ -592,8 +617,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       // 全同期時刻を更新
       const syncTime = now.toISOString()
       set({ 
-        lastFullSyncTime: syncTime,
-        lastSyncTime: syncTime
+        lastFullSyncTime: syncTime
       })
       
       console.log('✅ Daily full sync completed successfully!')
@@ -620,79 +644,3 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 }))
 
-// アプリケーション起動時にリアルタイム同期を自動開始（一時的に無効化）
-if (typeof window !== 'undefined') {
-  // リアルタイム同期を一時的に無効化
-  console.log('ℹ️ Realtime synchronization is temporarily disabled')
-  // Auto-enabling realtime synchronization is disabled - using lightweight notification system instead
-  
-  // ページを離れる時にリアルタイム同期を停止
-  window.addEventListener('beforeunload', () => {
-    const store = useInventoryStore.getState()
-    if (store.isRealtimeEnabled) {
-      console.log('🛑 Disabling realtime due to page unload...')
-      store.disableRealtime()
-    }
-  })
-  
-  // ページがフォーカスされた時に差分同期（最近更新されたアイテムのみ）
-  window.addEventListener('focus', async () => {
-    const store = useInventoryStore.getState()
-    if (store.isRealtimeEnabled && store.lastSyncTime) {
-      console.log('🔄 Page focused, performing differential sync...')
-      try {
-        // 最後の同期時刻以降に更新されたアイテムのみ取得
-        const recentItems = await supabaseDb.getRecentlyUpdatedProductItems(store.lastSyncTime)
-        
-        if (recentItems.length > 0) {
-          console.log(`📦 Found ${recentItems.length} updated items since last sync`)
-          
-          // 既存のアイテムリストを更新
-          const currentItems = store.items
-          const updatedItems = [...currentItems]
-          
-          recentItems.forEach(recentItem => {
-            const existingIndex = updatedItems.findIndex(item => item.id === recentItem.id)
-            if (existingIndex >= 0) {
-              // 既存アイテムを更新
-              updatedItems[existingIndex] = recentItem
-            } else {
-              // 新しいアイテムを追加
-              updatedItems.push(recentItem)
-            }
-          })
-          
-          store.clearItemsCache()
-          useInventoryStore.setState({ 
-            items: updatedItems,
-            lastSyncTime: new Date().toISOString()
-          })
-          console.log('✅ Differential sync completed')
-        } else {
-          console.log('📦 No updates found since last sync')
-        }
-      } catch (error) {
-        console.error('❌ Error during differential sync:', error)
-      }
-    } else if (store.isRealtimeEnabled && !store.lastSyncTime) {
-      console.log('ℹ️ No last sync time available, skipping differential sync')
-    }
-  })
-  
-  // 定期的な日次全同期チェック（6時間ごと）
-  const checkDailySyncInterval = setInterval(async () => {
-    try {
-      const store = useInventoryStore.getState()
-      if (store.isDataInitialized) {
-        await store.checkAndPerformDailySync()
-      }
-    } catch (error) {
-      console.error('❌ Error during periodic daily sync check:', error)
-    }
-  }, 6 * 60 * 60 * 1000) // 6時間 = 6 * 60 * 60 * 1000ms
-  
-  // ページを離れる時に定期チェックを停止
-  window.addEventListener('beforeunload', () => {
-    clearInterval(checkDailySyncInterval)
-  })
-}

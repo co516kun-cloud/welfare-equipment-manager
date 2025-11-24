@@ -11,6 +11,7 @@ const navigation = [
   { name: 'QRスキャン', href: '/scan', icon: '📱' },
   { name: '発注管理', href: '/orders', icon: '📋' },
   { name: '準備待ち', href: '/preparation', icon: '⏳' },
+  { name: 'ラベル印刷待ち', href: '/label-queue', icon: '🏷️' },
   { name: '発注承認', href: '/approval', icon: '✅' },
   { name: '履歴管理', href: '/history', icon: '📊' },
   { name: 'デモ機管理', href: '/demo', icon: '🛁' },

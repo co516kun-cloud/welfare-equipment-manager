@@ -25,6 +25,7 @@ export interface ProductItem {
   qr_code: string
   // notes フィールドを削除 - メモの記録は無しとする
   condition_notes?: string // メンテナンス済み・入庫処理時の状態メモ（記録される）
+  photos?: string[] // メンテナンス時の写真（Base64形式）
   current_setting?: string // 現在の設定 (例: "2M", "3M") - 楽匠プラスなどの設定変更可能商品用
 }
 
@@ -61,6 +62,9 @@ export interface OrderItem {
   approval_notes?: string // 承認時の備考
   item_processing_status: 'waiting' | 'ready' | 'delivered' | 'cancelled' // 商品処理ステータス
   requested_setting?: string // 発注時に要求された設定 (例: "2M", "3M")
+  cancelled_at?: string // キャンセル日時
+  cancelled_by?: string // キャンセル者
+  cancelled_reason?: string // キャンセル理由
 }
 
 export interface PreparationTask {
@@ -99,13 +103,22 @@ export interface ItemHistory {
   metadata?: Record<string, any>
 }
 
+export interface DemoCategory {
+  id: string
+  name: string
+  icon: string
+}
+
 export interface DemoEquipment {
   id: string
   name: string
   managementNumber: string
+  category_id?: string // デモカテゴリーID
   status: 'available' | 'demo'
   customerName?: string
   loanDate?: string
+  operator?: string // 操作者名
+  operatedAt?: string // 操作日時
   notes?: string
   created_at?: string
   updated_at?: string
@@ -119,4 +132,18 @@ export interface DepositItem {
   notes?: string // 備考（オプション）
   created_at?: string
   updated_at?: string
+}
+
+export interface LabelPrintQueue {
+  id: string
+  item_id: string // 商品アイテムID
+  product_name: string // 商品名（印刷時点での値を保存）
+  management_id: string // 管理番号
+  condition_notes: string // 商品状態メモ
+  status: 'pending' | 'printing' | 'completed' | 'failed' // 印刷ステータス
+  created_by: string // 作成者
+  created_at: string // 作成日時
+  printed_at?: string // 印刷完了日時
+  printed_by?: string // 印刷実行者
+  error_message?: string // エラーメッセージ（失敗時）
 }

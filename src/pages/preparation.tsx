@@ -8,6 +8,7 @@ import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
 
 export function Preparation() {
   const { orders, products, users, loadData, isDataInitialized, updateItemStatus } = useInventoryStore()
@@ -24,6 +25,40 @@ export function Preparation() {
   const [expandedGroups, setExpandedGroups] = useState<{[key: string]: boolean}>({})
   const [expandedItems, setExpandedItems] = useState<{[key: string]: boolean}>({})
   const [activeTab, setActiveTab] = useState<'unassigned' | 'assigned'>('unassigned')
+
+  // 保護されたアクション用のフック
+  const qrScanProtection = useProtectedAction(
+    async (qrCode: string, targetItem: any) => {
+      await handleQRAssignWithCodeUnsafe(qrCode, targetItem)
+    },
+    {
+      processType: ProcessType.QR_SCAN,
+      debounceMs: 1500,
+      preventConcurrent: true
+    }
+  )
+
+  const orderProcessProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.ORDER_PROCESS,
+      debounceMs: 1000,
+      preventConcurrent: true
+    }
+  )
+
+  const deleteProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.DELETE_OPERATION,
+      debounceMs: 800,
+      preventConcurrent: true
+    }
+  )
 
   // モバイル検出
   useEffect(() => {
@@ -55,6 +90,7 @@ export function Preparation() {
   // QRスキャン用の状態
   const [qrScanItem, setQrScanItem] = useState<any>(null)
   const [scanError, setScanError] = useState('')
+  const [scanSuccess, setScanSuccess] = useState('')
   const [qrCodeInput, setQrCodeInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -76,6 +112,7 @@ export function Preparation() {
     setQrScanItem(item)
     setQrCodeInput('')
     setScanError('')
+    setScanSuccess('')
     setCameraError(null)
     setUseCameraScanner(true) // カメラモードを初期設定に変更
     setIsProcessingQR(false) // 処理フラグをリセット
@@ -121,9 +158,9 @@ export function Preparation() {
         return
       }
       
-      // 状態更新のタイミング問題を回避するため、QRコードを直接渡す
-      console.log('📱 Calling handleQRAssignWithCode with:', { qrCode, qrScanItem })
-      await handleQRAssignWithCode(qrCode, qrScanItem)
+      // 状態更新のタイミング問題を回避するため、QRコードを直接渡す（保護機能付き）
+      console.log('📱 Calling protected QR assignment with:', { qrCode, qrScanItem })
+      await qrScanProtection.execute(qrCode, qrScanItem)
       
     } catch (error) {
       console.error('🔥 Error in handleCameraScanResult:', error)
@@ -146,8 +183,8 @@ export function Preparation() {
     setUseCameraScanner(false)
   }
 
-  // QRコードと対象アイテムを直接受け取る割り当て処理（状態更新タイミング問題を回避）
-  const handleQRAssignWithCode = async (qrCode: string, targetItem: any) => {
+  // QRコードと対象アイテムを直接受け取る割り当て処理（保護されていない版）
+  const handleQRAssignWithCodeUnsafe = async (qrCode: string, targetItem: any) => {
     try {
       console.log('🔧 Starting QR assignment with direct params:', {
         qrCode,
@@ -166,20 +203,26 @@ export function Preparation() {
 
       setScanError('')
       
-      // QRコードからアイテムを検索
-      console.log('🔧 Fetching product items...')
-      const items = await supabaseDb.getProductItems()
-      console.log('🔧 Found', items.length, 'product items')
-      
-      const scannedItem = items.find(item => {
-        const itemQR = item.qr_code?.trim()
-        const inputQR = qrCode.trim()
-        // 大文字小文字を無視して比較
-        return itemQR && itemQR.toLowerCase() === inputQR.toLowerCase()
-      })
-      
+      // QRコードからアイテムを検索（まずIDで直接検索）
+      console.log('🔧 Searching for QR code:', qrCode)
+      let scannedItem = await supabaseDb.getProductItemById(qrCode.trim())
+
+      // 直接IDで見つからない場合は、全商品からQRコードで検索
       if (!scannedItem) {
-        setScanError('QRコードに対応するアイテムが見つかりません')
+        console.log('🔧 Direct ID search failed, searching by QR code in all items...')
+        const items = await supabaseDb.getProductItems()
+        console.log('🔧 Found', items.length, 'product items')
+
+        scannedItem = items.find(item => {
+          const itemQR = item.qr_code?.trim()
+          const inputQR = qrCode.trim()
+          // 大文字小文字を無視して比較
+          return itemQR && itemQR.toLowerCase() === inputQR.toLowerCase()
+        })
+      }
+
+      if (!scannedItem) {
+        setScanError(`QRコード「${qrCode}」に対応するアイテムが見つかりません。\n\n・QRコードが正しく読み取られているか確認してください\n・商品が登録済みか確認してください`)
         return
       }
 
@@ -188,19 +231,31 @@ export function Preparation() {
       const productIdMatch = scannedItem.product_id?.toLowerCase() === expectedProductId?.toLowerCase()
       
       if (!productIdMatch) {
-        setScanError(`商品種類が一致しません。期待: ${expectedProductId}, 実際: ${scannedItem.product_id}`)
+        setScanError(`商品種類が一致しません。\n\n期待される商品: ${expectedProductId}\nスキャンした商品: ${scannedItem.product_id}\n\n正しい商品のQRコードをスキャンしてください。`)
         return
       }
 
       // 利用可能状態かチェック
       if (scannedItem.status !== 'available') {
-        setScanError(`このアイテムは利用できません (状態: ${scannedItem.status})`)
+        const statusText = {
+          'rented': '貸出中',
+          'returned': '返却済み',
+          'cleaning': '消毒済み',
+          'maintenance': 'メンテナンス済み',
+          'ready_for_delivery': '準備完了',
+          'reserved': '予約済み',
+          'demo_cancelled': 'デモキャンセル',
+          'out_of_order': '故障中',
+          'unknown': '状態不明'
+        }[scannedItem.status] || scannedItem.status
+        
+        setScanError(`このアイテム（${scannedItem.id}）は現在利用できません。\n\n現在の状態: ${statusText}\n\n利用可能な状態のアイテムをスキャンしてください。`)
         return
       }
 
-      console.log('🔧 Scanned item validation passed, updating order...')
+      console.log('🔧 Scanned item validation passed, getting order...')
 
-      // 発注データを取得して更新
+      // 発注データを取得
       const order = await supabaseDb.getOrderById(targetItem.orderId)
       if (!order) {
         setScanError('発注が見つかりません')
@@ -213,82 +268,16 @@ export function Preparation() {
         return
       }
 
-      // assigned_item_idsを更新
-      const updatedItems = order.items.map(item => {
-        if (item.id === targetItem.itemId) {
-          const currentAssigned = item.assigned_item_ids || []
-          // targetItem.individualIndex の位置に scannedItem.id を設定
-          const newAssigned = [...currentAssigned]
-          newAssigned[targetItem.individualIndex] = scannedItem.id
-          
-          const isFullyAssigned = newAssigned.every((id, index) => 
-            index < item.quantity ? id !== null && id !== undefined : true
-          )
-          
-          return {
-            ...item,
-            assigned_item_ids: newAssigned,
-            item_processing_status: isFullyAssigned ? 'ready' as const : 'waiting' as const
-          }
-        }
-        return item
-      })
-
-      // 全てのアイテムが ready かチェック
-      const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
-
-      const updatedOrder = {
-        ...order,
-        items: updatedItems,
-        status: allReady ? 'ready' as const : 'approved' as const
+      // 既に同じ管理番号が割り当てられていないかチェック
+      const currentAssignedIds = orderItem.assigned_item_ids || []
+      if (currentAssignedIds.includes(scannedItem.id)) {
+        setScanError(`管理番号「${scannedItem.id}」は既にこの発注に割り当て済みです。\n\n別のQRコードをスキャンしてください。`)
+        return
       }
 
-      await supabaseDb.saveOrder(updatedOrder)
-
-      // 楽観的更新でステータスを即座に反映
-      await updateItemStatus(scannedItem.id, 'ready_for_delivery')
-      
-      // customer_name も更新が必要な場合は追加で保存
-      if (scannedItem.customer_name !== order.customer_name) {
-        const updatedProductItem = {
-          ...scannedItem,
-          status: 'ready_for_delivery' as const,
-          customer_name: order.customer_name,
-        }
-        await supabaseDb.saveProductItem(updatedProductItem)
-      }
-
-      // 履歴を記録
-      await supabaseDb.createItemHistory(
-        scannedItem.id,
-        '準備完了',
-        scannedItem.status,
-        'ready_for_delivery',
-        currentUser,
-        {
-          location: scannedItem.location,
-          customerName: order.customer_name,
-          notes: '',
-          metadata: {
-            orderId: targetItem.orderId,
-            orderItemId: targetItem.itemId,
-            assignmentMethod: 'qr_scan',
-            previousStatus: scannedItem.status,
-            previousLocation: scannedItem.location,
-            previousNotes: scannedItem.notes,
-            assignedToOrder: `発注${targetItem.orderId}`
-          }
-        }
-      )
-
-      // データ再読み込み
-      await loadData()
-      
-      // 状態をリセット（ダイアログは既にhandleCameraScanResultで閉じている）
-      setQrScanItem(null)
-      setQrCodeInput('')
-      
-      alert(`アイテム ${scannedItem.id} を発注に割り当てました`)
+      // 共通の割り当て処理を実行（手動割り当てと同じロジック）
+      console.log('🔧 Using performAssignment for QR scan...')
+      await performAssignment(scannedItem.id, targetItem, order, orderItem, 'qr_scan')
 
     } catch (error) {
       console.error('🔥 QR割り当てエラー (direct params):', error)
@@ -378,7 +367,7 @@ export function Preparation() {
       // 既に割り当てられているかチェック
       const isAlreadyAssigned = orderItem.assigned_item_ids?.includes(scannedItem.id)
       if (isAlreadyAssigned) {
-        setScanError('このアイテムは既に割り当て済みです')
+        setScanError(`このアイテム（${scannedItem.id}）は既にこの発注に割り当て済みです。\n\n別のアイテムをスキャンしてください。`)
         return
       }
 
@@ -470,7 +459,7 @@ export function Preparation() {
     setShowManualAssignDialog(true)
   }
   
-  const handleManualAssignSubmit = async () => {
+  const handleManualAssignSubmitUnsafe = async () => {
     if (!selectedPreparationItem || !manualItemId.trim()) {
       setAssignError('管理番号を入力してください')
       return
@@ -520,12 +509,12 @@ export function Preparation() {
     // 既に同じ管理番号が割り当てられていないかチェック
     const currentAssignedIds = orderItem.assigned_item_ids || []
     if (currentAssignedIds.includes(productItem.id)) {
-      setAssignError('この管理番号は既に割り当てられています')
+      setAssignError(`管理番号「${productItem.id}」は既にこの発注に割り当て済みです。\n\n別の管理番号を入力してください。`)
       return
     }
     
     // 共通の割り当て処理を実行
-    await performAssignment(productItem.id, selectedPreparationItem, order, orderItem)
+    await performAssignment(productItem.id, selectedPreparationItem, order, orderItem, 'manual')
   }
 
   // 商品削除処理
@@ -534,7 +523,20 @@ export function Preparation() {
     setShowDeleteDialog(true)
   }
 
-  const handleDeleteConfirm = async () => {
+  // 保護されたバージョンの関数
+  const handleManualAssignSubmit = () => {
+    orderProcessProtection.execute(async () => {
+      await handleManualAssignSubmitUnsafe()
+    })
+  }
+
+  const handleDeleteConfirm = () => {
+    deleteProtection.execute(async () => {
+      await handleDeleteConfirmUnsafe()
+    })
+  }
+
+  const handleDeleteConfirmUnsafe = async () => {
     if (!itemToDelete) return
 
     try {
@@ -602,51 +604,44 @@ export function Preparation() {
         }
       }
 
-      // 発注アイテムから該当する個別商品を削除
+      // 発注アイテムを「キャンセル」状態に変更（削除ではなく保持）
       const updatedItems = order.items.map(item => {
         if (item.id === orderItem.id) {
-          // 数量を1減らし、assigned_item_idsからも該当するインデックスを削除
-          const newQuantity = item.quantity - 1
-          const newAssignedIds = [...(item.assigned_item_ids || [])]
-          
-          // 指定されたインデックスのアイテムを削除
-          newAssignedIds.splice(itemToDelete.individualIndex, 1)
-          
-          // 数量が0になった場合は、アイテム全体を削除
-          if (newQuantity <= 0) {
-            return null // この場合はアイテム全体を削除
+          // 個別のアイテムをキャンセル処理
+          const updatedAssignedIds = [...(item.assigned_item_ids || [])]
+
+          // 指定されたインデックスのアイテムをnullに設定（キャンセル状態）
+          if (itemToDelete.individualIndex < updatedAssignedIds.length) {
+            updatedAssignedIds[itemToDelete.individualIndex] = null
           }
-          
-          // 全ての割り当てが完了しているかチェック
-          const allAssigned = newAssignedIds.filter(id => id !== null && id !== undefined).length === newQuantity
-          
+
+          // キャンセル状態に更新
           return {
             ...item,
-            quantity: newQuantity,
-            assigned_item_ids: newAssignedIds,
-            item_processing_status: allAssigned ? 'ready' as const : 'waiting' as const
+            assigned_item_ids: updatedAssignedIds,
+            item_processing_status: 'cancelled' as const,
+            cancelled_at: new Date().toISOString(),
+            cancelled_by: currentUser,
+            cancelled_reason: '準備画面から手動キャンセル'
           }
         }
         return item
-      }).filter(item => item !== null) // null（削除対象）を除外
+      })
 
-      // アイテムが全て削除された場合は発注全体を削除
-      if (updatedItems.length === 0) {
-        await supabaseDb.deleteOrder(order.id)
-        alert(`発注 ${order.id} を削除しました`)
-      } else {
-        // すべてのアイテムが準備完了したかチェック
-        const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
-        
-        const updatedOrder = {
-          ...order,
-          items: updatedItems,
-          status: allReady ? 'ready' as const : 'approved' as const
-        }
-        
-        await supabaseDb.saveOrder(updatedOrder)
-        alert(`商品を発注から削除しました`)
+      // アイテムをキャンセル状態で保持
+      const allCancelled = updatedItems.every(item => item.item_processing_status === 'cancelled')
+      const allReady = updatedItems.every(item =>
+        item.item_processing_status === 'ready' || item.item_processing_status === 'cancelled'
+      )
+
+      const updatedOrder = {
+        ...order,
+        items: updatedItems,
+        status: allCancelled ? 'cancelled' as const : (allReady ? 'ready' as const : 'approved' as const)
       }
+
+      await supabaseDb.saveOrder(updatedOrder)
+      alert(`商品をキャンセルしました（発注一覧には「キャンセル済み」として残ります）`)
 
       setShowDeleteDialog(false)
       setItemToDelete(null)
@@ -659,7 +654,7 @@ export function Preparation() {
 
 
   // 実際の割り当て処理（手動入力とQRスキャン共通）
-  const performAssignment = async (itemId: string, preparationItem: any, order: any, orderItem: any) => {
+  const performAssignment = async (itemId: string, preparationItem: any, order: any, orderItem: any, assignMethod: 'qr_scan' | 'manual' = 'manual') => {
     const productItem = await supabaseDb.getProductItemById(itemId)
     if (!productItem) {
       alert('商品が見つかりません')
@@ -727,23 +722,30 @@ export function Preparation() {
           orderItemId: orderItem.id,
           individualIndex: preparationItem.individualIndex,
           totalQuantity: preparationItem.totalQuantity,
-          assignMethod: qrScanItem ? 'qr_scan' : 'manual',
+          assignMethod: assignMethod,
           previousNotes: productItem.notes // 前の状態のメモを履歴に保存
         }
       }
     )
     
-    // ダイアログを閉じてデータを再読み込み
-    setShowQRScanDialog(false)
-    setShowManualAssignDialog(false)
+    // 状態をクリア（ダイアログは成功メッセージ表示のため一時的に開いたまま）
     setQrScanItem(null)
     setSelectedPreparationItem(null)
     setManualItemId('')
     setAssignError('')
     setScanError('')
+
+    // 成功メッセージを表示
+    setScanSuccess(`${productItem.id} を ${order.customer_name}様の発注に割り当てました`)
+
+    // 2秒後にダイアログを閉じて成功メッセージをクリア
+    setTimeout(() => {
+      setScanSuccess('')
+      setShowQRScanDialog(false)
+      setShowManualAssignDialog(false)
+    }, 2000)
+
     loadData()
-    
-    alert(`${productItem.id} を ${order.customer_name}様の発注に割り当てました`)
   }
 
   // 管理番号割り当て済み商品の準備完了処理
@@ -892,7 +894,14 @@ export function Preparation() {
             itemId: item.id,
             product_id: item.product_id, // 追加: 商品IDを設定
             individualIndex: i,
-            name: product?.name || 'Unknown Product',
+            name: (() => {
+              if (!product) return 'Unknown Product'
+              const baseName = product.name
+              if (baseName?.includes('楽匠プラス') && item.requested_setting) {
+                return `${baseName}（${item.requested_setting}）`
+              }
+              return baseName
+            })(),
             customer: order.customer_name,
             assignedTo: order.assigned_to,
             carriedBy: order.carried_by,
@@ -954,7 +963,14 @@ export function Preparation() {
             itemId: item.id,
             product_id: item.product_id,
             individualIndex: i,
-            name: product?.name || 'Unknown Product',
+            name: (() => {
+              if (!product) return 'Unknown Product'
+              const baseName = product.name
+              if (baseName?.includes('楽匠プラス') && item.requested_setting) {
+                return `${baseName}（${item.requested_setting}）`
+              }
+              return baseName
+            })(),
             customer: order.customer_name,
             assignedTo: order.assigned_to,
             carriedBy: order.carried_by,
@@ -1640,8 +1656,11 @@ export function Preparation() {
               <Button variant="outline" onClick={() => setShowManualAssignDialog(false)}>
                 キャンセル
               </Button>
-              <Button onClick={handleManualAssignSubmit}>
-                割り当て実行
+              <Button
+                onClick={handleManualAssignSubmit}
+                disabled={orderProcessProtection.isLoading}
+              >
+                {orderProcessProtection.isLoading ? '処理中...' : '割り当て実行'}
               </Button>
             </div>
           </div>
@@ -1681,12 +1700,13 @@ export function Preparation() {
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               キャンセル
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleDeleteConfirm}
+              disabled={deleteProtection.isLoading}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              削除実行
+              {deleteProtection.isLoading ? '削除中...' : '削除実行'}
             </Button>
           </div>
         </DialogContent>
@@ -1773,6 +1793,17 @@ export function Preparation() {
                       </div>
                     </div>
                   )}
+
+                  {/* 処理中の表示 */}
+                  {isProcessingQR && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                      <div className="text-center text-white p-4">
+                        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                        <p className="text-sm font-medium">割り当て処理中...</p>
+                        <p className="text-xs mt-1">しばらくお待ちください</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground">
@@ -1782,7 +1813,7 @@ export function Preparation() {
               </div>
             ) : (
               /* 手動入力 */
-              <div className="h-32 bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border">
+              <div className="h-32 bg-secondary/20 rounded-lg flex items-center justify-center border-2 border-dashed border-border relative">
                 <div className="text-center">
                   <div className="text-4xl mb-2">📱</div>
                   <p className="text-sm text-muted-foreground mb-2">QRコードを入力</p>
@@ -1790,6 +1821,17 @@ export function Preparation() {
                     手動入力モード
                   </p>
                 </div>
+
+                {/* 手動入力での処理中表示 */}
+                {isProcessingQR && (
+                  <div className="absolute inset-0 bg-secondary/80 flex items-center justify-center rounded-lg">
+                    <div className="text-center">
+                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                      <p className="text-sm font-medium">割り当て処理中...</p>
+                      <p className="text-xs text-muted-foreground mt-1">しばらくお待ちください</p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -1868,47 +1910,79 @@ export function Preparation() {
                 </Button>
               </div>
               
-                <Button 
+                <Button
                   onClick={handleQRAssign}
                   className="w-full"
-                  disabled={!qrCodeInput.trim()}
+                  disabled={!qrCodeInput.trim() || isProcessingQR}
                 >
-                  QRコードを処理
+                  {isProcessingQR ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      処理中...
+                    </>
+                  ) : (
+                    'QRコードを処理'
+                  )}
                 </Button>
               
                 {scanError && (
-                  <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-lg">
-                    <p className="text-xs text-destructive font-medium">エラー</p>
-                    <p className="text-xs text-destructive">{scanError}</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-1 h-8 text-xs"
-                      onClick={() => {
-                        setScanError('')
-                        setQrCodeInput('')
-                      }}
-                    >
-                      再スキャン
-                    </Button>
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-destructive text-sm">⚠️</div>
+                      <div className="flex-1">
+                        <p className="text-sm text-destructive font-medium mb-1">割り当てエラー</p>
+                        <p className="text-xs text-destructive whitespace-pre-line">{scanError}</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => {
+                          setScanError('')
+                          setQrCodeInput('')
+                        }}
+                      >
+                        再試行
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 成功メッセージ */}
+                {scanSuccess && (
+                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <div className="text-success text-sm">✅</div>
+                      <div className="flex-1">
+                        <p className="text-sm text-success font-medium mb-1">割り当て成功</p>
+                        <p className="text-xs text-success">{scanSuccess.replace('✅ ', '')}</p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             )}
-            
+
             <div className="flex justify-end space-x-2 pt-4">
-              <Button variant="outline" onClick={() => setShowQRScanDialog(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setShowQRScanDialog(false)}
+                disabled={isProcessingQR}
+              >
                 キャンセル
               </Button>
               {!useCameraScanner && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
                     setShowQRScanDialog(false)
                     if (qrScanItem) {
                       handleManualAssign(qrScanItem)
                     }
                   }}
+                  disabled={isProcessingQR}
                 >
                   手動割り当て
                 </Button>

@@ -9,6 +9,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
+import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
 
 export function MyPage() {
   const { orders, products, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
@@ -44,6 +45,51 @@ export function MyPage() {
   const [displayedItems, setDisplayedItems] = useState<any[]>([]) // 表示される商品
   const [availableUsers, setAvailableUsers] = useState<string[]>([]) // 利用可能な営業マンリスト
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set()) // 選択された個別order_item
+
+  // 保護されたアクション用のフック
+  const deliveryProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.ORDER_PROCESS,
+      debounceMs: 1000,
+      preventConcurrent: true
+    }
+  )
+
+  const qrScanProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.QR_SCAN,
+      debounceMs: 1500,
+      preventConcurrent: true
+    }
+  )
+
+  const deleteProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.DELETE_OPERATION,
+      debounceMs: 800,
+      preventConcurrent: true
+    }
+  )
+
+  const batchDeliveryProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.ORDER_PROCESS,
+      debounceMs: 1200,
+      preventConcurrent: true
+    }
+  )
   
   // サポートダイアログ用の状態
   const [showSupportDialog, setShowSupportDialog] = useState(false)
@@ -266,7 +312,14 @@ export function MyPage() {
                       itemId: item.id,
                       orderItemId: item.id, // データベースの実際のorder_item ID
                       individualIndex: index,
-                      name: product?.name || 'Unknown Product',
+                      name: (() => {
+                        if (!product) return 'Unknown Product'
+                        const baseName = product.name
+                        if (baseName?.includes('楽匠プラス') && item.requested_setting) {
+                          return `${baseName}（${item.requested_setting}）`
+                        }
+                        return baseName
+                      })(),
                       customer: order.customer_name,
                       assignedTo: order.assigned_to,
                       carriedBy: order.carried_by,
@@ -699,7 +752,7 @@ export function MyPage() {
   }
 
   // 選択されたアイテムの一括配送完了処理
-  const handleBatchDelivery = async () => {
+  const handleBatchDeliveryUnsafe = async () => {
     if (selectedItems.size === 0) {
       alert('配送完了する項目を選択してください')
       return
@@ -858,6 +911,19 @@ export function MyPage() {
     setShowDeleteDialog(true)
   }
 
+  // 保護されたバージョンの関数
+  const handleBatchDelivery = () => {
+    batchDeliveryProtection.execute(async () => {
+      await handleBatchDeliveryUnsafe()
+    })
+  }
+
+  const handleDeleteConfirm = () => {
+    deleteProtection.execute(async () => {
+      await handleDeleteConfirmUnsafe()
+    })
+  }
+
   // 音声認識開始/停止
   const toggleVoiceRecognition = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -882,7 +948,7 @@ export function MyPage() {
     }
   }
 
-  const handleDeleteConfirm = async () => {
+  const handleDeleteConfirmUnsafe = async () => {
     if (!itemToDelete) return
 
     const order = await supabaseDb.getOrderById(itemToDelete.orderId)
@@ -949,51 +1015,34 @@ export function MyPage() {
       }
     }
 
-    // 発注アイテムから該当する個別商品を削除
+    // 発注アイテムをキャンセル状態に更新（削除ではなくキャンセル）
     const updatedItems = order.items.map(item => {
       if (item.id === orderItem.id) {
-        // 数量を1減らし、assignedItemIdsからも該当するインデックスを削除
-        const newQuantity = item.quantity - 1
         const newAssignedIds = [...(item.assigned_item_ids || [])]
-        
-        // 指定されたインデックスのアイテムを削除
-        newAssignedIds.splice(itemToDelete.individualIndex, 1)
-        
-        // 数量が0になった場合は、アイテム全体を削除
-        if (newQuantity <= 0) {
-          return null // この場合はアイテム全体を削除
-        }
-        
-        // 全ての割り当てが完了しているかチェック
-        const allAssigned = newAssignedIds.filter(id => id !== null && id !== undefined).length === newQuantity
-        
+
+        // 指定されたインデックスのアイテムをnullに設定（キャンセル扱い）
+        newAssignedIds[itemToDelete.individualIndex] = null
+
         return {
           ...item,
-          quantity: newQuantity,
           assigned_item_ids: newAssignedIds,
-          item_processing_status: allAssigned ? 'ready' as const : 'waiting' as const
+          item_processing_status: 'cancelled' as const,
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: currentUser,
+          cancelled_reason: '個別商品キャンセル'
         }
       }
       return item
-    }).filter(item => item !== null) // null（削除対象）を除外
+    })
 
-    // アイテムが全て削除された場合は発注全体を削除
-    if (updatedItems.length === 0) {
-      await supabaseDb.deleteOrder(order.id)
-      alert(`発注 ${order.id} を削除しました`)
-    } else {
-      // すべてのアイテムが準備完了したかチェック
-      const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
-      
-      const updatedOrder = {
-        ...order,
-        items: updatedItems,
-        status: allReady ? 'ready' as const : 'approved' as const
-      }
-      
-      await supabaseDb.saveOrder(updatedOrder)
-      alert(`商品を発注から削除しました`)
+    // 発注を更新（アイテムは削除せずキャンセル状態で保持）
+    const updatedOrder = {
+      ...order,
+      items: updatedItems
     }
+
+    await supabaseDb.saveOrder(updatedOrder)
+    alert(`商品をキャンセルしました。発注一覧に残ります。`)
 
     setShowDeleteDialog(false)
     setItemToDelete(null)
@@ -1319,10 +1368,11 @@ export function MyPage() {
                     <Button
                       size="sm"
                       onClick={handleBatchDelivery}
+                      disabled={batchDeliveryProtection.isLoading}
                       className="bg-success hover:bg-success/90 text-success-foreground text-xs"
                     >
-                      <span className="mr-1">🚚</span>
-                      一括配送完了 ({selectedItems.size})
+                      <span className="mr-1">{batchDeliveryProtection.isLoading ? '⏳' : '🚚'}</span>
+                      {batchDeliveryProtection.isLoading ? '配送処理中...' : `一括配送完了 (${selectedItems.size})`}
                     </Button>
                   )}
                 </div>
@@ -1755,11 +1805,12 @@ export function MyPage() {
               <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
                 キャンセル
               </Button>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={handleDeleteConfirm}
+                disabled={deleteProtection.isLoading}
               >
-                削除実行
+                {deleteProtection.isLoading ? '削除中...' : '削除実行'}
               </Button>
             </div>
           </DialogContent>
@@ -2056,10 +2107,11 @@ export function MyPage() {
                 <Button
                   size="sm"
                   onClick={handleBatchDelivery}
+                  disabled={batchDeliveryProtection.isLoading}
                   className="bg-success hover:bg-success/90 text-success-foreground text-xs"
                 >
-                  <span className="mr-1">🚚</span>
-                  {selectedUser === currentUser ? '一括配送完了' : '一括代理配送'} ({selectedItems.size})
+                  <span className="mr-1">{batchDeliveryProtection.isLoading ? '⏳' : '🚚'}</span>
+                  {batchDeliveryProtection.isLoading ? '配送処理中...' : `${selectedUser === currentUser ? '一括配送完了' : '一括代理配送'} (${selectedItems.size})`}
                 </Button>
               )}
             </div>
@@ -2160,11 +2212,12 @@ export function MyPage() {
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
               キャンセル
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={handleDeleteConfirm}
+              disabled={deleteProtection.isLoading}
             >
-              削除実行
+              {deleteProtection.isLoading ? '削除中...' : '削除実行'}
             </Button>
           </div>
         </DialogContent>

@@ -320,7 +320,18 @@ export function Menu() {
                   <span className="text-sm font-medium text-white">🚨 在庫アラート</span>
                 </div>
               </Link>
-              
+
+              {/* ラベル印刷待ち */}
+              <Link
+                to="/label-queue"
+                className="group block relative"
+                title="ラベル印刷待ち"
+              >
+                <div className="bg-gradient-to-r from-purple-500 to-violet-500 backdrop-blur-xl px-4 py-3 border border-purple-300/40 hover:border-purple-400/60 transition-all duration-300 hover:shadow-xl rounded-lg flex items-center">
+                  <span className="text-sm font-medium text-white">🏷️ ラベル印刷</span>
+                </div>
+              </Link>
+
               {/* セパレーター */}
               <div className="border-t border-slate-600/50"></div>
               

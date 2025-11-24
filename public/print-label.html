@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ラベル印刷 - Brother QL-800</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      padding: 30px;
+    }
+
+    h1 {
+      color: #333;
+      font-size: 28px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 30px;
+    }
+
+    .status {
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .status.warning {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+    }
+
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+
+    .queue-list {
+      margin-top: 20px;
+    }
+
+    .queue-item {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .queue-item-info {
+      flex: 1;
+    }
+
+    .queue-item-info h3 {
+      color: #333;
+      font-size: 18px;
+      margin-bottom: 5px;
+    }
+
+    .queue-item-info p {
+      color: #666;
+      font-size: 14px;
+      margin: 3px 0;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+
+    .btn-success {
+      background: #28a745;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #218838;
+    }
+
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c82333;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .loading-spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .actions {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .actions .btn {
+      margin: 0 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏷️ ラベル印刷</h1>
+    <p class="subtitle">Brother QL-800 ラベルプリンター</p>
+
+    <div id="status" class="status info">
+      初期化中...
+    </div>
+
+    <div id="loading" class="loading">
+      <div class="loading-spinner"></div>
+      <p>印刷待ちデータを読み込んでいます...</p>
+    </div>
+
+    <div id="queueList" class="queue-list" style="display: none;"></div>
+
+    <div id="debugLog" style="margin-top: 20px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 300px; overflow-y: auto; display: none;">
+      <div style="margin-bottom: 10px; font-weight: bold;">デバッグログ:</div>
+      <div id="debugContent"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="window.location.reload()">🔄 更新</button>
+      <button class="btn btn-danger" onclick="window.close()">✖️ 閉じる</button>
+      <button class="btn btn-primary" onclick="toggleDebugLog()">🐛 デバッグ表示</button>
+    </div>
+  </div>
+
+  <script>
+    // Supabase設定（.envから読み込めないため、直接設定が必要）
+    // 本番環境では環境変数から読み込むか、サーバーサイドで処理してください
+    var SUPABASE_URL = 'https://xbltuzyazsafxbacrzfs.supabase.co'; // ここに実際のURLを設定
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHR1enlhenNhZnhiYWNyemZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjU5NjMsImV4cCI6MjA2ODkwMTk2M30.RwlAsXQ_sj9k9-5Zxs3aP0pC3seKOVe-NVVi-ioSykw'; // ここに実際のキーを設定
+    var TEMPLATE_PATH = 'C:\\Users\\taguchi\\Desktop\\claude-kanri\\welfare-equipment-manager\\public\\templates\\equipment-label.lbx';
+
+    // グローバル変数
+    var queueData = [];
+    var statusDiv = document.getElementById('status');
+    var loadingDiv = document.getElementById('loading');
+    var queueListDiv = document.getElementById('queueList');
+    var debugLogDiv = document.getElementById('debugLog');
+    var debugContentDiv = document.getElementById('debugContent');
+    var debugMessages = [];
+
+    // デバッグログ表示/非表示
+    function toggleDebugLog() {
+      if (debugLogDiv.style.display === 'none') {
+        debugLogDiv.style.display = 'block';
+      } else {
+        debugLogDiv.style.display = 'none';
+      }
+    }
+
+    // デバッグログ追加（コンソールと画面の両方に出力）
+    function debugLog(message) {
+      console.log(message);
+      var timestamp = new Date().toLocaleTimeString();
+      var logEntry = '[' + timestamp + '] ' + message;
+      debugMessages.push(logEntry);
+      if (debugContentDiv) {
+        debugContentDiv.innerHTML = debugMessages.join('<br>');
+      }
+    }
+
+    // ステータス表示
+    function showStatus(message, type) {
+      statusDiv.className = 'status ' + type;
+      statusDiv.textContent = message;
+    }
+
+    // b-PAC SDK チェック
+    function checkBPacAvailable() {
+      debugLog('=== b-PAC SDK チェック開始 ===');
+      debugLog('typeof ActiveXObject: ' + typeof ActiveXObject);
+      debugLog('ActiveXObject in window: ' + ('ActiveXObject' in window));
+      debugLog('User Agent: ' + navigator.userAgent);
+
+      try {
+        debugLog('ActiveXObject("bpac.Document") 作成を試行...');
+        var testObj = new ActiveXObject('bpac.Document');
+        debugLog('✅ b-PAC SDK 検出成功');
+        debugLog('testObj オブジェクトの作成に成功しました');
+        return true;
+      } catch (e) {
+        debugLog('❌ b-PAC SDK 検出失敗');
+        debugLog('エラー名: ' + e.name);
+        debugLog('エラーメッセージ: ' + e.message);
+        debugLog('32bit版 b-PAC SDK がインストールされているか確認してください');
+        return false;
+      }
+    }
+
+    // Supabaseから印刷待ちデータ取得
+    function loadPrintQueue() {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', SUPABASE_URL + '/rest/v1/label_print_queue?status=eq.pending&order=created_at.desc', true);
+      xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + SUPABASE_ANON_KEY);
+
+      xhr.onload = function() {
+        loadingDiv.style.display = 'none';
+
+        if (xhr.status === 200) {
+          queueData = JSON.parse(xhr.responseText);
+
+          if (queueData.length === 0) {
+            showStatus('✅ 印刷待ちはありません', 'success');
+          } else {
+            showStatus('📋 印刷待ち: ' + queueData.length + '件', 'info');
+            renderQueue();
+          }
+        } else {
+          showStatus('❌ データ読み込みエラー: ' + xhr.status, 'error');
+        }
+      };
+
+      xhr.onerror = function() {
+        loadingDiv.style.display = 'none';
+        showStatus('❌ 通信エラー', 'error');
+      };
+
+      xhr.send();
+    }
+
+    // キューリスト表示
+    function renderQueue() {
+      queueListDiv.style.display = 'block';
+      queueListDiv.innerHTML = '';
+
+      for (var i = 0; i < queueData.length; i++) {
+        var item = queueData[i];
+        var div = document.createElement('div');
+        div.className = 'queue-item';
+        div.innerHTML =
+          '<div class="queue-item-info">' +
+            '<h3>' + item.product_name + '</h3>' +
+            '<p>管理番号: <strong>' + item.management_id + '</strong></p>' +
+            '<p>状態: ' + (item.condition_notes || '(メモなし)') + '</p>' +
+            '<p>登録者: ' + item.created_by + '</p>' +
+          '</div>' +
+          '<button class="btn btn-success" onclick="printLabel(\'' + item.id + '\')">🖨️ 印刷</button>';
+
+        queueListDiv.appendChild(div);
+      }
+    }
+
+    // ラベル印刷実行
+    function printLabel(queueId) {
+      if (!checkBPacAvailable()) {
+        alert('❌ b-PAC SDKが検出されません。\nBrother b-PAC3 SDKをインストールしてください。');
+        return;
+      }
+
+      // キューアイテム検索
+      var queueItem = null;
+      for (var i = 0; i < queueData.length; i++) {
+        if (queueData[i].id === queueId) {
+          queueItem = queueData[i];
+          break;
+        }
+      }
+
+      if (!queueItem) {
+        alert('❌ データが見つかりません');
+        return;
+      }
+
+      try {
+        showStatus('🖨️ 印刷中: ' + queueItem.management_id, 'warning');
+        debugLog('=== 印刷処理開始 ===');
+        debugLog('管理番号: ' + queueItem.management_id);
+        debugLog('商品名: ' + queueItem.product_name);
+        debugLog('状態メモ: ' + queueItem.condition_notes);
+        debugLog('テンプレートパス: ' + TEMPLATE_PATH);
+
+        // b-PAC Document 作成
+        debugLog('ActiveXObject("bpac.Document") 作成...');
+        var objDoc = new ActiveXObject('bpac.Document');
+        debugLog('objDoc 作成成功（COMオブジェクト）');
+
+        // テンプレート開く
+        debugLog('テンプレートを開く...');
+        var ret = objDoc.Open(TEMPLATE_PATH);
+        debugLog('Open() 戻り値: ' + ret);
+        debugLog('objDoc.ErrorCode: ' + objDoc.ErrorCode);
+
+        if (!ret) {
+          var errorCode = objDoc.ErrorCode;
+          throw new Error('テンプレートを開けません: ' + TEMPLATE_PATH + ' (エラーコード: ' + errorCode + ')');
+        }
+
+        debugLog('✅ テンプレート開いた');
+
+        // データ設定
+        debugLog('データ設定開始...');
+        try {
+          var mgmtObj = objDoc.GetObject('ManagementID');
+          debugLog('ManagementID オブジェクト取得: ' + (mgmtObj ? 'OK' : 'null'));
+          if (mgmtObj) mgmtObj.Text = queueItem.management_id;
+
+          var nameObj = objDoc.GetObject('ProductName');
+          debugLog('ProductName オブジェクト取得: ' + (nameObj ? 'OK' : 'null'));
+          if (nameObj) nameObj.Text = queueItem.product_name;
+
+          var condObj = objDoc.GetObject('ConditionNotes');
+          debugLog('ConditionNotes オブジェクト取得: ' + (condObj ? 'OK' : 'null'));
+          if (condObj) condObj.Text = queueItem.condition_notes || '';
+
+          var qrObj = objDoc.GetObject('QRCode');
+          debugLog('QRCode オブジェクト取得: ' + (qrObj ? 'OK' : 'null'));
+          if (qrObj) qrObj.Text = queueItem.management_id;
+
+          debugLog('✅ データ設定完了');
+        } catch (e) {
+          debugLog('データ設定エラー: ' + e.message);
+          throw new Error('データ設定エラー: ' + e.message);
+        }
+
+        // objDoc のメソッド一覧を確認（デバッグ用 - 運用時はコメントアウト可）
+        // debugLog('=== objDoc メソッド確認 ===');
+        // try {
+        //   debugLog('objDoc.Print: ' + typeof objDoc.Print);
+        //   debugLog('objDoc.PrintOut: ' + typeof objDoc.PrintOut);
+        //   debugLog('objDoc.DoPrint: ' + typeof objDoc.DoPrint);
+        //   debugLog('objDoc.StartPrint: ' + typeof objDoc.StartPrint);
+        //   debugLog('objDoc.Export: ' + typeof objDoc.Export);
+        // } catch (e) {
+        //   debugLog('メソッド確認エラー: ' + e.message);
+        // }
+
+        // 印刷実行
+        debugLog('=== 印刷実行 ===');
+        var printResult = false;
+
+        // 方法1: StartPrint + PrintOut + EndPrint（推奨フロー）
+        try {
+          debugLog('方法1: StartPrint + PrintOut + EndPrint を試行...');
+
+          // StartPrint で印刷ジョブ開始
+          if (typeof objDoc.StartPrint !== 'undefined') {
+            debugLog('objDoc.StartPrint() を実行...');
+            var startResult = objDoc.StartPrint('', 0);
+            debugLog('StartPrint() 戻り値: ' + startResult);
+          }
+
+          // PrintOut で印刷
+          debugLog('objDoc.PrintOut(1, 0) を実行...');
+          printResult = objDoc.PrintOut(1, 0);
+          debugLog('PrintOut() 戻り値: ' + printResult);
+          debugLog('objDoc.ErrorCode: ' + objDoc.ErrorCode);
+
+          // EndPrint で印刷ジョブ終了
+          if (typeof objDoc.EndPrint !== 'undefined') {
+            debugLog('objDoc.EndPrint() を実行...');
+            objDoc.EndPrint();
+            debugLog('EndPrint() 完了');
+          }
+
+          debugLog('✅ 方法1成功');
+        } catch (e1) {
+          debugLog('❌ 方法1失敗: ' + e1.message);
+
+          // 方法2: DoPrint（一括処理）
+          try {
+            debugLog('方法2: objDoc.DoPrint() を試行...');
+            printResult = objDoc.DoPrint();
+            debugLog('✅ 方法2成功 - DoPrint() 戻り値: ' + printResult);
+          } catch (e2) {
+            debugLog('❌ 方法2失敗: ' + e2.message);
+
+            // 方法3: Export してから印刷
+            try {
+              debugLog('方法3: Export + PrintOut を試行...');
+
+              // 一時ファイルにエクスポート
+              var tempPath = 'C:\\temp\\label_temp.prn';
+              debugLog('Export() 実行中...');
+              var exportResult = objDoc.Export(3, tempPath, 0); // 3 = プリンターフォーマット
+              debugLog('Export() 戻り値: ' + exportResult);
+
+              if (exportResult) {
+                debugLog('PrintOut() 実行中...');
+                printResult = objDoc.PrintOut(1, 0);
+                debugLog('PrintOut() 戻り値: ' + printResult);
+              }
+
+              debugLog('✅ 方法3成功');
+            } catch (e3) {
+              debugLog('❌ 方法3失敗: ' + e3.message);
+              throw new Error('全ての印刷メソッドが失敗しました');
+            }
+          }
+        }
+
+        objDoc.Close();
+        debugLog('✅ 印刷処理完了');
+
+        if (printResult) {
+          // 成功: ステータスを completed に更新
+          updateQueueStatus(queueId, 'completed', function() {
+            showStatus('✅ 印刷完了: ' + queueItem.management_id, 'success');
+            setTimeout(function() {
+              window.location.reload();
+            }, 2000);
+          });
+        } else {
+          throw new Error('印刷に失敗しました');
+        }
+
+      } catch (error) {
+        debugLog('❌ 印刷処理エラー: ' + error.message);
+        showStatus('❌ 印刷エラー: ' + error.message, 'error');
+
+        // 失敗: ステータスを failed に更新
+        updateQueueStatus(queueId, 'failed', null, error.message);
+      }
+    }
+
+    // キューステータス更新
+    function updateQueueStatus(queueId, status, callback, errorMessage) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('PATCH', SUPABASE_URL + '/rest/v1/label_print_queue?id=eq.' + queueId, true);
+      xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+      xhr.setRequestHeader('Authorization', 'Bearer ' + SUPABASE_ANON_KEY);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Prefer', 'return=minimal');
+
+      var updateData = {
+        status: status,
+        updated_at: new Date().toISOString()
+      };
+
+      if (status === 'completed') {
+        updateData.printed_at = new Date().toISOString();
+        updateData.printed_by = 'IE印刷ページ';
+      }
+
+      if (status === 'failed' && errorMessage) {
+        updateData.error_message = errorMessage;
+      }
+
+      xhr.onload = function() {
+        if (xhr.status === 204 && callback) {
+          callback();
+        }
+      };
+
+      xhr.send(JSON.stringify(updateData));
+    }
+
+    // 初期化
+    window.onload = function() {
+      // ActiveXObjectの存在確認
+      var hasActiveX = typeof ActiveXObject !== 'undefined' || 'ActiveXObject' in window;
+
+      console.log('=== 初期化開始 ===');
+      console.log('ActiveXObject利用可能:', hasActiveX);
+
+      if (!hasActiveX) {
+        showStatus('⚠️ このページはIEモードで開かれていません', 'warning');
+        loadingDiv.innerHTML =
+          '<div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 20px; border-radius: 8px; color: #856404;">' +
+          '<p style="font-weight: bold; font-size: 18px; margin-bottom: 10px;">🔄 IEモードで再読み込みしてください</p>' +
+          '<ol style="text-align: left; margin: 10px 0; padding-left: 20px;">' +
+          '<li>このウィンドウで <strong>...</strong>（その他）メニューをクリック</li>' +
+          '<li><strong>「その他のツール」</strong> → <strong>「Internet Explorer モードで再読み込み」</strong> を選択</li>' +
+          '<li>ページがリロードされます</li>' +
+          '</ol>' +
+          '<p style="margin-top: 15px; font-size: 14px;">💡 アドレスバーに「IE」アイコンが表示されればIEモードです</p>' +
+          '</div>';
+        return;
+      }
+
+      // b-PAC SDK チェック
+      if (!checkBPacAvailable()) {
+        showStatus('❌ b-PAC SDKが検出されません', 'error');
+        loadingDiv.innerHTML =
+          '<div style="background: #f8d7da; border: 1px solid #f5c6cb; padding: 20px; border-radius: 8px; color: #721c24;">' +
+          '<p style="font-weight: bold; font-size: 18px; margin-bottom: 10px;">Brother b-PAC3 SDKがインストールされていません</p>' +
+          '<p>このページで印刷するには、Brother b-PAC3 SDKのインストールが必要です。</p>' +
+          '<p style="margin-top: 10px;">インストール場所: <code>C:\\Program Files (x86)\\Brother\\Brother bPAC3 SDK\\</code></p>' +
+          '<p style="margin-top: 10px; font-size: 14px;">F12キーを押してコンソールタブでエラー詳細を確認してください。</p>' +
+          '</div>';
+        return;
+      }
+
+      showStatus('✅ b-PAC SDK 検出済み', 'success');
+
+      // Supabase設定チェック
+      if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+        showStatus('⚠️ Supabase設定が必要です', 'warning');
+        loadingDiv.innerHTML =
+          '<p style="color: #856404; font-weight: bold;">このHTMLファイルにSupabase情報を設定してください</p>' +
+          '<p>SUPABASE_URL と SUPABASE_ANON_KEY を編集してください。</p>';
+        return;
+      }
+
+      // データ読み込み
+      loadPrintQueue();
+    };
+  </script>
+</body>
+</html>

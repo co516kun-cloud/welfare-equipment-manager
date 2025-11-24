@@ -1,16 +1,17 @@
 import { supabase } from './supabase'
 import { mockDb } from './mock-database'
-import type { 
-  Product, 
-  ProductItem, 
-  ProductCategory, 
-  Order, 
+import type {
+  Product,
+  ProductItem,
+  ProductCategory,
+  Order,
   OrderItem,
   User,
   ItemHistory,
   PreparationTask,
   DemoEquipment,
-  DepositItem
+  DepositItem,
+  LabelPrintQueue
 } from '../types'
 
 // Check if we should use mock database (when Supabase is not properly configured)
@@ -155,9 +156,9 @@ export class SupabaseDatabase {
     }
     
     // Supabaseのデフォルト制限を回避するため、範囲指定で取得
-    const { data, error, count } = await supabase
+    const { data, error } = await supabase
       .from('product_items')
-      .select('*', { count: 'exact' })
+      .select('*')
       .order('created_at', { ascending: false })
       .range(0, 9999) // 最大10000件まで取得
     
@@ -183,11 +184,13 @@ export class SupabaseDatabase {
       return items
     }
     
+    // 更新または新規作成された商品アイテムを取得
+    // updated_atまたはcreated_atが指定時刻以降のものを取得
     const { data, error } = await supabase
       .from('product_items')
       .select('*')
-      .gte('updated_at', since)
-      .order('updated_at', { ascending: false })
+      .or(`updated_at.gte.${since},created_at.gte.${since}`)
+      .order('created_at', { ascending: false })
     
     if (error) {
       console.error('Error fetching recently updated product items:', error)
@@ -292,7 +295,10 @@ export class SupabaseDatabase {
   async saveProductItem(item: ProductItem): Promise<void> {
     const { error } = await supabase
       .from('product_items')
-      .upsert(item)
+      .upsert({
+        ...item,
+        updated_at: new Date().toISOString()  // 更新時刻を明示的に設定
+      })
     
     if (error) {
       console.error('Error saving product item:', error)
@@ -344,6 +350,41 @@ export class SupabaseDatabase {
     }
     
     return data
+  }
+
+  async getCurrentUserName(): Promise<string> {
+    if (useMockDatabase()) {
+      return 'テストユーザー'
+    }
+
+    try {
+      // 認証ユーザーを取得
+      const { data: authUser } = await supabase.auth.getUser()
+      if (!authUser.user) {
+        return 'Unknown User'
+      }
+
+      // usersテーブルから名前を取得（email で検索）
+      const { data, error } = await supabase
+        .from('users')
+        .select('name')
+        .eq('email', authUser.user.email)
+        .single()
+
+      if (error || !data) {
+        console.log('User not found in users table, using auth metadata')
+        // usersテーブルにない場合は認証情報から取得
+        return authUser.user.user_metadata?.name || 
+               authUser.user.email?.split('@')[0] || 
+               authUser.user.email || 
+               'Unknown User'
+      }
+
+      return data.name
+    } catch (error) {
+      console.error('Error getting current user name:', error)
+      return 'Unknown User'
+    }
   }
 
   async saveUser(user: User): Promise<void> {
@@ -433,6 +474,61 @@ export class SupabaseDatabase {
     }
   }
 
+  // 差分同期用: 指定された日時以降に更新されたオーダーを取得
+  async getRecentlyUpdatedOrders(since: string): Promise<Order[]> {
+    if (useMockDatabase()) {
+      const orders = await mockDb.getOrders()
+      // モックデータでは全件返す（実際の環境では使われない）
+      return orders
+    }
+
+    try {
+      // 更新または新規作成されたオーダーの基本情報を取得
+      // updated_atまたはcreated_atが指定時刻以降のものを取得
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('is_archived', false)
+        .or(`updated_at.gte.${since},created_at.gte.${since}`)
+        .order('created_at', { ascending: false })
+
+      if (ordersError) {
+        console.error('Error fetching recently updated orders:', ordersError)
+        return []
+      }
+
+      if (!ordersData || ordersData.length === 0) {
+        return []
+      }
+
+      // 各注文の詳細項目を取得
+      const ordersWithItems: Order[] = []
+      for (const orderData of ordersData) {
+        const { data: itemsData, error: itemsError } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', orderData.id)
+
+        if (itemsError) {
+          console.error('Error fetching order items:', itemsError)
+          continue
+        }
+
+        const order: Order = {
+          ...orderData,
+          items: itemsData || []
+        }
+
+        ordersWithItems.push(order)
+      }
+
+      return ordersWithItems
+    } catch (error) {
+      console.error('Error in getRecentlyUpdatedOrders:', error)
+      return []
+    }
+  }
+
   async getOrderById(id: string): Promise<Order | null> {
     try {
       // 注文の基本情報を取得（アーカイブ状態に関係なく取得）
@@ -501,7 +597,8 @@ export class SupabaseDatabase {
         approved_by: order.approved_by,
         approved_date: order.approved_date,
         approval_notes: order.approval_notes,
-        is_archived: false  // 新規作成時はアクティブ状態
+        is_archived: false,  // 新規作成時はアクティブ状態
+        updated_at: new Date().toISOString()  // 更新時刻を明示的に設定
       }
       const { error: orderError } = await supabase
         .from('orders')
@@ -526,12 +623,15 @@ export class SupabaseDatabase {
       // 新しい注文項目を挿入
       if (order.items && order.items.length > 0) {
         const itemsData = order.items.map(item => {
-          // 一時的なIDを新しいUUIDに置き換え
-          const newId = `OI-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+          // 既存のIDがあればそれを使用、なければ新しいIDを生成
+          const itemId = item.id && item.id.startsWith('OI-') ? item.id : `OI-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
           return {
             ...item,
-            id: newId, // 新しいIDを設定
-            order_id: order.id
+            id: itemId, // 既存IDを保持
+            order_id: order.id,
+            cancelled_at: item.cancelled_at || null,
+            cancelled_by: item.cancelled_by || null,
+            cancelled_reason: item.cancelled_reason || null
           }
         })
         
@@ -573,7 +673,10 @@ export class SupabaseDatabase {
         approved_by: orderItem.approved_by || null,
         approved_date: orderItem.approved_date || null,
         approval_notes: orderItem.approval_notes || null,
-        item_processing_status: orderItem.item_processing_status
+        item_processing_status: orderItem.item_processing_status,
+        cancelled_at: orderItem.cancelled_at || null,
+        cancelled_by: orderItem.cancelled_by || null,
+        cancelled_reason: orderItem.cancelled_reason || null
       }
 
       const { error } = await supabase
@@ -1131,9 +1234,12 @@ export class SupabaseDatabase {
       id: item.id,
       name: item.name,
       managementNumber: item.management_number,
+      category_id: item.category_id,
       status: item.status,
       customerName: item.customer_name,
       loanDate: item.loan_date,
+      operator: item.operator,
+      operatedAt: item.operated_at,
       notes: item.notes,
       created_at: item.created_at,
       updated_at: item.updated_at
@@ -1149,10 +1255,13 @@ export class SupabaseDatabase {
       id: equipment.id,
       name: equipment.name,
       management_number: equipment.managementNumber,
+      category_id: equipment.category_id,
       status: equipment.status,
-      customer_name: equipment.customerName,
-      loan_date: equipment.loanDate,
-      notes: equipment.notes,
+      customer_name: equipment.customerName || null,
+      loan_date: equipment.loanDate || null,
+      operator: equipment.operator || null,
+      operated_at: equipment.operatedAt || null,
+      notes: equipment.notes || null,
       updated_at: new Date().toISOString()
     }
 
@@ -1242,14 +1351,172 @@ export class SupabaseDatabase {
     if (useMockDatabase()) {
       return await mockDb.deleteDepositItem(id)
     }
-    
+
     const { error } = await supabase
       .from('deposit_items')
       .delete()
       .eq('id', id)
-    
+
     if (error) {
       console.error('Error deleting deposit item:', error)
+      throw error
+    }
+  }
+
+  // Label Print Queue Management
+  /**
+   * 印刷待ちキューの全取得
+   */
+  async getLabelPrintQueue(): Promise<LabelPrintQueue[]> {
+    if (useMockDatabase()) {
+      console.warn('Mock database does not support label print queue')
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from('label_print_queue')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      // テーブルが存在しない場合は空配列を返す
+      if (error.code === '42P01') {
+        console.warn('label_print_queue table does not exist. Please run the migration SQL.')
+        return []
+      }
+      console.error('Error fetching label print queue:', error)
+      return []
+    }
+
+    return data || []
+  }
+
+  /**
+   * ステータス別の印刷待ちキュー取得
+   */
+  async getLabelPrintQueueByStatus(status: LabelPrintQueue['status']): Promise<LabelPrintQueue[]> {
+    if (useMockDatabase()) {
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from('label_print_queue')
+      .select('*')
+      .eq('status', status)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching label print queue by status:', error)
+      return []
+    }
+
+    return data || []
+  }
+
+  /**
+   * 印刷待ちキューに追加
+   */
+  async addLabelPrintQueue(queueItem: Omit<LabelPrintQueue, 'id' | 'created_at'>): Promise<LabelPrintQueue> {
+    if (useMockDatabase()) {
+      throw new Error('Mock database does not support label print queue')
+    }
+
+    const { data, error } = await supabase
+      .from('label_print_queue')
+      .insert({
+        item_id: queueItem.item_id,
+        product_name: queueItem.product_name,
+        management_id: queueItem.management_id,
+        condition_notes: queueItem.condition_notes,
+        status: queueItem.status,
+        created_by: queueItem.created_by,
+        printed_at: queueItem.printed_at,
+        printed_by: queueItem.printed_by,
+        error_message: queueItem.error_message
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error adding label print queue:', error)
+      throw error
+    }
+
+    return data
+  }
+
+  /**
+   * 印刷ステータス更新
+   */
+  async updateLabelPrintQueueStatus(
+    id: string,
+    status: LabelPrintQueue['status'],
+    printedBy?: string,
+    errorMessage?: string
+  ): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString()
+    }
+
+    if (status === 'completed' && printedBy) {
+      updateData.printed_at = new Date().toISOString()
+      updateData.printed_by = printedBy
+    }
+
+    if (status === 'failed' && errorMessage) {
+      updateData.error_message = errorMessage
+    }
+
+    const { error } = await supabase
+      .from('label_print_queue')
+      .update(updateData)
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error updating label print queue status:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 印刷キュー削除
+   */
+  async deleteLabelPrintQueue(id: string): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('label_print_queue')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error deleting label print queue:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 完了済み印刷キューの一括削除
+   */
+  async deleteCompletedLabelPrintQueue(): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('label_print_queue')
+      .delete()
+      .eq('status', 'completed')
+
+    if (error) {
+      console.error('Error deleting completed label print queue:', error)
       throw error
     }
   }

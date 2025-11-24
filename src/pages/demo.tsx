@@ -5,28 +5,38 @@ import { Label } from '../components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { supabaseDb } from '../lib/supabase-database'
 import type { DemoEquipment } from '../types'
+import { demoCategories, getDemoCategoryById, getDemoCategoryName, getDemoCategoryIcon } from '../data/demo-categories'
+import { useAuth } from '../hooks/useAuth'
+import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
 
 export function Demo() {
   const [demoEquipment, setDemoEquipment] = useState<DemoEquipment[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [showLoanDialog, setShowLoanDialog] = useState(false)
-  const [selectedEquipment, setSelectedEquipment] = useState<DemoEquipment | null>(null)
   const [activeTab, setActiveTab] = useState<'available' | 'demo'>('available')
-  const [loanForm, setLoanForm] = useState({
-    customerName: '',
-    loanDate: new Date().toISOString().split('T')[0],
-    notes: ''
-  })
-  const [formError, setFormError] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const { user } = useAuth()
   
   // 新規デモ機登録用の状態
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [addForm, setAddForm] = useState({
     name: '',
-    managementNumber: ''
+    managementNumber: '',
+    category_id: ''
   })
   const [addError, setAddError] = useState('')
+
+  // 保護されたアクション用のフック
+  const demoManagementProtection = useProtectedAction(
+    async (callback: () => Promise<void>) => {
+      await callback()
+    },
+    {
+      processType: ProcessType.DEMO_MANAGEMENT,
+      debounceMs: 1000,
+      preventConcurrent: true
+    }
+  )
 
   // デモページ用のデータをオンデマンド読み込み
   useEffect(() => {
@@ -58,44 +68,57 @@ export function Demo() {
     }
   }
 
-  // デモ開始処理
-  const handleStartDemo = (equipment: DemoEquipment) => {
-    setSelectedEquipment(equipment)
-    setLoanForm({
-      customerName: '',
-      loanDate: new Date().toISOString().split('T')[0],
-      notes: ''
-    })
-    setFormError('')
-    setShowLoanDialog(true)
-  }
-
-  // デモ開始送信
-  const handleLoanSubmit = async () => {
-    if (!loanForm.customerName.trim()) {
-      setFormError('顧客名を入力してください')
-      return
-    }
-
-    if (!loanForm.loanDate) {
-      setFormError('貸出日を選択してください')
-      return
-    }
-
-    if (!selectedEquipment) return
+  // デモ開始処理（ワンクリック）
+  const handleStartDemo = async (equipment: DemoEquipment) => {
+    // usersテーブルから操作者名を自動取得
+    const operator = await supabaseDb.getCurrentUserName()
 
     const updatedEquipment: DemoEquipment = {
-      ...selectedEquipment,
+      ...equipment,
       status: 'demo',
-      customerName: loanForm.customerName,
-      loanDate: loanForm.loanDate,
-      notes: loanForm.notes
+      operator: operator,
+      operatedAt: new Date().toISOString(),
+      loanDate: new Date().toISOString().split('T')[0]
     }
 
     await saveData(updatedEquipment)
-    setShowLoanDialog(false)
-    setSelectedEquipment(null)
-    alert(`${selectedEquipment.name} のデモ貸出を開始しました`)
+    alert(`${equipment.name} のデモを開始しました（操作者: ${operator}）`)
+  }
+
+  // 日付と操作者でグループ化
+  const groupEquipmentByDateAndOperator = (equipment: DemoEquipment[]) => {
+    const grouped = equipment.reduce((groups, item) => {
+      if (item.status === 'demo' && item.operator && item.operatedAt) {
+        const date = new Date(item.operatedAt).toLocaleDateString('ja-JP', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        })
+        const key = `${date} - ${item.operator}`
+        
+        if (!groups[key]) {
+          groups[key] = []
+        }
+        groups[key].push(item)
+      }
+      return groups
+    }, {} as Record<string, DemoEquipment[]>)
+    
+    return Object.entries(grouped).sort(([a], [b]) => b.localeCompare(a))
+  }
+
+  // 顧客名入力処理
+  const handleEditCustomer = async (equipment: DemoEquipment) => {
+    const customerName = prompt('顧客名を入力してください:', equipment.customerName || '')
+    if (customerName !== null) { // キャンセルでなければ
+      const updatedEquipment: DemoEquipment = {
+        ...equipment,
+        customerName: customerName.trim() || undefined
+      }
+
+      await saveData(updatedEquipment)
+      alert(`${equipment.name} の顧客名を更新しました`)
+    }
   }
 
   // 返却処理
@@ -106,6 +129,8 @@ export function Demo() {
         status: 'available',
         customerName: undefined,
         loanDate: undefined,
+        operator: undefined,
+        operatedAt: undefined,
         notes: undefined
       }
 
@@ -116,7 +141,7 @@ export function Demo() {
 
   // 新規デモ機追加
   const handleAddEquipment = () => {
-    setAddForm({ name: '', managementNumber: '' })
+    setAddForm({ name: '', managementNumber: '', category_id: '' })
     setAddError('')
     setShowAddDialog(true)
   }
@@ -147,6 +172,7 @@ export function Demo() {
       id: `DEMO-${String(demoEquipment.length + 1).padStart(3, '0')}`,
       name: addForm.name.trim(),
       managementNumber: addForm.managementNumber.trim(),
+      category_id: addForm.category_id || undefined,
       status: 'available'
     }
 
@@ -193,8 +219,52 @@ export function Demo() {
     total: demoEquipment.length
   }
 
-  // タブ別にデータをフィルタ
-  const filteredEquipment = demoEquipment.filter(item => item.status === activeTab)
+
+
+  // タブ別・カテゴリー別にデータをフィルタ
+  const filteredEquipment = demoEquipment
+    .filter(item => {
+      const statusMatch = item.status === activeTab
+      
+      let categoryMatch = false
+      if (selectedCategory === '') {
+        // 全て表示
+        categoryMatch = true
+      } else {
+        // 特定のカテゴリー
+        categoryMatch = item.category_id === selectedCategory
+      }
+
+      return statusMatch && categoryMatch
+    })
+    .sort((a, b) => {
+      // 管理番号でソート（A～、①～順）
+      const managementA = a.managementNumber || ''
+      const managementB = b.managementNumber || ''
+      
+      // 丸数字を数値に変換する関数
+      const convertCircledNumber = (str: string): string => {
+        const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩', 
+                              '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳']
+        
+        for (let i = 0; i < circledNumbers.length; i++) {
+          if (str.startsWith(circledNumbers[i])) {
+            // 丸数字を数値に変換（01, 02, ... 10, 11... の形式）
+            return String(i + 1).padStart(2, '0') + str.substring(1)
+          }
+        }
+        return str
+      }
+      
+      // 両方を変換してから比較
+      const normalizedA = convertCircledNumber(managementA)
+      const normalizedB = convertCircledNumber(managementB)
+      
+      return normalizedA.localeCompare(normalizedB, 'ja-JP', { 
+        numeric: true, 
+        sensitivity: 'base' 
+      })
+    })
 
   // ローディング中の表示
   if (isLoading) {
@@ -307,6 +377,37 @@ export function Demo() {
               </button>
             </div>
           </div>
+
+          {/* Category Filter */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm font-medium text-muted-foreground mr-2">カテゴリー:</span>
+              <button
+                onClick={() => setSelectedCategory('')}
+                className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                  selectedCategory === ''
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                全て
+              </button>
+              {demoCategories.map(category => (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`px-3 py-1 text-xs rounded-full transition-colors flex items-center space-x-1 ${
+                    selectedCategory === category.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <span>{category.icon}</span>
+                  <span>{category.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           
           <div className="space-y-3">
             {filteredEquipment.length === 0 ? (
@@ -315,7 +416,63 @@ export function Demo() {
                   {activeTab === 'available' ? '利用可能なデモ機はありません' : '貸出中のデモ機はありません'}
                 </p>
               </div>
+            ) : activeTab === 'demo' ? (
+              // デモ中: 日付と操作者でグループ表示
+              groupEquipmentByDateAndOperator(filteredEquipment).map(([groupKey, groupItems]) => (
+                <div key={groupKey} className="space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-600 border-b border-slate-200 pb-1">
+                    {groupKey}
+                  </h3>
+                  {groupItems.map((equipment) => (
+                    <div key={equipment.id} className="border border-border rounded-lg p-3 ml-4 hover:bg-accent/50 transition-colors">
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-foreground flex items-center gap-2">
+                              <span className="text-lg">{getDemoCategoryIcon(equipment.category_id)}</span>
+                              {equipment.name}
+                              <span className="text-lg font-bold text-blue-600">{equipment.managementNumber}</span>
+                            </h4>
+                            {equipment.operatedAt && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {new Date(equipment.operatedAt).toLocaleTimeString('ja-JP', { 
+                                  hour: '2-digit', 
+                                  minute: '2-digit' 
+                                })} デモ開始
+                              </p>
+                            )}
+                            {equipment.customerName && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                顧客: {equipment.customerName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-600 text-xs"
+                              onClick={() => handleEditCustomer(equipment)}
+                            >
+                              {equipment.customerName ? '顧客名変更' : '顧客名入力'}
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="bg-red-50 border-red-200 hover:bg-red-100 text-red-600 text-xs"
+                              onClick={() => handleReturn(equipment)}
+                            >
+                              返却
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))
             ) : (
+              // 利用可能: 通常表示
               filteredEquipment.map((equipment) => (
                 <div key={equipment.id} className="border border-border rounded-lg p-3 hover:bg-accent/50 transition-colors">
                   <div className="space-y-3">
@@ -323,7 +480,7 @@ export function Demo() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-foreground flex items-center gap-2">
-                          <span className="text-lg">🛁</span>
+                          <span className="text-lg">{getDemoCategoryIcon(equipment.category_id)}</span>
                           {equipment.name}
                           <span className="text-lg font-bold text-blue-600">{equipment.managementNumber}</span>
                         </h3>
@@ -387,90 +544,6 @@ export function Demo() {
         </div>
       </div>
 
-      {/* デモ開始ダイアログ */}
-      {showLoanDialog && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4">
-          {/* 背景オーバーレイ */}
-          <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setShowLoanDialog(false)}
-          />
-          
-          {/* ダイアログ */}
-          <div className="relative bg-white rounded-xl p-6 shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-            {/* 閉じるボタン */}
-            <button
-              onClick={() => setShowLoanDialog(false)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors"
-            >
-              ✕
-            </button>
-            
-            <div className="pr-8">
-              <h2 className="text-lg font-bold text-slate-800 mb-2">デモ機貸出</h2>
-              <p className="text-sm text-slate-600 mb-6">
-                {selectedEquipment && (
-                  <>
-                    <strong>{selectedEquipment.name}</strong> のデモ貸出を開始します。<br />
-                    顧客情報を入力してください。
-                  </>
-                )}
-              </p>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="customerName">顧客名 <span className="text-red-500">*</span></Label>
-                <Input
-                  id="customerName"
-                  value={loanForm.customerName}
-                  onChange={(e) => setLoanForm(prev => ({ ...prev, customerName: e.target.value }))}
-                  placeholder="例: 田中太郎"
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="loanDate">貸出日 <span className="text-red-500">*</span></Label>
-                <Input
-                  id="loanDate"
-                  type="date"
-                  value={loanForm.loanDate}
-                  onChange={(e) => setLoanForm(prev => ({ ...prev, loanDate: e.target.value }))}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="notes">備考</Label>
-                <Input
-                  id="notes"
-                  value={loanForm.notes}
-                  onChange={(e) => setLoanForm(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="特記事項があれば入力してください"
-                  className="mt-1"
-                />
-              </div>
-
-              {formError && (
-                <p className="text-sm text-red-500">{formError}</p>
-              )}
-              
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setShowLoanDialog(false)}
-                >
-                  キャンセル
-                </Button>
-                <Button onClick={handleLoanSubmit}>
-                  貸出開始
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 新規デモ機登録ダイアログ */}
       {showAddDialog && (
@@ -517,11 +590,31 @@ export function Demo() {
                   id="managementNumber"
                   value={addForm.managementNumber}
                   onChange={(e) => setAddForm(prev => ({ ...prev, managementNumber: e.target.value }))}
-                  placeholder="例: ①、②、③... または A、B、C..."
+                  placeholder="例: A、B、C... または ①、②、③..."
                   className="mt-1"
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   他のデモ機と重複しない管理番号を入力してください
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="category">カテゴリー</Label>
+                <select
+                  id="category"
+                  value={addForm.category_id}
+                  onChange={(e) => setAddForm(prev => ({ ...prev, category_id: e.target.value }))}
+                  className="mt-1 w-full px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                >
+                  <option value="">未選択</option>
+                  {demoCategories.map(category => (
+                    <option key={category.id} value={category.id}>
+                      {category.icon} {category.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  デモ機のカテゴリーを選択してください（任意）
                 </p>
               </div>
 

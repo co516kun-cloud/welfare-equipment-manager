@@ -45,10 +45,11 @@ export function ScanActionDialog({
     orderItemId: '',
     photos: [] as string[]
   })
-  
+
   const [showMaintenanceChecklist, setShowMaintenanceChecklist] = useState(false)
   const [checklistResult, setChecklistResult] = useState<ChecklistResult | null>(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
+  const [showLabelPrintDialog, setShowLabelPrintDialog] = useState(false)
 
   // フォームをリセット
   const resetForm = () => {
@@ -63,6 +64,7 @@ export function ScanActionDialog({
     setChecklistResult(null)
     setShowMaintenanceChecklist(false)
     setSelectedSubcategory(null)
+    setShowLabelPrintDialog(false)
   }
 
   // 写真撮影機能
@@ -206,11 +208,15 @@ export function ScanActionDialog({
       // 楽観的更新でステータスを即座に反映（データベース保存も含む）
       await updateItemStatus(selectedItem.id, finalStatus)
       
-      // ステータス以外の属性も更新が必要な場合は追加でDB保存
+      // メンテナンス処理の場合は常にDB保存（商品状態、状態メモ、写真を確実に保存）
+      const forceUpdateForMaintenance = actionType === 'maintenance'
+      const hasPhotos = actionType === 'maintenance' && actionForm.photos.length > 0
       if (
+        forceUpdateForMaintenance ||
         (actionForm.condition && actionForm.condition !== selectedItem.condition) ||
         (actionForm.location && actionForm.location !== selectedItem.location) ||
-        (shouldSaveConditionNotes && actionForm.conditionNotes !== (selectedItem.condition_notes || ''))
+        (shouldSaveConditionNotes && actionForm.conditionNotes !== (selectedItem.condition_notes || '')) ||
+        hasPhotos
       ) {
         const updatedItem: ProductItem = {
           id: selectedItem.id,
@@ -220,8 +226,10 @@ export function ScanActionDialog({
           location: actionForm.location || selectedItem.location,
           qr_code: selectedItem.qr_code,
           condition_notes: newConditionNotes,
+          photos: actionType === 'maintenance' ? actionForm.photos : selectedItem.photos,
           customer_name: selectedItem.customer_name,
-          loan_start_date: selectedItem.loan_start_date
+          loan_start_date: selectedItem.loan_start_date,
+          current_setting: selectedItem.current_setting
         }
         await supabaseDb.saveProductItem(updatedItem)
       }
@@ -257,7 +265,7 @@ export function ScanActionDialog({
           location: actionForm.location || selectedItem.location,
           condition: actionForm.condition || selectedItem.condition,
           conditionNotes: shouldSaveConditionNotes ? actionForm.conditionNotes : undefined,
-          customerName: actionType === 'assign_to_order' ? 
+          customerName: actionType === 'assign_to_order' ?
             orders.find(o => o.id === actionForm.orderId)?.customer_name : undefined,
           photos: actionType === 'maintenance' ? actionForm.photos : undefined,
           metadata: {
@@ -271,14 +279,53 @@ export function ScanActionDialog({
         }
       )
 
-      resetForm()
-      onOpenChange(false)
-      onSuccess()
-      
+      // 入庫処理の場合は印刷確認ダイアログを表示
+      if (actionType === 'storage') {
+        setShowLabelPrintDialog(true)
+      } else {
+        resetForm()
+        onOpenChange(false)
+        onSuccess()
+      }
+
     } catch (error) {
       console.error('Action execution error:', error)
       alert(`処理中にエラーが発生しました: ${error.message}`)
     }
+  }
+
+  // ラベル印刷確認ダイアログの処理
+  const handleLabelPrintConfirm = async () => {
+    if (!selectedItem) return
+
+    try {
+      // 印刷待ちキューに追加
+      await supabaseDb.addLabelPrintQueue({
+        item_id: selectedItem.id,
+        product_name: selectedItem.product?.name || '不明な商品',
+        management_id: selectedItem.id,
+        condition_notes: actionForm.conditionNotes || selectedItem.condition_notes || '',
+        status: 'pending',
+        created_by: getCurrentUserName()
+      })
+
+      alert('印刷待ちキューに追加しました')
+    } catch (error) {
+      console.error('印刷キューへの追加エラー:', error)
+      alert('印刷待ちキューへの追加に失敗しました')
+    }
+
+    // ダイアログを閉じる
+    resetForm()
+    onOpenChange(false)
+    onSuccess()
+  }
+
+  const handleLabelPrintCancel = () => {
+    // 印刷しない場合もダイアログを閉じる
+    resetForm()
+    onOpenChange(false)
+    onSuccess()
   }
 
   return (
@@ -499,6 +546,51 @@ export function ScanActionDialog({
           onComplete={handleChecklistComplete}
         />
       )}
+
+      {/* ラベル印刷確認ダイアログ */}
+      <Dialog open={showLabelPrintDialog} onOpenChange={setShowLabelPrintDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ラベル印刷</DialogTitle>
+            <DialogDescription>
+              入庫処理が完了しました。梱包用のラベルを印刷しますか？
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-secondary/20 rounded-lg">
+              <h3 className="font-bold mb-2">印刷内容</h3>
+              <dl className="space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">商品名:</dt>
+                  <dd className="font-medium">{selectedItem?.product?.name}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">管理番号:</dt>
+                  <dd className="font-mono font-medium">{selectedItem?.id}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">商品状態:</dt>
+                  <dd>{actionForm.conditionNotes || selectedItem?.condition_notes || '(メモなし)'}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              ※ 印刷待ちキューに追加されます。「ラベル印刷待ち」ページから印刷してください。
+            </p>
+
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={handleLabelPrintCancel}>
+                印刷しない
+              </Button>
+              <Button onClick={handleLabelPrintConfirm}>
+                印刷待ちに追加
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
