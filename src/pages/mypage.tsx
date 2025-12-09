@@ -12,7 +12,7 @@ import { supabaseDb } from '../lib/supabase-database'
 import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
 
 export function MyPage() {
-  const { orders, products, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
+  const { orders, products, items, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(false)
@@ -217,17 +217,17 @@ export function MyPage() {
   }
   
   useEffect(() => {
-    
+
     // usersまたはordersデータがある場合にupdateAvailableUsersを実行
     if (users.length > 0 || orders.length > 0) {
       updateAvailableUsers()
     }
-    
+
     // 商品データの更新は従来通り
     if (orders.length > 0 && products.length > 0) {
       updateDisplayedItems()
     }
-  }, [orders, products, users, selectedUser, currentUser])
+  }, [orders, products, items, users, selectedUser, currentUser])
   
   // 利用可能な営業マンリストを更新
   const updateAvailableUsers = () => {
@@ -270,29 +270,30 @@ export function MyPage() {
   }
 
   // 選択された営業マンの商品を更新
-  const updateDisplayedItems = async () => {
-    
+  const updateDisplayedItems = () => {
+
     const itemsList: any[] = []
-    
+
     try {
-      // 非同期処理を正しく扱うため、Promise.all を使用
-      const orderPromises = orders.map(async (order) => {
+      // Zustandの items を直接使用（非同期処理不要）
+      const orderResults = orders.map((order) => {
         // 選択された営業マンが担当者または持出し者の発注のみ処理
         if (order.assigned_to === selectedUser || order.carried_by === selectedUser) {
-          const itemPromises = order.items.map(async (item) => {
-            
+          const itemResults = order.items.map((item) => {
+
             // 配送準備完了の商品のみ取得
             // 配送済み（delivered）の発注は除外
             if (item.assigned_item_ids && item.assigned_item_ids.length > 0 &&
                 order.status !== 'delivered' &&
                 item.item_processing_status === 'ready') {
-              
+
               const product = products.find(p => p.id === item.product_id)
-              
+
               // 数量分だけ個別アイテムを生成
-              const assignedItemPromises = item.assigned_item_ids.map(async (assignedItemId, index) => {
+              const assignedItems = item.assigned_item_ids.map((assignedItemId, index) => {
                 if (assignedItemId) {
-                  const productItem = await supabaseDb.getProductItemById(assignedItemId)
+                  // Zustandの items から取得（楽観的更新を即座に反映）
+                  const productItem = items.find(i => i.id === assignedItemId)
                   if (productItem) {
                     // 商品固有のメモを作成（発注のメモではなく商品の状態に応じたメモ）
                     const getItemNotes = () => {
@@ -305,7 +306,7 @@ export function MyPage() {
                       }
                     }
 
-                    
+
                     const itemData = {
                       id: `${order.id}-${item.id}-${index}`,
                       orderId: order.id,
@@ -343,21 +344,18 @@ export function MyPage() {
                   }
                 }
                 return null
-              })
-              
-              const assignedItems = await Promise.all(assignedItemPromises)
-              return assignedItems.filter(item => item !== null)
+              }).filter(item => item !== null)
+
+              return assignedItems
             }
             return []
           })
-          
-          const itemResults = await Promise.all(itemPromises)
+
           return itemResults.flat()
         }
         return []
       })
-      
-      const orderResults = await Promise.all(orderPromises)
+
       const allItems = orderResults.flat()
       
       // サポート履歴を取得（専用のlocalStorageから）
