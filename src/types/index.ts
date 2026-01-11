@@ -27,6 +27,7 @@ export interface ProductItem {
   condition_notes?: string // メンテナンス済み・入庫処理時の状態メモ（記録される）
   photos?: string[] // メンテナンス時の写真（Base64形式）
   current_setting?: string // 現在の設定 (例: "2M", "3M") - 楽匠プラスなどの設定変更可能商品用
+  total_rental_days?: number // 累積貸与日数（返却時に加算される）
 }
 
 

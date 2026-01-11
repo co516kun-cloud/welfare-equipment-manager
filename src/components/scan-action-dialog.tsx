@@ -9,6 +9,7 @@ import { useInventoryStore } from '../stores/useInventoryStore'
 import { MaintenanceChecklist, type ChecklistResult } from './maintenance-checklist'
 import { SubcategorySelector } from './subcategory-selector'
 import { getCategoryIdByName, getChecklistConfig } from '../lib/maintenance-checklist-config'
+import { calculateRentalDays } from '../lib/utils'
 import type { ProductItem, Product, Order, OrderItem } from '../types'
 
 interface SelectedItem extends ProductItem {
@@ -199,20 +200,30 @@ export function ScanActionDialog({
       const shouldSaveConditionNotes = ['maintenance', 'repair'].includes(actionType)
       const newConditionNotes = shouldSaveConditionNotes ? actionForm.conditionNotes : selectedItem.condition_notes
       
+      // 返却処理の場合は貸与日数を計算して合計に加算
+      let rentalDays = 0
+      let newTotalRentalDays = selectedItem.total_rental_days || 0
+      if (actionType === 'return' && selectedItem.loan_start_date) {
+        rentalDays = calculateRentalDays(selectedItem.loan_start_date)
+        newTotalRentalDays = (selectedItem.total_rental_days || 0) + rentalDays
+      }
+
       // 商品状態が「要修理」の場合はステータスを「故障中」に変更
       const newCondition = (actionForm.condition || selectedItem.condition) as ProductItem['condition']
-      const finalStatus = newCondition === 'needs_repair' 
+      const finalStatus = newCondition === 'needs_repair'
         ? 'out_of_order' as ProductItem['status']
         : action.nextStatus as ProductItem['status']
 
       // 楽観的更新でステータスを即座に反映（データベース保存も含む）
       await updateItemStatus(selectedItem.id, finalStatus)
       
-      // メンテナンス処理の場合は常にDB保存（商品状態、状態メモ、写真を確実に保存）
+      // メンテナンス処理、返却処理の場合は常にDB保存（商品状態、状態メモ、写真、貸与日数を確実に保存）
       const forceUpdateForMaintenance = actionType === 'maintenance'
+      const forceUpdateForReturn = actionType === 'return'
       const hasPhotos = actionType === 'maintenance' && actionForm.photos.length > 0
       if (
         forceUpdateForMaintenance ||
+        forceUpdateForReturn ||
         (actionForm.condition && actionForm.condition !== selectedItem.condition) ||
         (actionForm.location && actionForm.location !== selectedItem.location) ||
         (shouldSaveConditionNotes && actionForm.conditionNotes !== (selectedItem.condition_notes || '')) ||
@@ -227,9 +238,10 @@ export function ScanActionDialog({
           qr_code: selectedItem.qr_code,
           condition_notes: newConditionNotes,
           photos: actionType === 'maintenance' ? actionForm.photos : selectedItem.photos,
-          customer_name: selectedItem.customer_name,
-          loan_start_date: selectedItem.loan_start_date,
-          current_setting: selectedItem.current_setting
+          customer_name: actionType === 'return' ? undefined : selectedItem.customer_name, // 返却時にクリア
+          loan_start_date: actionType === 'return' ? undefined : selectedItem.loan_start_date, // 返却時にクリア
+          current_setting: selectedItem.current_setting,
+          total_rental_days: newTotalRentalDays // 累積貸与日数を更新
         }
         await supabaseDb.saveProductItem(updatedItem)
       }
@@ -239,10 +251,18 @@ export function ScanActionDialog({
         scanMethod: 'QR',
         actionType: actionType
       }
-      
+
       if (actionType === 'assign_to_order') {
         historyMetadata.orderId = actionForm.orderId
         historyMetadata.orderItemId = actionForm.orderItemId
+      }
+
+      // 返却処理の場合は貸与日数情報を記録
+      if (actionType === 'return') {
+        historyMetadata.rentalDays = rentalDays
+        historyMetadata.totalRentalDays = newTotalRentalDays
+        historyMetadata.loanStartDate = selectedItem.loan_start_date
+        historyMetadata.returnDate = new Date().toISOString()
       }
       
       // チェックリストデータの準備（メンテナンス処理の場合）

@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 import { getChecklistConfig } from '../lib/maintenance-checklist-config'
+import { calculateRentalDays } from '../lib/utils'
 import { useAuth } from '../hooks/useAuth'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import type { ProductItem, Product, ItemHistory } from '../types'
@@ -567,51 +568,62 @@ export function ItemDetail() {
           )}
 
           {/* Loan Information */}
-          {item.loan_start_date && (
-            <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-              <h2 className="text-lg font-semibold text-foreground mb-4">貸与情報</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">貸与開始日</p>
-                  <p className="font-medium text-foreground">{new Date(item.loan_start_date).toLocaleDateString('ja-JP')}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">貸与期間</p>
-                  <p className="font-medium text-foreground">
-                    {(() => {
-                      const startDate = new Date(item.loan_start_date)
-                      const today = new Date()
-                      const diffTime = Math.abs(today.getTime() - startDate.getTime())
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                      return `${diffDays}日間`
-                    })()}
-                  </p>
-                </div>
-                {currentOrder && (
-                  <>
-                    <div>
-                      <p className="text-sm text-muted-foreground">貸与先顧客</p>
-                      <p className="font-medium text-foreground">{currentOrder.customer_name}様</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">担当者</p>
-                      <p className="font-medium text-foreground">{currentOrder.assigned_to}</p>
-                    </div>
-                    {currentOrder.carried_by && currentOrder.carried_by !== currentOrder.assigned_to && (
+          <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-foreground mb-4">貸与情報</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {item.loan_start_date ? (
+                <>
+                  <div>
+                    <p className="text-sm text-muted-foreground">貸与開始日</p>
+                    <p className="font-medium text-foreground">{new Date(item.loan_start_date).toLocaleDateString('ja-JP')}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">現在の貸与日数</p>
+                    <p className="font-medium text-foreground text-lg text-primary">
+                      {calculateRentalDays(item.loan_start_date)}日間
+                    </p>
+                  </div>
+                  {currentOrder && (
+                    <>
                       <div>
-                        <p className="text-sm text-muted-foreground">持出者</p>
-                        <p className="font-medium text-foreground">{currentOrder.carried_by}</p>
+                        <p className="text-sm text-muted-foreground">貸与先顧客</p>
+                        <p className="font-medium text-foreground">{currentOrder.customer_name}様</p>
                       </div>
-                    )}
-                    <div>
-                      <p className="text-sm text-muted-foreground">発注ID</p>
-                      <p className="font-medium text-foreground text-xs">{currentOrder.id}</p>
-                    </div>
-                  </>
-                )}
+                      <div>
+                        <p className="text-sm text-muted-foreground">担当者</p>
+                        <p className="font-medium text-foreground">{currentOrder.assigned_to}</p>
+                      </div>
+                      {currentOrder.carried_by && currentOrder.carried_by !== currentOrder.assigned_to && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">持出者</p>
+                          <p className="font-medium text-foreground">{currentOrder.carried_by}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-muted-foreground">発注ID</p>
+                        <p className="font-medium text-foreground text-xs">{currentOrder.id}</p>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="col-span-2">
+                  <p className="text-sm text-muted-foreground">現在貸与中ではありません</p>
+                </div>
+              )}
+
+              {/* 合計貸与日数（常に表示） */}
+              <div className="col-span-2 pt-4 border-t border-border mt-2">
+                <p className="text-sm text-muted-foreground mb-1">累積貸与日数（この商品の総貸与期間）</p>
+                <p className="font-bold text-foreground text-2xl text-blue-600">
+                  {item.total_rental_days || 0}日間
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ※過去の全ての貸与期間の合計です
+                </p>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* History Timeline */}
