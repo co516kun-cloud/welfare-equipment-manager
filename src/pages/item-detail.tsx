@@ -630,16 +630,24 @@ export function ItemDetail() {
         <div className="space-y-6">
           <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-foreground mb-4">業務フロー履歴</h2>
-            
-            {histories.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">
-                履歴がありません
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {(showAllHistories ? histories : histories.slice(0, 5)).map((history, index) => (
+
+            {(() => {
+              // ステータスが変更された履歴のみを抽出（業務フロー表示用）
+              const statusChangedHistories = histories.filter(h => h.from_status !== h.to_status)
+
+              if (statusChangedHistories.length === 0) {
+                return (
+                  <p className="text-muted-foreground text-center py-4">
+                    履歴がありません
+                  </p>
+                )
+              }
+
+              return (
+                <div className="space-y-4">
+                  {(showAllHistories ? statusChangedHistories : statusChangedHistories.slice(0, 5)).map((history, index, displayedArray) => (
                   <div key={history.id} className="relative">
-                    {index !== histories.length - 1 && (
+                    {index !== displayedArray.length - 1 && (
                       <div className="absolute left-5 top-12 w-0.5 h-8 bg-border"></div>
                     )}
                     <div className="flex items-start space-x-3">
@@ -699,26 +707,27 @@ export function ItemDetail() {
                       </div>
                     </div>
                   </div>
-                ))}
-                
-                {/* もっと見る / 閉じる ボタン */}
-                {histories.length > 5 && (
-                  <div className="flex justify-center pt-4 border-t border-border">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAllHistories(!showAllHistories)}
-                      className="text-sm"
-                    >
-                      {showAllHistories 
-                        ? `📈 履歴を閉じる (${histories.length - 5}件を非表示)`
-                        : `📈 もっと見る (${histories.length - 5}件の履歴)`
-                      }
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+                  ))}
+
+                  {/* もっと見る / 閉じる ボタン */}
+                  {statusChangedHistories.length > 5 && (
+                    <div className="flex justify-center pt-4 border-t border-border">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAllHistories(!showAllHistories)}
+                        className="text-sm"
+                      >
+                        {showAllHistories
+                          ? `📈 履歴を閉じる (${statusChangedHistories.length - 5}件を非表示)`
+                          : `📈 もっと見る (${statusChangedHistories.length - 5}件の履歴)`
+                        }
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Quick Actions */}

@@ -142,10 +142,7 @@ export function Preparation() {
       
       setIsProcessingQR(true)
       setLastProcessedQR(qrCode)
-      
-      // ダイアログを即座に閉じて重複を防ぐ
-      setShowQRScanDialog(false)
-      
+
       setQrCodeInput(qrCode)
       setUseCameraScanner(false)
       setScanError('') // エラーをクリア
@@ -164,7 +161,9 @@ export function Preparation() {
       
     } catch (error) {
       console.error('🔥 Error in handleCameraScanResult:', error)
-      setCameraError(`スキャン処理エラー: ${error instanceof Error ? error.message : String(error)}`)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+
+      setScanError(`❌ スキャン処理エラー\n\n${errorMsg}`)
       setUseCameraScanner(false)
       setShowQRScanDialog(true) // エラー時はダイアログを再表示
     } finally {
@@ -282,8 +281,20 @@ export function Preparation() {
     } catch (error) {
       console.error('🔥 QR割り当てエラー (direct params):', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      setScanError(`割り当て処理中にエラーが発生しました: ${errorMessage}`)
+
+      // カメラスキャナーを停止
       setUseCameraScanner(false)
+
+      // モバイルでも見やすいエラーメッセージを表示
+      setScanError(
+        `❌ 割り当てに失敗しました\n\n` +
+        `エラー内容:\n${errorMessage}\n\n` +
+        `QRコード: ${qrCode}\n` +
+        `商品ID: ${targetItem?.product_id || '不明'}`
+      )
+
+      // 処理フラグをリセット
+      setIsProcessingQR(false)
     }
   }
 
@@ -657,8 +668,7 @@ export function Preparation() {
   const performAssignment = async (itemId: string, preparationItem: any, order: any, orderItem: any, assignMethod: 'qr_scan' | 'manual' = 'manual') => {
     const productItem = await supabaseDb.getProductItemById(itemId)
     if (!productItem) {
-      alert('商品が見つかりません')
-      return
+      throw new Error(`商品が見つかりません（ID: ${itemId}）`)
     }
     
     // 発注を更新 - 該当するインデックスの位置に管理番号を割り当て
@@ -738,12 +748,12 @@ export function Preparation() {
     // 成功メッセージを表示
     setScanSuccess(`${productItem.id} を ${order.customer_name}様の発注に割り当てました`)
 
-    // 2秒後にダイアログを閉じて成功メッセージをクリア
+    // 3秒後にダイアログを閉じて成功メッセージをクリア
     setTimeout(() => {
       setScanSuccess('')
       setShowQRScanDialog(false)
       setShowManualAssignDialog(false)
-    }, 2000)
+    }, 3000)
 
     loadData()
   }
@@ -1926,25 +1936,37 @@ export function Preparation() {
                 </Button>
               
                 {scanError && (
-                  <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                    <div className="flex items-start space-x-2">
-                      <div className="text-destructive text-sm">⚠️</div>
+                  <div className="p-4 bg-red-50 border-2 border-red-500 rounded-lg shadow-lg animate-pulse">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-red-600 text-2xl flex-shrink-0">❌</div>
                       <div className="flex-1">
-                        <p className="text-sm text-destructive font-medium mb-1">割り当てエラー</p>
-                        <p className="text-xs text-destructive whitespace-pre-line">{scanError}</p>
+                        <p className="text-base text-red-700 font-bold mb-2">割り当てエラー</p>
+                        <p className="text-sm text-red-600 whitespace-pre-line leading-relaxed">{scanError}</p>
                       </div>
                     </div>
-                    <div className="flex justify-end mt-2">
+                    <div className="flex justify-end mt-3 space-x-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 text-xs"
+                        className="h-9 text-sm border-red-500 text-red-600 hover:bg-red-50"
                         onClick={() => {
                           setScanError('')
                           setQrCodeInput('')
+                          setUseCameraScanner(true)
                         }}
                       >
-                        再試行
+                        🔄 再スキャン
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 text-sm"
+                        onClick={() => {
+                          setScanError('')
+                          setShowQRScanDialog(false)
+                        }}
+                      >
+                        閉じる
                       </Button>
                     </div>
                   </div>
@@ -1952,13 +1974,18 @@ export function Preparation() {
 
                 {/* 成功メッセージ */}
                 {scanSuccess && (
-                  <div className="p-3 bg-success/10 border border-success/20 rounded-lg">
-                    <div className="flex items-start space-x-2">
-                      <div className="text-success text-sm">✅</div>
+                  <div className="p-4 bg-green-50 border-2 border-green-500 rounded-lg shadow-lg animate-bounce">
+                    <div className="flex items-start space-x-3">
+                      <div className="text-green-600 text-3xl flex-shrink-0">✅</div>
                       <div className="flex-1">
-                        <p className="text-sm text-success font-medium mb-1">割り当て成功</p>
-                        <p className="text-xs text-success">{scanSuccess.replace('✅ ', '')}</p>
+                        <p className="text-lg text-green-700 font-bold mb-2">✨ 割り当て成功！</p>
+                        <p className="text-sm text-green-600 leading-relaxed">{scanSuccess.replace('✅ ', '')}</p>
                       </div>
+                    </div>
+                    <div className="mt-3 text-center">
+                      <p className="text-xs text-green-600">
+                        🎉 このダイアログは3秒後に自動で閉じます
+                      </p>
                     </div>
                   </div>
                 )}
