@@ -410,7 +410,7 @@ export function ItemDetail() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={() => navigate('/inventory')}>
             <span className="mr-2">←</span>
             戻る
           </Button>
@@ -427,7 +427,7 @@ export function ItemDetail() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={() => navigate('/inventory')}>
             <span className="mr-2">←</span>
             戻る
           </Button>
@@ -458,7 +458,7 @@ export function ItemDetail() {
           >
             ✏️ 編集
           </Button>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={() => navigate('/inventory')}>
             <span className="mr-2">←</span>
             戻る
           </Button>

@@ -37,7 +37,7 @@ export function ScanActionDialog({
   getCurrentUserName,
   orders
 }: ScanActionDialogProps) {
-  const { updateItemStatus } = useInventoryStore()
+  const { items } = useInventoryStore()
   const [actionForm, setActionForm] = useState({
     condition: '',
     location: '',
@@ -214,37 +214,28 @@ export function ScanActionDialog({
         ? 'out_of_order' as ProductItem['status']
         : action.nextStatus as ProductItem['status']
 
-      // 楽観的更新でステータスを即座に反映（データベース保存も含む）
-      await updateItemStatus(selectedItem.id, finalStatus)
-      
-      // メンテナンス処理、返却処理の場合は常にDB保存（商品状態、状態メモ、写真、貸与日数を確実に保存）
-      const forceUpdateForMaintenance = actionType === 'maintenance'
-      const forceUpdateForReturn = actionType === 'return'
-      const hasPhotos = actionType === 'maintenance' && actionForm.photos.length > 0
-      if (
-        forceUpdateForMaintenance ||
-        forceUpdateForReturn ||
-        (actionForm.condition && actionForm.condition !== selectedItem.condition) ||
-        (actionForm.location && actionForm.location !== selectedItem.location) ||
-        (shouldSaveConditionNotes && actionForm.conditionNotes !== (selectedItem.condition_notes || '')) ||
-        hasPhotos
-      ) {
-        const updatedItem: ProductItem = {
-          id: selectedItem.id,
-          product_id: selectedItem.product_id,
-          status: finalStatus,
-          condition: newCondition,
-          location: actionForm.location || selectedItem.location,
-          qr_code: selectedItem.qr_code,
-          condition_notes: newConditionNotes,
-          photos: actionType === 'maintenance' ? actionForm.photos : selectedItem.photos,
-          customer_name: actionType === 'return' ? undefined : selectedItem.customer_name, // 返却時にクリア
-          loan_start_date: actionType === 'return' ? undefined : selectedItem.loan_start_date, // 返却時にクリア
-          current_setting: selectedItem.current_setting,
-          total_rental_days: newTotalRentalDays // 累積貸与日数を更新
-        }
-        await supabaseDb.saveProductItem(updatedItem)
+      // 全フィールドを含めて1回で保存（データベース + ストア更新）
+      const updatedItem: ProductItem = {
+        id: selectedItem.id,
+        product_id: selectedItem.product_id,
+        status: finalStatus,
+        condition: newCondition,
+        location: actionForm.location || selectedItem.location,
+        qr_code: selectedItem.qr_code,
+        condition_notes: newConditionNotes,
+        photos: actionType === 'maintenance' ? actionForm.photos : selectedItem.photos,
+        customer_name: actionType === 'return' ? undefined : selectedItem.customer_name, // 返却時にクリア
+        loan_start_date: actionType === 'return' ? undefined : selectedItem.loan_start_date, // 返却時にクリア
+        current_setting: selectedItem.current_setting,
+        total_rental_days: newTotalRentalDays // 累積貸与日数を更新
       }
+
+      // データベースに保存（1回の保存で全フィールドを更新）
+      await supabaseDb.saveProductItem(updatedItem)
+
+      // Zustandストアを即座に更新（楽観的更新）
+      const updatedItems = items.map(i => i.id === updatedItem.id ? updatedItem : i)
+      useInventoryStore.setState({ items: updatedItems })
 
       // 履歴を記録
       const historyMetadata: any = {

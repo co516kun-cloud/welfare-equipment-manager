@@ -408,18 +408,13 @@ export function Preparation() {
 
       await supabaseDb.saveOrder(updatedOrder)
 
-      // 楽観的更新でステータスを即座に反映
-      await updateItemStatus(scannedItem.id, 'ready_for_delivery')
-      
-      // customer_name も更新が必要な場合は追加で保存
-      if (scannedItem.customer_name !== order.customer_name) {
-        const updatedProductItem = {
-          ...scannedItem,
-          status: 'ready_for_delivery' as const,
-          customer_name: order.customer_name,
-        }
-        await supabaseDb.saveProductItem(updatedProductItem)
+      // 商品のステータスとcustomer_nameを1回で保存
+      const updatedProductItem = {
+        ...scannedItem,
+        status: 'ready_for_delivery' as const,
+        customer_name: order.customer_name,
       }
+      await supabaseDb.saveProductItem(updatedProductItem)
 
       // 履歴を記録（履歴のみに記録、商品データは変更しない）
       await supabaseDb.createItemHistory(
@@ -579,19 +574,14 @@ export function Preparation() {
           
           const previousStatus = assignmentHistory?.fromStatus || 'available'
           const previousLocation = assignmentHistory?.metadata?.previousLocation || '倉庫'
-          
-          // 楽観的更新でステータスを即座に反映
-          await updateItemStatus(assignedItemId, previousStatus)
-          
-          // location も更新が必要な場合は追加で保存
-          if (productItem.location !== previousLocation) {
-            const updatedProductItem = {
-              ...productItem,
-              status: previousStatus,
-              location: previousLocation
-            }
-            await supabaseDb.saveProductItem(updatedProductItem)
+
+          // ステータスとlocationを1回で保存
+          const updatedProductItem = {
+            ...productItem,
+            status: previousStatus,
+            location: previousLocation
           }
+          await supabaseDb.saveProductItem(updatedProductItem)
           
           // 履歴を記録
           await supabaseDb.createItemHistory(
@@ -700,12 +690,8 @@ export function Preparation() {
     }
     
     await supabaseDb.saveOrder(updatedOrder)
-    
-    // 楽観的更新でステータスを即座に反映
-    await updateItemStatus(productItem.id, 'ready_for_delivery')
-    
-    // その他の属性も更新が必要な場合は追加で保存
-    // 発注時の備考があれば反映、なければ空文字
+
+    // 商品のステータスと属性を1回で保存
     const orderNotes = order.notes ? order.notes : ''
     const updatedProductItem = {
       ...productItem,
@@ -801,18 +787,13 @@ export function Preparation() {
       // 商品ステータスを準備完了に変更
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
-        // 楽観的更新でステータスを即座に反映
-        await updateItemStatus(productItem.id, 'ready_for_delivery')
-        
-        // customer_name も更新が必要な場合は追加で保存
-        if (productItem.customer_name !== order.customer_name) {
-          const updatedProductItem = {
-            ...productItem,
-            status: 'ready_for_delivery' as const,
-            customer_name: order.customer_name
-          }
-          await supabaseDb.saveProductItem(updatedProductItem)
+        // ステータスとcustomer_nameを1回で保存
+        const updatedProductItem = {
+          ...productItem,
+          status: 'ready_for_delivery' as const,
+          customer_name: order.customer_name
         }
+        await supabaseDb.saveProductItem(updatedProductItem)
       }
 
       // 履歴を記録

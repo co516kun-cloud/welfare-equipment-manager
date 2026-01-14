@@ -196,10 +196,10 @@ export function Inventory() {
       item.product_id === productId && item.status === 'available'
     ).length
 
-    // 未完了発注数（pending, approved, preparing ステータスの注文）
+    // 未完了発注数（pending, approved, ready ステータスの注文）
     // ただし、管理番号が割り当て済みの分は除外
     const pendingOrders = orders
-      .filter(order => ['pending', 'approved', 'preparing'].includes(order.status))
+      .filter(order => ['pending', 'approved', 'ready'].includes(order.status))
       .reduce((count, order) => {
         const productItems = order.items.filter(item => item.product_id === productId)
         return count + productItems.reduce((sum, item) => {
@@ -895,17 +895,20 @@ export function Inventory() {
           {Object.entries(groupedItems).map(([productId, items]) => {
             const product = products.find(p => p.id === productId)
             if (!product) return null
-            
-            const hasStock = items.length > 0
-            
+
+            // 実質在庫を計算
+            const { effectiveStock, physicalStock, pendingOrders } = getEffectiveStock(productId)
+            const hasStock = effectiveStock > 0
+            const isLow = isLowStock(productId)
+
             return (
-              <div 
+              <div
                 key={productId}
                 className={`bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg ${
                   hasStock ? 'cursor-pointer' : 'cursor-default opacity-60'
                 }`}
                 onClick={() => {
-                  if (hasStock) {
+                  if (hasStock && items.length > 0) {
                     setSelectedProductItems(items)
                     setShowManagementNumbers(true)
                   }
@@ -920,21 +923,32 @@ export function Inventory() {
                       {product.manufacturer} - {product.model}
                     </p>
                   </div>
-                  <div className={`px-3 py-1 rounded-full ${
-                    hasStock 
-                      ? 'bg-emerald-100 text-emerald-700' 
-                      : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    <span className="text-sm font-bold">{items.length}</span>
-                    <span className="text-xs ml-1">台</span>
+                  <div>
+                    {/* 実質在庫表示 */}
+                    <div className={`px-3 py-1 rounded-full ${
+                      effectiveStock === 0
+                        ? 'bg-slate-100 text-slate-500'
+                        : isLow
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      <span className="text-sm font-bold">{effectiveStock}</span>
+                      <span className="text-xs ml-1">台</span>
+                    </div>
+                    {/* 発注中がある場合の詳細情報 */}
+                    {pendingOrders > 0 && (
+                      <div className="text-xs text-slate-500 mt-1 text-right">
+                        物理:{physicalStock} - 発注:{pendingOrders}
+                      </div>
+                    )}
                   </div>
                 </div>
                 
                 {/* 管理番号リスト */}
-                {hasStock ? (
+                {hasStock && items.length > 0 ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {items.slice(0, 4).map(item => (
-                      <div 
+                      <div
                         key={item.id}
                         className="bg-slate-50 rounded-lg px-3 py-2 text-xs font-mono text-slate-700"
                       >
@@ -949,7 +963,9 @@ export function Inventory() {
                   </div>
                 ) : (
                   <div className="mt-3 text-center py-4">
-                    <div className="text-slate-400 text-sm">在庫なし</div>
+                    <div className="text-slate-400 text-sm">
+                      {physicalStock > 0 ? '実質在庫なし（発注中）' : '在庫なし'}
+                    </div>
                   </div>
                 )}
               </div>

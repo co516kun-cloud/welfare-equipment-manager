@@ -415,15 +415,16 @@ export class SupabaseDatabase {
     if (useMockDatabase()) {
       return await mockDb.getOrders()
     }
-    
+
     try {
-      // まず注文の基本情報を取得（アーカイブされていないもののみ）
+      // アクティブな注文の基本情報を取得（アーカイブされていない & アクティブステータスのみ）
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .eq('is_archived', false)  // アーカイブされていない注文のみ
+        .in('status', ['pending', 'partial_approved', 'approved', 'ready'])  // アクティブな注文のみ
         .order('created_at', { ascending: false })
-      
+
       if (ordersError) {
         console.error('Error fetching orders:', ordersError)
         return []
@@ -433,43 +434,122 @@ export class SupabaseDatabase {
         return []
       }
 
-      // 各注文の詳細項目を取得
-      const ordersWithItems: Order[] = []
-      for (const orderData of ordersData) {
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('order_items')
-          .select('*')
-          .eq('order_id', orderData.id)
-        
-        if (itemsError) {
-          console.error('Error fetching order items:', itemsError)
-          continue
-        }
-        
+      // 全order_itemsを一括取得（N+1問題を解消）
+      const orderIds = ordersData.map(o => o.id)
+      const { data: allItemsData, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .in('order_id', orderIds)
 
-        const order: Order = {
-          id: orderData.id,
-          customer_name: orderData.customer_name,
-          order_date: orderData.order_date,
-          required_date: orderData.required_date,
-          assigned_to: orderData.assigned_to,
-          carried_by: orderData.carried_by,
-          status: orderData.status,
-          notes: orderData.notes,
-          created_by: orderData.created_by,
-          needs_approval: orderData.needs_approval,
-          approved_by: orderData.approved_by,
-          approved_date: orderData.approved_date,
-          approval_notes: orderData.approval_notes,
-          items: itemsData || []
-        }
-        
-        ordersWithItems.push(order)
+      if (itemsError) {
+        console.error('Error fetching order items:', itemsError)
+        return []
       }
-      
+
+      // order_idごとにグループ化
+      const itemsByOrderId = new Map<string, OrderItem[]>()
+      if (allItemsData) {
+        allItemsData.forEach((item: OrderItem) => {
+          if (!itemsByOrderId.has(item.order_id)) {
+            itemsByOrderId.set(item.order_id, [])
+          }
+          itemsByOrderId.get(item.order_id)!.push(item)
+        })
+      }
+
+      // 注文データとorder_itemsをマージ
+      const ordersWithItems: Order[] = ordersData.map(orderData => ({
+        id: orderData.id,
+        customer_name: orderData.customer_name,
+        order_date: orderData.order_date,
+        required_date: orderData.required_date,
+        assigned_to: orderData.assigned_to,
+        carried_by: orderData.carried_by,
+        status: orderData.status,
+        notes: orderData.notes,
+        created_by: orderData.created_by,
+        needs_approval: orderData.needs_approval,
+        approved_by: orderData.approved_by,
+        approved_date: orderData.approved_date,
+        approval_notes: orderData.approval_notes,
+        items: itemsByOrderId.get(orderData.id) || []
+      }))
+
       return ordersWithItems
     } catch (error) {
       console.error('Error in getOrders:', error)
+      return []
+    }
+  }
+
+  // 完了済み注文を取得（遅延ロード用）
+  async getCompletedOrders(): Promise<Order[]> {
+    if (useMockDatabase()) {
+      return await mockDb.getOrders()
+    }
+
+    try {
+      // 完了・キャンセルされた注文の基本情報を取得
+      const { data: ordersData, error: ordersError } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('is_archived', false)  // アーカイブされていない注文のみ
+        .in('status', ['delivered', 'cancelled'])  // 完了済み注文のみ
+        .order('created_at', { ascending: false })
+
+      if (ordersError) {
+        console.error('Error fetching completed orders:', ordersError)
+        return []
+      }
+
+      if (!ordersData || ordersData.length === 0) {
+        return []
+      }
+
+      // 全order_itemsを一括取得（N+1問題を解消）
+      const orderIds = ordersData.map(o => o.id)
+      const { data: allItemsData, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .in('order_id', orderIds)
+
+      if (itemsError) {
+        console.error('Error fetching order items for completed orders:', itemsError)
+        return []
+      }
+
+      // order_idごとにグループ化
+      const itemsByOrderId = new Map<string, OrderItem[]>()
+      if (allItemsData) {
+        allItemsData.forEach((item: OrderItem) => {
+          if (!itemsByOrderId.has(item.order_id)) {
+            itemsByOrderId.set(item.order_id, [])
+          }
+          itemsByOrderId.get(item.order_id)!.push(item)
+        })
+      }
+
+      // 注文データとorder_itemsをマージ
+      const ordersWithItems: Order[] = ordersData.map(orderData => ({
+        id: orderData.id,
+        customer_name: orderData.customer_name,
+        order_date: orderData.order_date,
+        required_date: orderData.required_date,
+        assigned_to: orderData.assigned_to,
+        carried_by: orderData.carried_by,
+        status: orderData.status,
+        notes: orderData.notes,
+        created_by: orderData.created_by,
+        needs_approval: orderData.needs_approval,
+        approved_by: orderData.approved_by,
+        approved_date: orderData.approved_date,
+        approval_notes: orderData.approval_notes,
+        items: itemsByOrderId.get(orderData.id) || []
+      }))
+
+      return ordersWithItems
+    } catch (error) {
+      console.error('Error in getCompletedOrders:', error)
       return []
     }
   }
@@ -501,26 +581,34 @@ export class SupabaseDatabase {
         return []
       }
 
-      // 各注文の詳細項目を取得
-      const ordersWithItems: Order[] = []
-      for (const orderData of ordersData) {
-        const { data: itemsData, error: itemsError } = await supabase
-          .from('order_items')
-          .select('*')
-          .eq('order_id', orderData.id)
+      // 全order_itemsを一括取得（N+1問題を解消）
+      const orderIds = ordersData.map(o => o.id)
+      const { data: allItemsData, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*')
+        .in('order_id', orderIds)
 
-        if (itemsError) {
-          console.error('Error fetching order items:', itemsError)
-          continue
-        }
-
-        const order: Order = {
-          ...orderData,
-          items: itemsData || []
-        }
-
-        ordersWithItems.push(order)
+      if (itemsError) {
+        console.error('Error fetching order items for recently updated orders:', itemsError)
+        return []
       }
+
+      // order_idごとにグループ化
+      const itemsByOrderId = new Map<string, OrderItem[]>()
+      if (allItemsData) {
+        allItemsData.forEach((item: OrderItem) => {
+          if (!itemsByOrderId.has(item.order_id)) {
+            itemsByOrderId.set(item.order_id, [])
+          }
+          itemsByOrderId.get(item.order_id)!.push(item)
+        })
+      }
+
+      // 注文データとorder_itemsをマージ
+      const ordersWithItems: Order[] = ordersData.map(orderData => ({
+        ...orderData,
+        items: itemsByOrderId.get(orderData.id) || []
+      }))
 
       return ordersWithItems
     } catch (error) {

@@ -489,9 +489,7 @@ export function MyPage() {
       // 配送完了処理を実行
       await supabaseDb.updateOrderItemStatus(targetItem.orderItemId, 'delivered', currentUser)
 
-      // 商品ステータスを 'rented' に更新
-      await updateItemStatus(scannedItem.id, 'rented')
-
+      // 商品ステータスと属性を1回で保存
       const updatedProductItem = {
         ...scannedItem,
         status: 'rented' as const,
@@ -609,10 +607,7 @@ export function MyPage() {
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
-        // 楽観的更新でステータスを即座に反映
-        await updateItemStatus(productItem.id, 'rented')
-        
-        // その他の属性も更新が必要な場合は追加で保存
+        // ステータスと属性を1回で保存
         const updatedProductItem = {
           ...productItem,
           status: 'rented' as const,
@@ -676,10 +671,7 @@ export function MyPage() {
       // 商品アイテムのステータスを貸与中に更新
       const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
       if (productItem) {
-        // 楽観的更新でステータスを即座に反映
-        await updateItemStatus(productItem.id, 'rented')
-        
-        // その他の属性も更新が必要な場合は追加で保存
+        // ステータスと属性を1回で保存
         const updatedProductItem = {
           ...productItem,
           status: 'rented' as const,
@@ -784,8 +776,6 @@ export function MyPage() {
           }
           
           // 商品アイテムのステータスを個別に更新
-          await updateItemStatus(item.assignedItemId, 'rented')
-          
           const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
           if (productItem) {
             const updatedProductItem = {

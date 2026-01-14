@@ -37,8 +37,11 @@ export function NewItemDialog({
     managementId: '',
     condition: 'good' as ProductItem['condition'],
     location: '倉庫',
-    notes: ''
+    conditionNotes: ''
   })
+
+  // ラベル印刷フラグ
+  const [addToLabelQueue, setAddToLabelQueue] = useState(false)
   
   // 新規商品フォーム
   const [newProductForm, setNewProductForm] = useState({
@@ -59,7 +62,7 @@ export function NewItemDialog({
       managementId: '',
       condition: 'good',
       location: '倉庫',
-      notes: ''
+      conditionNotes: ''
     })
     setNewProductForm({
       name: '',
@@ -68,6 +71,7 @@ export function NewItemDialog({
       manufacturer: '',
       model: ''
     })
+    setAddToLabelQueue(false)
     setRegistrationError('')
   }
 
@@ -124,17 +128,20 @@ export function NewItemDialog({
         status: 'available',
         condition: newItemForm.condition,
         location: newItemForm.location || '倉庫',
-        notes: newItemForm.notes || ''
+        condition_notes: newItemForm.conditionNotes || undefined
       }
-      
+
       await addProductItem(newItemData, newItemForm.managementId.trim())
-      
+
       // ユーザー指定のIDで作成されたアイテム
       const newItem: ProductItem = {
         id: newItemForm.managementId.trim(),
         ...newItemData
       }
-      
+
+      // 商品情報を取得（ラベル印刷用）
+      const product = products.find(p => p.id === productId)
+
       // 履歴を記録
       await supabaseDb.createItemHistory(
         newItem.id,
@@ -145,16 +152,37 @@ export function NewItemDialog({
         {
           location: newItem.location,
           condition: newItem.condition,
-          notes: `新規登録: ${registrationType === 'new' ? '新規商品' : '既存商品'}`,
+          conditionNotes: newItemForm.conditionNotes,
           metadata: {
             registrationType: registrationType,
             productId: productId
           }
         }
       )
-      
+
+      // ラベル印刷キューに追加（チェックが入っている場合）
+      if (addToLabelQueue && product) {
+        try {
+          await supabaseDb.addLabelPrintQueue({
+            item_id: newItem.id,
+            product_name: product.name,
+            management_id: newItem.id,
+            condition_notes: newItemForm.conditionNotes || '',
+            status: 'pending',
+            created_by: currentUser
+          })
+          console.log('✅ ラベル印刷キューに追加しました')
+        } catch (labelError) {
+          console.error('❌ ラベル印刷キューへの追加エラー:', labelError)
+          // ラベル印刷キューの追加に失敗してもアイテム登録は成功
+        }
+      }
+
       // 成功メッセージ
-      alert(`管理番号 ${newItem.id} を登録しました`)
+      const successMessage = addToLabelQueue
+        ? `管理番号 ${newItem.id} を登録し、ラベル印刷キューに追加しました`
+        : `管理番号 ${newItem.id} を登録しました`
+      alert(successMessage)
       
       // ダイアログを閉じてリロード
       resetForms()
@@ -372,13 +400,26 @@ export function NewItemDialog({
             </div>
             
             <div>
-              <Label htmlFor="newNotes">メモ</Label>
+              <Label htmlFor="conditionNotes">状態メモ</Label>
               <Input
-                id="newNotes"
-                value={newItemForm.notes}
-                onChange={(e) => setNewItemForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="特記事項があれば入力"
+                id="conditionNotes"
+                value={newItemForm.conditionNotes}
+                onChange={(e) => setNewItemForm(prev => ({ ...prev, conditionNotes: e.target.value }))}
+                placeholder="商品の状態についての特記事項（例: 小傷あり、動作確認済み）"
               />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="addToLabelQueue"
+                checked={addToLabelQueue}
+                onChange={(e) => setAddToLabelQueue(e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300"
+              />
+              <Label htmlFor="addToLabelQueue" className="cursor-pointer">
+                ラベル印刷キューに追加する
+              </Label>
             </div>
           </div>
 
