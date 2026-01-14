@@ -192,22 +192,24 @@ export function Inventory() {
   // 実質利用可能在庫数を計算する関数
   const getEffectiveStock = (productId: string) => {
     // 物理在庫数（利用可能ステータスの商品個体数）
-    const physicalStock = items.filter(item => 
+    const physicalStock = items.filter(item =>
       item.product_id === productId && item.status === 'available'
     ).length
 
-    // 未完了発注数（pending, approved, ready ステータスの注文）
-    // ただし、管理番号が割り当て済みの分は除外
+    // 未完了発注数（item_processing_status が 'waiting' の注文明細のみカウント）
+    // 'waiting' = 管理番号未割り当て（まだ物理在庫として残っている）
+    // 'ready' = 管理番号割り当て済み（既に物理在庫から除外されている）→ カウント不要
+    // 'delivered' = 配送完了 → カウント不要
+    // 'cancelled' = キャンセル → カウント不要
     const pendingOrders = orders
       .filter(order => ['pending', 'approved', 'ready'].includes(order.status))
       .reduce((count, order) => {
-        const productItems = order.items.filter(item => item.product_id === productId)
+        const productItems = order.items.filter(item =>
+          item.product_id === productId &&
+          item.item_processing_status === 'waiting'  // waiting のみカウント
+        )
         return count + productItems.reduce((sum, item) => {
-          // 管理番号が割り当て済みの数量を計算
-          const assignedCount = item.assigned_item_ids?.filter(id => id !== null && id !== undefined).length || 0
-          // 未割り当ての数量のみカウント
-          const unassignedCount = Math.max(0, item.quantity - assignedCount)
-          return sum + unassignedCount
+          return sum + item.quantity
         }, 0)
       }, 0)
 
