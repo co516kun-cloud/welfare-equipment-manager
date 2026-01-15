@@ -224,10 +224,16 @@ export function ScanActionDialog({
         qr_code: selectedItem.qr_code,
         condition_notes: newConditionNotes,
         photos: actionType === 'maintenance' ? actionForm.photos : selectedItem.photos,
-        customer_name: actionType === 'return' ? undefined : selectedItem.customer_name, // 返却時にクリア
-        loan_start_date: actionType === 'return' ? undefined : selectedItem.loan_start_date, // 返却時にクリア
+        customer_name: selectedItem.customer_name, // 後でnullに更新
+        loan_start_date: selectedItem.loan_start_date, // 後でnullに更新
         current_setting: selectedItem.current_setting,
         total_rental_days: newTotalRentalDays // 累積貸与日数を更新
+      }
+
+      // 返却処理の場合は貸与情報を明示的にnullにリセット
+      if (actionType === 'return') {
+        updatedItem.customer_name = undefined
+        updatedItem.loan_start_date = undefined
       }
 
       // データベースに保存（1回の保存で全フィールドを更新）

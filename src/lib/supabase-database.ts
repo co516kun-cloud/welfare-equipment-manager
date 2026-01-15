@@ -293,13 +293,19 @@ export class SupabaseDatabase {
   }
 
   async saveProductItem(item: ProductItem): Promise<void> {
+    // undefinedをnullに変換（Supabaseでフィールドをクリアするため）
+    const itemData: any = {
+      ...item,
+      customer_name: item.customer_name === undefined ? null : item.customer_name,
+      loan_start_date: item.loan_start_date === undefined ? null : item.loan_start_date,
+      condition_notes: item.condition_notes === undefined ? null : item.condition_notes,
+      updated_at: new Date().toISOString()  // 更新時刻を明示的に設定
+    }
+
     const { error } = await supabase
       .from('product_items')
-      .upsert({
-        ...item,
-        updated_at: new Date().toISOString()  // 更新時刻を明示的に設定
-      })
-    
+      .upsert(itemData)
+
     if (error) {
       console.error('Error saving product item:', error)
       throw error
