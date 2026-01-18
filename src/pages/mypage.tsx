@@ -1813,20 +1813,28 @@ export function MyPage() {
 
         {/* フローティングボタン */}
         <div className="fixed bottom-20 right-4 z-50 flex space-x-3">
+          {/* ダイレクト貸与ボタン */}
+          <Button
+            className="w-14 h-14 rounded-full shadow-lg bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white"
+            onClick={handleOpenDirectRentalScan}
+          >
+            <span className="text-2xl">🔍</span>
+          </Button>
+
           {/* 音声認識ボタン */}
-          <Button 
+          <Button
             className={`w-14 h-14 rounded-full shadow-lg transition-all duration-300 ${
-              isListening 
-                ? 'bg-red-500 hover:bg-red-600 animate-pulse scale-110' 
+              isListening
+                ? 'bg-red-500 hover:bg-red-600 animate-pulse scale-110'
                 : 'bg-blue-500 hover:bg-blue-600'
             } text-white`}
             onClick={toggleVoiceRecognition}
           >
             <span className="text-2xl">{isListening ? '🔴' : '🎤'}</span>
           </Button>
-          
+
           {/* 営業マン選択ボタン */}
-          <Button 
+          <Button
             className="w-14 h-14 rounded-full shadow-lg bg-purple-500 hover:bg-purple-600 text-white"
             onClick={() => setShowUserSelectModal(true)}
           >
@@ -2568,17 +2576,6 @@ export function MyPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* ダイレクト貸与用フロートボタン（モバイルのみ） */}
-      {isMobile && (
-        <button
-          onClick={handleOpenDirectRentalScan}
-          className="fixed bottom-20 right-4 z-50 w-14 h-14 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-full shadow-lg flex items-center justify-center hover:from-emerald-600 hover:to-teal-700 transition-all active:scale-95"
-          aria-label="ダイレクト貸与"
-        >
-          <span className="text-2xl">🔍</span>
-        </button>
-      )}
 
       {/* ダイレクト貸与: QRスキャンダイアログ */}
       <Dialog open={showDirectRentalScan} onOpenChange={setShowDirectRentalScan}>
