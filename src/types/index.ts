@@ -37,7 +37,7 @@ export interface Order {
   assigned_to: string // 担当者
   carried_by: string // 持出者
   items: OrderItem[]
-  status: 'pending' | 'partial_approved' | 'approved' | 'ready' | 'delivered' | 'cancelled'
+  status: 'pending' | 'partial_approved' | 'approved' | 'cancelled'  // 承認フロー用（配送状態はOrderItem.item_processing_statusで管理）
   created_at: string
   order_date: string // 発注日
   required_date: string // 希望納期日

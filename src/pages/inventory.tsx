@@ -202,7 +202,7 @@ export function Inventory() {
     // 'delivered' = 配送完了 → カウント不要
     // 'cancelled' = キャンセル → カウント不要
     const pendingOrders = orders
-      .filter(order => ['pending', 'approved', 'ready'].includes(order.status))
+      .filter(order => ['pending', 'approved'].includes(order.status))
       .reduce((count, order) => {
         const productItems = order.items.filter(item =>
           item.product_id === productId &&

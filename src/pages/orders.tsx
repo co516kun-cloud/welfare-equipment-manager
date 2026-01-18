@@ -501,12 +501,21 @@ export function Orders() {
     }
   }
 
-  // Calculate stats（発注管理ベース）
+  // Calculate stats（OrderItem.item_processing_statusベースで計算）
   const stats = {
     pending: orders.filter(o => o.status === 'pending').length,
     approved: orders.filter(o => o.status === 'approved').length,
-    ready: orders.filter(o => o.status === 'ready').length,
-    delivered: orders.filter(o => o.status === 'delivered').length,
+    // 準備完了: item_processing_status が 'ready' のアイテムがある発注数
+    ready: orders.filter(o =>
+      o.status === 'approved' &&
+      o.items?.some(item => item.item_processing_status === 'ready')
+    ).length,
+    // 配送完了: 全アイテムの item_processing_status が 'delivered' の発注数
+    delivered: orders.filter(o =>
+      o.status === 'approved' &&
+      o.items?.length > 0 &&
+      o.items.every(item => item.item_processing_status === 'delivered')
+    ).length,
     total: orders.length
   }
 

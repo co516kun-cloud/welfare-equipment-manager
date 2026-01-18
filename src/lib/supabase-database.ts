@@ -428,7 +428,7 @@ export class SupabaseDatabase {
         .from('orders')
         .select('*')
         .eq('is_archived', false)  // アーカイブされていない注文のみ
-        .in('status', ['pending', 'partial_approved', 'approved', 'ready'])  // アクティブな注文のみ
+        .in('status', ['pending', 'partial_approved', 'approved'])  // アクティブな注文のみ（配送状態はOrderItem.item_processing_statusで管理）
         .order('created_at', { ascending: false })
 
       if (ordersError) {
@@ -500,7 +500,7 @@ export class SupabaseDatabase {
         .from('orders')
         .select('*')
         .eq('is_archived', false)  // アーカイブされていない注文のみ
-        .in('status', ['delivered', 'cancelled'])  // 完了済み注文のみ
+        .eq('status', 'cancelled')  // キャンセル注文のみ（配送完了はOrderItem.item_processing_statusで判定）
         .order('created_at', { ascending: false })
 
       if (ordersError) {

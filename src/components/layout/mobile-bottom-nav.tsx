@@ -69,9 +69,8 @@ export function MobileBottomNav() {
         return (
           (order.assigned_to === currentUser || order.carried_by === currentUser) &&
           item.item_processing_status === 'ready' &&
-          item.assigned_item_ids && 
-          item.assigned_item_ids.length > 0 &&
-          order.status !== 'delivered'
+          item.assigned_item_ids &&
+          item.assigned_item_ids.length > 0
         )
       })
       .flatMap(item => {

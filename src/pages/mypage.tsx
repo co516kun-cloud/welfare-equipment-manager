@@ -123,7 +123,21 @@ export function MyPage() {
   // 天気予報用の状態
   const [weatherData, setWeatherData] = useState<{today: any, tomorrow: any} | null>(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
-  
+
+  // ダイレクト貸与用の状態
+  const [showDirectRentalScan, setShowDirectRentalScan] = useState(false)
+  const [showDirectRentalDialog, setShowDirectRentalDialog] = useState(false)
+  const [directRentalItem, setDirectRentalItem] = useState<any>(null)
+  const [directRentalForm, setDirectRentalForm] = useState({
+    customerName: '',
+    assignedTo: '',
+    carriedBy: '',
+    requestedSetting: ''
+  })
+  const [directRentalError, setDirectRentalError] = useState('')
+  const [directRentalManualId, setDirectRentalManualId] = useState('')
+  const [useDirectRentalCamera, setUseDirectRentalCamera] = useState(false)
+
   // selectedUserを現在のユーザーで初期化（usersデータが読み込まれた後）
   useEffect(() => {
     if (users.length > 0 && user) {
@@ -281,10 +295,8 @@ export function MyPage() {
         if (order.assigned_to === selectedUser || order.carried_by === selectedUser) {
           const itemResults = order.items.map((item) => {
 
-            // 配送準備完了の商品のみ取得
-            // 配送済み（delivered）の発注は除外
+            // 配送準備完了の商品のみ取得（item_processing_statusがreadyのもの）
             if (item.assigned_item_ids && item.assigned_item_ids.length > 0 &&
-                order.status !== 'delivered' &&
                 item.item_processing_status === 'ready') {
 
               const product = products.find(p => p.id === item.product_id)
@@ -828,6 +840,170 @@ export function MyPage() {
     } catch (error) {
       console.error('Batch delivery error:', error)
       alert('一括配送完了処理中にエラーが発生しました')
+    }
+  }
+
+  // ダイレクト貸与: スキャンダイアログを開く
+  const handleOpenDirectRentalScan = () => {
+    setShowDirectRentalScan(true)
+    setDirectRentalManualId('')
+    setDirectRentalError('')
+    setUseDirectRentalCamera(false)
+  }
+
+  // ダイレクト貸与: QRスキャン結果の処理
+  const handleDirectRentalScanResult = async (scannedCode: string) => {
+    setDirectRentalError('')
+
+    // QRコードから管理番号を抽出（QR-プレフィックスを除去）
+    const itemId = scannedCode.replace(/^QR-/i, '')
+
+    // 商品を検索
+    const productItem = items.find(item => item.id === itemId)
+
+    if (!productItem) {
+      setDirectRentalError(`管理番号 ${itemId} が見つかりません`)
+      return
+    }
+
+    // ステータスチェック（availableのみ許可）
+    if (productItem.status !== 'available') {
+      const statusText: { [key: string]: string } = {
+        'rented': '貸与中',
+        'reserved': '予約済み',
+        'ready_for_delivery': '配送準備完了',
+        'returned': '返却済み',
+        'cleaning': '消毒中',
+        'maintenance': 'メンテナンス中',
+        'demo_cancelled': 'デモキャンセル',
+        'out_of_order': '故障中',
+        'unknown': '状態不明'
+      }
+      setDirectRentalError(`この商品は現在利用できません\nステータス: ${statusText[productItem.status] || productItem.status}`)
+      return
+    }
+
+    // 商品情報を取得
+    const product = products.find(p => p.id === productItem.product_id)
+
+    // スキャンダイアログを閉じて、貸与入力ダイアログを表示
+    setShowDirectRentalScan(false)
+    setDirectRentalItem({
+      productItem,
+      product
+    })
+    setDirectRentalForm({
+      customerName: '',
+      assignedTo: currentUser,
+      carriedBy: currentUser,
+      requestedSetting: productItem.current_setting || ''
+    })
+    setDirectRentalError('')
+    setShowDirectRentalDialog(true)
+  }
+
+  // ダイレクト貸与: 貸与処理の実行
+  const handleDirectRentalSubmit = async () => {
+    if (!directRentalItem) return
+
+    // バリデーション
+    if (!directRentalForm.customerName.trim()) {
+      setDirectRentalError('顧客名を入力してください')
+      return
+    }
+    if (!directRentalForm.assignedTo) {
+      setDirectRentalError('担当者を選択してください')
+      return
+    }
+    if (!directRentalForm.carriedBy) {
+      setDirectRentalError('持出者を選択してください')
+      return
+    }
+
+    try {
+      const { productItem, product } = directRentalItem
+      const today = new Date().toISOString().split('T')[0]
+      const now = new Date().toISOString()
+
+      // 1. 発注データを作成（即完了状態）
+      const orderId = `ORD-${Date.now()}`
+      const orderItemId = `OI-${Date.now()}`
+
+      const orderItem = {
+        id: orderItemId,
+        product_id: productItem.product_id,
+        quantity: 1,
+        assigned_item_ids: [productItem.id],
+        notes: 'ダイレクト貸与',
+        item_status: null,
+        needs_approval: false,
+        approval_status: 'not_required' as const,
+        item_processing_status: 'delivered' as const,
+        requested_setting: directRentalForm.requestedSetting || undefined
+      }
+
+      const newOrder = {
+        id: orderId,
+        customer_name: directRentalForm.customerName.trim(),
+        assigned_to: directRentalForm.assignedTo,
+        carried_by: directRentalForm.carriedBy,
+        status: 'approved' as const,  // 承認済み（配送状態はOrderItem.item_processing_statusで管理）
+        order_date: today,
+        required_date: today,
+        notes: 'ダイレクト貸与',
+        created_by: currentUser,
+        needs_approval: false,
+        created_at: now,
+        items: [orderItem]
+      }
+
+      await supabaseDb.saveOrder(newOrder)
+
+      // 2. 商品アイテムを更新（貸与中に変更）
+      const updatedProductItem = {
+        ...productItem,
+        status: 'rented' as const,
+        customer_name: directRentalForm.customerName.trim(),
+        loan_start_date: today,
+        current_setting: directRentalForm.requestedSetting || productItem.current_setting
+      }
+
+      await supabaseDb.saveProductItem(updatedProductItem)
+
+      // Zustandストアも更新
+      const updatedItems = items.map(i => i.id === updatedProductItem.id ? updatedProductItem : i)
+      useInventoryStore.setState({ items: updatedItems })
+
+      // 3. 履歴を記録
+      await supabaseDb.createItemHistory(
+        productItem.id,
+        'ダイレクト貸与',
+        'available',
+        'rented',
+        currentUser,
+        {
+          location: `${directRentalForm.customerName.trim()}様宅`,
+          customer_name: directRentalForm.customerName.trim(),
+          metadata: {
+            orderId: orderId,
+            orderItemId: orderItemId,
+            orderType: 'direct_rental',
+            assignedTo: directRentalForm.assignedTo,
+            carriedBy: directRentalForm.carriedBy,
+            requestedSetting: directRentalForm.requestedSetting
+          }
+        }
+      )
+
+      // 成功
+      setShowDirectRentalDialog(false)
+      setDirectRentalItem(null)
+      loadData()
+      alert(`${directRentalForm.customerName.trim()}様への貸与が開始されました\n管理番号: ${productItem.id}`)
+
+    } catch (error) {
+      console.error('ダイレクト貸与処理でエラーが発生しました:', error)
+      setDirectRentalError('ダイレクト貸与処理でエラーが発生しました')
     }
   }
 
@@ -2387,6 +2563,207 @@ export function MyPage() {
             <div className="flex justify-end space-x-2 pt-4">
               <Button variant="outline" onClick={() => setShowQRScanDialog(false)}>
                 キャンセル
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ダイレクト貸与用フロートボタン（モバイルのみ） */}
+      {isMobile && (
+        <button
+          onClick={handleOpenDirectRentalScan}
+          className="fixed bottom-20 right-4 z-50 w-14 h-14 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-full shadow-lg flex items-center justify-center hover:from-emerald-600 hover:to-teal-700 transition-all active:scale-95"
+          aria-label="ダイレクト貸与"
+        >
+          <span className="text-2xl">🔍</span>
+        </button>
+      )}
+
+      {/* ダイレクト貸与: QRスキャンダイアログ */}
+      <Dialog open={showDirectRentalScan} onOpenChange={setShowDirectRentalScan}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ダイレクト貸与</DialogTitle>
+            <DialogDescription>
+              貸与する商品のQRコードをスキャンしてください。
+              <br />
+              <span className="text-amber-600 font-medium">※ 利用可能な商品のみ対象です</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* カメラ/手動入力切り替え */}
+            <div className="flex space-x-2">
+              <Button
+                variant={useDirectRentalCamera ? 'default' : 'outline'}
+                onClick={() => setUseDirectRentalCamera(true)}
+                className="flex-1"
+              >
+                📷 カメラ
+              </Button>
+              <Button
+                variant={!useDirectRentalCamera ? 'default' : 'outline'}
+                onClick={() => setUseDirectRentalCamera(false)}
+                className="flex-1"
+              >
+                ⌨️ 手動入力
+              </Button>
+            </div>
+
+            {useDirectRentalCamera ? (
+              <div className="space-y-2">
+                <QRCameraScanner
+                  onScan={handleDirectRentalScanResult}
+                  onError={(error) => setDirectRentalError(error)}
+                  isActive={showDirectRentalScan && useDirectRentalCamera}
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Label htmlFor="directRentalInput">管理番号を入力</Label>
+                <Input
+                  id="directRentalInput"
+                  value={directRentalManualId}
+                  onChange={(e) => setDirectRentalManualId(e.target.value)}
+                  placeholder="例: WC-001, QR-WC-001"
+                  className="text-center"
+                />
+                <Button
+                  onClick={() => {
+                    if (directRentalManualId.trim()) {
+                      handleDirectRentalScanResult(directRentalManualId.trim())
+                    }
+                  }}
+                  className="w-full"
+                  disabled={!directRentalManualId.trim()}
+                >
+                  確認
+                </Button>
+              </div>
+            )}
+
+            {directRentalError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive font-medium">エラー</p>
+                <p className="text-sm text-destructive whitespace-pre-line">{directRentalError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    setDirectRentalError('')
+                    setDirectRentalManualId('')
+                  }}
+                >
+                  再入力
+                </Button>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setShowDirectRentalScan(false)}>
+                キャンセル
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ダイレクト貸与: 貸与情報入力ダイアログ */}
+      <Dialog open={showDirectRentalDialog} onOpenChange={setShowDirectRentalDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>ダイレクト貸与</DialogTitle>
+            <DialogDescription>
+              {directRentalItem && (
+                <>
+                  管理番号: <strong>{directRentalItem.productItem.id}</strong>
+                  <br />
+                  商品: <strong>{directRentalItem.product?.name || '不明'}</strong>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="directCustomerName">顧客名 <span className="text-destructive">*</span></Label>
+              <Input
+                id="directCustomerName"
+                value={directRentalForm.customerName}
+                onChange={(e) => setDirectRentalForm(prev => ({ ...prev, customerName: e.target.value }))}
+                placeholder="例: 山田太郎"
+                className="mt-1"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="directAssignedTo">担当者 <span className="text-destructive">*</span></Label>
+              <Select
+                id="directAssignedTo"
+                value={directRentalForm.assignedTo}
+                onChange={(e) => setDirectRentalForm(prev => ({ ...prev, assignedTo: e.target.value }))}
+                className="mt-1"
+              >
+                {users.map(u => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="directCarriedBy">持出者 <span className="text-destructive">*</span></Label>
+              <Select
+                id="directCarriedBy"
+                value={directRentalForm.carriedBy}
+                onChange={(e) => setDirectRentalForm(prev => ({ ...prev, carriedBy: e.target.value }))}
+                className="mt-1"
+              >
+                {users.map(u => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+              </Select>
+            </div>
+
+            {/* 希望設定（楽匠プラスなど） */}
+            {directRentalItem?.product?.name?.includes('楽匠') && (
+              <div>
+                <Label htmlFor="directRequestedSetting">希望設定</Label>
+                <Select
+                  id="directRequestedSetting"
+                  value={directRentalForm.requestedSetting}
+                  onChange={(e) => setDirectRentalForm(prev => ({ ...prev, requestedSetting: e.target.value }))}
+                  className="mt-1"
+                >
+                  <option value="">設定なし</option>
+                  <option value="2M">2M</option>
+                  <option value="3M">3M</option>
+                </Select>
+              </div>
+            )}
+
+            {directRentalError && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                <p className="text-sm text-destructive">{directRentalError}</p>
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDirectRentalDialog(false)
+                  setDirectRentalItem(null)
+                }}
+              >
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleDirectRentalSubmit}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                貸与開始
               </Button>
             </div>
           </div>

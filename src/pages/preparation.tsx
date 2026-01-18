@@ -397,13 +397,11 @@ export function Preparation() {
         return item
       })
 
-      // すべてのアイテムが準備完了したかチェック
-      const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
-      
+      // Order.statusは承認フロー用なので変更しない（OrderItem.item_processing_statusで管理）
       const updatedOrder = {
         ...order,
-        items: updatedItems,
-        status: allReady ? 'ready' as const : 'approved' as const
+        items: updatedItems
+        // status は 'approved' のまま
       }
 
       await supabaseDb.saveOrder(updatedOrder)
@@ -638,7 +636,7 @@ export function Preparation() {
       const updatedOrder = {
         ...order,
         items: updatedItems,
-        status: allCancelled ? 'cancelled' as const : (allReady ? 'ready' as const : 'approved' as const)
+        status: allCancelled ? 'cancelled' as const : 'approved' as const
       }
 
       await supabaseDb.saveOrder(updatedOrder)
@@ -680,15 +678,13 @@ export function Preparation() {
       return item
     })
       
-    // すべてのアイテムが準備完了したかチェック
-    const allReady = updatedItems.every(item => item.item_processing_status === 'ready')
-    
+    // Order.statusは承認フロー用なので変更しない
     const updatedOrder = {
       ...order,
-      items: updatedItems,
-      status: allReady ? 'ready' as const : 'approved' as const
+      items: updatedItems
+      // status は 'approved' のまま
     }
-    
+
     await supabaseDb.saveOrder(updatedOrder)
 
     // 商品のステータスと属性を1回で保存
@@ -774,14 +770,13 @@ export function Preparation() {
       })
 
       // すべてのアイテムが準備完了したかチェック
-      const allReady = updatedItems.every(oi => oi.item_processing_status === 'ready')
-      
+      // Order.statusは承認フロー用なので変更しない
       const updatedOrder = {
         ...order,
-        items: updatedItems,
-        status: allReady ? 'ready' as const : 'approved' as const
+        items: updatedItems
+        // status は 'approved' のまま
       }
-      
+
       await supabaseDb.saveOrder(updatedOrder)
 
       // 商品ステータスを準備完了に変更

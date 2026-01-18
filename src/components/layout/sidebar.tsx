@@ -73,7 +73,7 @@ export function Sidebar() {
     // 自分が担当者または持出者の発注のみ
     if (order.assigned_to === currentUser || order.carried_by === currentUser) {
       return (order.items || []).flatMap(item => {
-        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 && order.status !== 'delivered') {
+        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 && item.item_processing_status !== 'delivered') {
           // 割り当てられた商品アイテムの中でready_for_deliveryのもののみカウント
           return item.assigned_item_ids.map(assignedItemId => {
             if (assignedItemId) {

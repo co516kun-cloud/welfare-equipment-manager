@@ -190,8 +190,8 @@ export function Menu() {
     // 自分が担当者または持出者の発注のみ
     if (order.assigned_to === currentUser || order.carried_by === currentUser) {
       return total + order.items.reduce((itemTotal, item) => {
-        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 && 
-            order.status !== 'delivered' && item.item_processing_status === 'ready') {
+        if (item.assigned_item_ids && item.assigned_item_ids.length > 0 &&
+            item.item_processing_status === 'ready') {
           
           // この発注アイテムが配送準備完了かチェック
           const hasReadyForDeliveryItems = item.assigned_item_ids.some(assignedItemId => {
