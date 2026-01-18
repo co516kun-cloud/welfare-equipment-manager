@@ -423,12 +423,11 @@ export class SupabaseDatabase {
     }
 
     try {
-      // アクティブな注文の基本情報を取得（アーカイブされていない & アクティブステータスのみ）
+      // 全注文の基本情報を取得（アーカイブされていないもの全て）
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select('*')
         .eq('is_archived', false)  // アーカイブされていない注文のみ
-        .in('status', ['pending', 'partial_approved', 'approved'])  // アクティブな注文のみ（配送状態はOrderItem.item_processing_statusで管理）
         .order('created_at', { ascending: false })
 
       if (ordersError) {
