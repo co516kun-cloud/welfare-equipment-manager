@@ -2188,6 +2188,196 @@ export function MyPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* ダイレクト貸与: QRスキャンダイアログ */}
+        <Dialog open={showDirectRentalScan} onOpenChange={setShowDirectRentalScan}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>ダイレクト貸与</DialogTitle>
+              <DialogDescription>
+                貸与する商品のQRコードをスキャンしてください。
+                <br />
+                <span className="text-amber-600 font-medium">※ 利用可能な商品のみ対象です</span>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* カメラ/手動入力切り替え */}
+              <div className="flex space-x-2">
+                <Button
+                  variant={useDirectRentalCamera ? 'default' : 'outline'}
+                  onClick={() => setUseDirectRentalCamera(true)}
+                  className="flex-1"
+                >
+                  📷 カメラ
+                </Button>
+                <Button
+                  variant={!useDirectRentalCamera ? 'default' : 'outline'}
+                  onClick={() => setUseDirectRentalCamera(false)}
+                  className="flex-1"
+                >
+                  ⌨️ 手動入力
+                </Button>
+              </div>
+
+              {useDirectRentalCamera ? (
+                <div className="space-y-2">
+                  <QRCameraScanner
+                    onScan={handleDirectRentalScanResult}
+                    onError={(error) => setDirectRentalError(error)}
+                    isActive={showDirectRentalScan && useDirectRentalCamera}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Label htmlFor="directRentalInputMobile">管理番号を入力</Label>
+                  <Input
+                    id="directRentalInputMobile"
+                    value={directRentalManualId}
+                    onChange={(e) => setDirectRentalManualId(e.target.value)}
+                    placeholder="例: WC-001, QR-WC-001"
+                    className="text-center"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (directRentalManualId.trim()) {
+                        handleDirectRentalScanResult(directRentalManualId.trim())
+                      }
+                    }}
+                    className="w-full"
+                    disabled={!directRentalManualId.trim()}
+                  >
+                    確認
+                  </Button>
+                </div>
+              )}
+
+              {directRentalError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm text-destructive font-medium">エラー</p>
+                  <p className="text-sm text-destructive whitespace-pre-line">{directRentalError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => {
+                      setDirectRentalError('')
+                      setDirectRentalManualId('')
+                    }}
+                  >
+                    再入力
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setShowDirectRentalScan(false)}>
+                  キャンセル
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ダイレクト貸与: 貸与情報入力ダイアログ */}
+        <Dialog open={showDirectRentalDialog} onOpenChange={setShowDirectRentalDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>ダイレクト貸与</DialogTitle>
+              <DialogDescription>
+                {directRentalItem && (
+                  <>
+                    管理番号: <strong>{directRentalItem.productItem.id}</strong>
+                    <br />
+                    商品: <strong>{directRentalItem.product?.name || '不明'}</strong>
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="directCustomerNameMobile">顧客名 <span className="text-destructive">*</span></Label>
+                <Input
+                  id="directCustomerNameMobile"
+                  value={directRentalForm.customerName}
+                  onChange={(e) => setDirectRentalForm(prev => ({ ...prev, customerName: e.target.value }))}
+                  placeholder="例: 山田太郎"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="directAssignedToMobile">担当者 <span className="text-destructive">*</span></Label>
+                <Select
+                  id="directAssignedToMobile"
+                  value={directRentalForm.assignedTo}
+                  onChange={(e) => setDirectRentalForm(prev => ({ ...prev, assignedTo: e.target.value }))}
+                  className="mt-1"
+                >
+                  {users.map(u => (
+                    <option key={u.id} value={u.name}>{u.name}</option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="directCarriedByMobile">持出者 <span className="text-destructive">*</span></Label>
+                <Select
+                  id="directCarriedByMobile"
+                  value={directRentalForm.carriedBy}
+                  onChange={(e) => setDirectRentalForm(prev => ({ ...prev, carriedBy: e.target.value }))}
+                  className="mt-1"
+                >
+                  {users.map(u => (
+                    <option key={u.id} value={u.name}>{u.name}</option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* 希望設定（楽匠プラスなど） */}
+              {directRentalItem?.product?.name?.includes('楽匠') && (
+                <div>
+                  <Label htmlFor="directRequestedSettingMobile">希望設定</Label>
+                  <Select
+                    id="directRequestedSettingMobile"
+                    value={directRentalForm.requestedSetting}
+                    onChange={(e) => setDirectRentalForm(prev => ({ ...prev, requestedSetting: e.target.value }))}
+                    className="mt-1"
+                  >
+                    <option value="">設定なし</option>
+                    <option value="2M">2M</option>
+                    <option value="3M">3M</option>
+                  </Select>
+                </div>
+              )}
+
+              {directRentalError && (
+                <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+                  <p className="text-sm text-destructive">{directRentalError}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDirectRentalDialog(false)
+                    setDirectRentalItem(null)
+                  }}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  onClick={handleDirectRentalSubmit}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                >
+                  貸与開始
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
