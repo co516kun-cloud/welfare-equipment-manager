@@ -97,20 +97,30 @@ export function Orders() {
   const needsApprovalForProduct = (productId: string) => {
     const productItems = items.filter(item => item.product_id === productId)
     const physicalAvailable = productItems.filter(item => item.status === 'available')
-    const processingItems = productItems.filter(item => 
+    const processingItems = productItems.filter(item =>
       ['returned', 'cleaning', 'maintenance'].includes(item.status)
     )
-    
+
     // 実質在庫数を取得（予約枠を考慮）
     const actualAvailableCount = getProductAvailableStock(productId)
-    
+
+    // 利用可能な在庫の商品状態をチェック
+    // 「良好」または「普通」状態の在庫があるかどうか
+    const goodOrFairAvailable = physicalAvailable.filter(item =>
+      item.condition === 'good' || item.condition === 'fair'
+    )
+    // 「注意」状態の在庫のみかどうか（利用可能在庫があるが、良好・普通がない場合）
+    const onlyCautionAvailable = physicalAvailable.length > 0 && goodOrFairAvailable.length === 0
+
     return {
       hasAvailable: actualAvailableCount > 0,
       hasProcessing: processingItems.length > 0,
       physicalAvailableCount: physicalAvailable.length,
       availableCount: actualAvailableCount,
       processingCount: processingItems.length,
-      needsApproval: actualAvailableCount === 0 && processingItems.length > 0
+      needsApproval: actualAvailableCount === 0 && processingItems.length > 0,
+      onlyCautionAvailable, // 注意状態のみの在庫かどうか
+      goodOrFairCount: goodOrFairAvailable.length // 良好・普通状態の在庫数
     }
   }
 
@@ -1177,7 +1187,16 @@ export function Orders() {
                               </span>
                             </div>
                           )}
-                          
+
+                          {details && details.onlyCautionAvailable && (
+                            <div className="flex items-center space-x-2 p-2 bg-amber-100 border border-amber-300 rounded">
+                              <span className="text-amber-600">⚠️</span>
+                              <span className="text-sm text-amber-700 font-medium">
+                                注意: 利用可能な在庫はすべて「注意」状態です。状態の良い商品がありません。
+                              </span>
+                            </div>
+                          )}
+
                         </div>
                       )}
                     </div>
