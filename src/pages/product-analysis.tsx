@@ -254,17 +254,18 @@ export function ProductAnalysis() {
             <div className="bg-card border border-border rounded-xl p-4">
               <h2 className="text-sm font-semibold text-foreground mb-4">貸与数・返却数グラフ</h2>
               <div className="overflow-x-auto">
-                <div style={{ minWidth: Math.max(400, analysisData.length * 80), height: 350 }}>
+                <div style={{ minWidth: Math.max(400, analysisData.length * 80), height: 450 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 60 }}>
+                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 120 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis
                         dataKey="name"
                         tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                        angle={-35}
+                        angle={-45}
                         textAnchor="end"
                         interval={0}
-                        height={80}
+                        height={130}
+                        dy={10}
                       />
                       <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} allowDecimals={false} />
                       <Tooltip
