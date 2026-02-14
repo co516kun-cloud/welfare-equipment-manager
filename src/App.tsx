@@ -23,6 +23,7 @@ import { StockAlert } from './pages/stock-alert'
 import { DataImport } from './pages/data-import'
 import Notifications from './pages/notifications'
 import { LabelQueuePage } from './pages/label-queue'
+import { ProductAnalysis } from './pages/product-analysis'
 // import { CSVImport } from './pages/csv-import'
 // import { Import } from './pages/import' // Disabled due to installation issues
 
@@ -126,6 +127,7 @@ function App() {
           <Route path="manual-import" element={<ManualImport />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="label-queue" element={<LabelQueuePage />} />
+          <Route path="product-analysis" element={<ProductAnalysis />} />
           {/* <Route path="csv-import" element={<CSVImport />} />
           <Route path="import" element={<Import />} /> Disabled due to installation issues */}
         </Route>

@@ -1016,6 +1016,47 @@ export class SupabaseDatabase {
     }
   }
 
+  // 分析用: 貸与・返却履歴を取得（ページネーションなし）
+  async getHistoriesForAnalysis(
+    year: number,
+    month?: number
+  ): Promise<ItemHistory[]> {
+    try {
+      let query = supabase
+        .from('item_histories')
+        .select('*')
+        .in('to_status', ['rented', 'returned'])
+
+      if (month) {
+        const startDate = `${year}-${month.toString().padStart(2, '0')}-01T00:00:00Z`
+        const nextMonth = month === 12 ? 1 : month + 1
+        const nextYear = month === 12 ? year + 1 : year
+        const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01T00:00:00Z`
+        query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+      } else {
+        const startDate = `${year}-01-01T00:00:00Z`
+        const endDate = `${year + 1}-01-01T00:00:00Z`
+        query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+      }
+
+      const { data, error } = await query.order('timestamp', { ascending: false })
+
+      if (error) {
+        if (error.code === '42P01') {
+          console.warn('item_histories table does not exist.')
+          return []
+        }
+        console.error('Error fetching histories for analysis:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Error in getHistoriesForAnalysis:', error)
+      return []
+    }
+  }
+
   // Preparation Tasks
   async getPreparationTasks(): Promise<PreparationTask[]> {
     const { data, error } = await supabase

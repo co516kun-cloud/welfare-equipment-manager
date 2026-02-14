@@ -332,9 +332,20 @@ export function Menu() {
                 </div>
               </Link>
 
+              {/* 貸与分析 */}
+              <Link
+                to="/product-analysis"
+                className="group block relative"
+                title="貸与分析"
+              >
+                <div className="bg-gradient-to-r from-amber-500 to-yellow-500 backdrop-blur-xl px-4 py-3 border border-amber-300/40 hover:border-amber-400/60 transition-all duration-300 hover:shadow-xl rounded-lg flex items-center">
+                  <span className="text-sm font-medium text-white">📊 貸与分析</span>
+                </div>
+              </Link>
+
               {/* セパレーター */}
               <div className="border-t border-slate-600/50"></div>
-              
+
               {/* データインポート */}
               <Link
                 to="/data-import"
