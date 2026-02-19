@@ -24,7 +24,8 @@ const BADGE_STYLES: Record<string, string> = {
 }
 
 export function WorkManagement() {
-  const { products, items } = useInventoryStore()
+  const { categories, products, items } = useInventoryStore()
+  const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedWorkType, setSelectedWorkType] = useState('')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedMonth, setSelectedMonth] = useState<number | ''>(new Date().getMonth() + 1)
@@ -43,6 +44,13 @@ export function WorkManagement() {
   const productNameMap = useMemo(() => {
     const map = new Map<string, string>()
     products.forEach(p => map.set(p.id, p.name))
+    return map
+  }, [products])
+
+  // product_id → category_id マッピング
+  const productCategoryMap = useMemo(() => {
+    const map = new Map<string, string>()
+    products.forEach(p => map.set(p.id, p.category_id))
     return map
   }, [products])
 
@@ -66,11 +74,18 @@ export function WorkManagement() {
     fetchData()
   }, [selectedYear, selectedMonth, selectedDay])
 
-  // 作業種別フィルタ後のデータ
+  // 作業種別・カテゴリフィルタ後のデータ
   const filteredHistories = useMemo(() => {
-    if (!selectedWorkType) return histories
-    return histories.filter(h => h.action === selectedWorkType)
-  }, [histories, selectedWorkType])
+    return histories.filter(h => {
+      if (selectedWorkType && h.action !== selectedWorkType) return false
+      if (selectedCategory) {
+        const productId = itemToProductMap.get(h.item_id)
+        const categoryId = productId ? productCategoryMap.get(productId) : undefined
+        if (categoryId !== selectedCategory) return false
+      }
+      return true
+    })
+  }, [histories, selectedWorkType, selectedCategory, itemToProductMap, productCategoryMap])
 
   // サマリー集計（フィルタ後）
   const summary = useMemo(() => {
@@ -102,7 +117,19 @@ export function WorkManagement() {
 
         {/* フィルタ */}
         <div className="bg-card border border-border rounded-xl p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">カテゴリ</label>
+              <Select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+              >
+                <option value="">すべて</option>
+                {categories.map(cat => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </Select>
+            </div>
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">作業種別</label>
               <Select
