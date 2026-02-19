@@ -24,6 +24,7 @@ import { DataImport } from './pages/data-import'
 import Notifications from './pages/notifications'
 import { LabelQueuePage } from './pages/label-queue'
 import { ProductAnalysis } from './pages/product-analysis'
+import { WorkManagement } from './pages/work-management'
 // import { CSVImport } from './pages/csv-import'
 // import { Import } from './pages/import' // Disabled due to installation issues
 
@@ -128,6 +129,7 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
           <Route path="label-queue" element={<LabelQueuePage />} />
           <Route path="product-analysis" element={<ProductAnalysis />} />
+          <Route path="work-management" element={<WorkManagement />} />
           {/* <Route path="csv-import" element={<CSVImport />} />
           <Route path="import" element={<Import />} /> Disabled due to installation issues */}
         </Route>

@@ -343,6 +343,17 @@ export function Menu() {
                 </div>
               </Link>
 
+              {/* 消毒作業管理 */}
+              <Link
+                to="/work-management"
+                className="group block relative"
+                title="消毒作業管理"
+              >
+                <div className="bg-gradient-to-r from-cyan-500 to-teal-500 backdrop-blur-xl px-4 py-3 border border-cyan-300/40 hover:border-cyan-400/60 transition-all duration-300 hover:shadow-xl rounded-lg flex items-center">
+                  <span className="text-sm font-medium text-white">🧴 消毒管理</span>
+                </div>
+              </Link>
+
               {/* セパレーター */}
               <div className="border-t border-slate-600/50"></div>
 

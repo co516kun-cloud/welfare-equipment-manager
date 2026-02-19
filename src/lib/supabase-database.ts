@@ -1057,6 +1057,55 @@ export class SupabaseDatabase {
     }
   }
 
+  // 消毒作業管理用: 消毒・メンテナンス・入庫の履歴を取得
+  async getWorkHistories(
+    year: number,
+    month?: number,
+    day?: number
+  ): Promise<ItemHistory[]> {
+    try {
+      let query = supabase
+        .from('item_histories')
+        .select('*')
+        .or('to_status.in.(cleaning,maintenance),and(to_status.eq.available,action.eq.入庫処理)')
+
+      if (month && day) {
+        const paddedMonth = month.toString().padStart(2, '0')
+        const paddedDay = day.toString().padStart(2, '0')
+        const startDate = `${year}-${paddedMonth}-${paddedDay}T00:00:00Z`
+        const nextDay = new Date(Date.UTC(year, month - 1, day + 1))
+        const endDate = nextDay.toISOString().split('T')[0] + 'T00:00:00Z'
+        query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+      } else if (month) {
+        const startDate = `${year}-${month.toString().padStart(2, '0')}-01T00:00:00Z`
+        const nextMonth = month === 12 ? 1 : month + 1
+        const nextYear = month === 12 ? year + 1 : year
+        const endDate = `${nextYear}-${nextMonth.toString().padStart(2, '0')}-01T00:00:00Z`
+        query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+      } else {
+        const startDate = `${year}-01-01T00:00:00Z`
+        const endDate = `${year + 1}-01-01T00:00:00Z`
+        query = query.gte('timestamp', startDate).lt('timestamp', endDate)
+      }
+
+      const { data, error } = await query.order('timestamp', { ascending: false })
+
+      if (error) {
+        if (error.code === '42P01') {
+          console.warn('item_histories table does not exist.')
+          return []
+        }
+        console.error('Error fetching work histories:', error)
+        return []
+      }
+
+      return data || []
+    } catch (error) {
+      console.error('Error in getWorkHistories:', error)
+      return []
+    }
+  }
+
   // Preparation Tasks
   async getPreparationTasks(): Promise<PreparationTask[]> {
     const { data, error } = await supabase
