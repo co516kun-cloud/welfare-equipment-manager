@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -42,6 +42,8 @@ export function Orders() {
   }, [])
 
   const [showNewOrderDialog, setShowNewOrderDialog] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const isSubmittingRef = useRef(false)
   const [selectedOrders, setSelectedOrders] = useState<Set<string>>(new Set())
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [showAllOrders, setShowAllOrders] = useState(false)
@@ -138,6 +140,11 @@ export function Orders() {
   }
 
   const handleSubmitOrder = async () => {
+    // 二重送信防止
+    if (isSubmittingRef.current) return
+    isSubmittingRef.current = true
+    setIsSubmitting(true)
+
     try {
       // Validation
       if (!orderForm.customerName || !orderForm.assignedTo || !orderForm.carriedBy || !orderForm.requiredDate) {
@@ -298,6 +305,9 @@ export function Orders() {
     } catch (error) {
       console.error('Error in handleSubmitOrder:', error)
       alert(`発注処理中にエラーが発生しました: ${error.message}`)
+    } finally {
+      isSubmittingRef.current = false
+      setIsSubmitting(false)
     }
   }
 
@@ -1234,12 +1244,13 @@ export function Orders() {
               >
                 キャンセル
               </Button>
-              <Button 
+              <Button
                 onClick={handleSubmitOrder}
+                disabled={isSubmitting}
                 className="px-6 bg-primary hover:bg-primary/90"
               >
                 <span className="mr-2">✨</span>
-                発注作成
+                {isSubmitting ? '処理中...' : '発注作成'}
               </Button>
             </div>
           </div>

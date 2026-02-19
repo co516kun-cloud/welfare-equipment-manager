@@ -378,7 +378,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     try {
       const newOrder: Order = {
         ...orderData,
-        id: `ORD-${Date.now()}`,
+        id: `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       }
       console.log('📦 Created new order object:', newOrder)
       
