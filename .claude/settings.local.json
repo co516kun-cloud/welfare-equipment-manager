@@ -29,7 +29,22 @@
       "Read(/mnt/c/Users/taguchi/Desktop/clara-kanri/welfare-equipment-manager/src/pages/**)",
       "Bash(cat:*)",
       "Bash(git rm:*)",
-      "Bash(gh auth status:*)"
+      "Bash(gh auth status:*)",
+      "Bash(printf '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0.0\"}}}\\\\n' | timeout 5 node /mnt/c/Users/taguchi/desktop/claude-kanri/welfare-equipment-manager/mcp-server/dist/index.js 2>&1 | head -5)",
+      "WebSearch",
+      "WebFetch(domain:support.brother.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:download.brother.com)",
+      "WebFetch(domain:www.servicenow.com)",
+      "WebFetch(domain:support.brother.co.jp)",
+      "WebFetch(domain:gist.githubusercontent.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:cdn.jsdelivr.net)",
+      "WebFetch(domain:chromewebstore.google.com)",
+      "WebFetch(domain:microsoftedge.microsoft.com)",
+      "Bash(ls:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": []
   }

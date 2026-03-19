@@ -30,16 +30,18 @@ export function LabelQueuePage() {
 
   useEffect(() => {
     loadQueue()
-    const available = LabelPrinter.isAvailable()
-    setPrinterAvailable(available)
 
-    // デバッグ情報をコンソールに出力
-    console.log('=== プリンター接続チェック ===')
-    console.log('ActiveXObject in window:', 'ActiveXObject' in window)
-    console.log('typeof ActiveXObject:', typeof (window as any).ActiveXObject)
-    console.log('プリンター利用可能:', available)
-    console.log('User Agent:', navigator.userAgent)
-    console.log('============================')
+    // b-PAC拡張機能の検出（拡張機能がbodyにクラスを追加するまで少し待つ）
+    const checkPrinter = () => {
+      const available = LabelPrinter.isAvailable()
+      setPrinterAvailable(available)
+      console.log('b-PAC拡張機能:', available ? '検出済み' : '未検出')
+    }
+
+    // 拡張機能のロードを待って再チェック
+    checkPrinter()
+    const timer = setTimeout(checkPrinter, 1500)
+    return () => clearTimeout(timer)
   }, [])
 
   // 個別印刷
@@ -228,29 +230,31 @@ export function LabelQueuePage() {
             />
             <span className="font-medium">
               {printerAvailable
-                ? '✅ プリンター接続可能'
-                : '❌ プリンター接続不可'}
+                ? 'プリンター接続可能'
+                : 'プリンター接続不可'}
             </span>
           </div>
 
           {!printerAvailable && (
             <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm space-y-2">
-              <p className="font-semibold text-amber-900">📋 印刷を行うには以下の手順が必要です：</p>
+              <p className="font-semibold text-amber-900">印刷を行うには以下のセットアップが必要です：</p>
               <ol className="list-decimal list-inside space-y-1 text-amber-800">
-                <li>Windows PCを使用してください</li>
-                <li>Microsoft Edge を開く</li>
+                <li>Brother b-PAC Client Component をインストール</li>
                 <li>
-                  Edge設定 (edge://settings/defaultBrowser) で
-                  <br/>
-                  「Internet Explorer モードページ」に
-                  <code className="bg-amber-100 px-1 rounded">http://localhost:5174</code>
-                  を追加
+                  ブラウザに b-PAC 拡張機能をインストール
                 </li>
-                <li>Brother b-PAC3 SDK をインストール</li>
-                <li>Edge を再起動してこのページにアクセス</li>
+                <li>ブラウザを再起動してこのページにアクセス</li>
               </ol>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => LabelPrinter.openExtensionInstallPage()}
+              >
+                b-PAC 拡張機能をインストール
+              </Button>
               <p className="text-xs text-amber-700 mt-2">
-                💡 デバッグ情報は、ブラウザの開発者ツール（F12）→ コンソールタブで確認できます
+                ※ IEモードは不要です。Chrome / Edge で直接印刷できます。
               </p>
             </div>
           )}
@@ -258,27 +262,10 @@ export function LabelQueuePage() {
           {printerAvailable && (
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded text-sm">
               <p className="text-green-800">
-                ✅ b-PAC SDKが検出されました。ラベル印刷が可能です。
+                b-PAC拡張機能が検出されました。ラベル印刷が可能です。
               </p>
             </div>
           )}
-
-          {/* IE印刷ページを開くボタン */}
-          <div className="mt-3">
-            <Button
-              onClick={() => {
-                const printUrl = window.location.origin + '/print-label.html'
-                window.open(printUrl, '_blank', 'width=1000,height=700')
-              }}
-              className="w-full"
-              variant="outline"
-            >
-              🖨️ IE印刷ページを開く（IEモード用）
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              ※ 開いたページを Edge の「IEモードで再読み込み」してください
-            </p>
-          </div>
         </div>
       </div>
 
