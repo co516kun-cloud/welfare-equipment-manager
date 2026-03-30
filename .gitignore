@@ -28,3 +28,16 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Debug/test scripts with hardcoded credentials
+create-auth-user.js
+check-order-fields.js
+check-schema.js
+cleanup-old-orders.js
+debug-mypage-issue.js
+debug-order-flow.js
+debug-product-items.js
+browser-debug.js
+create-test-order-with-dates.js
+final-test.js
+add-missing-columns.js

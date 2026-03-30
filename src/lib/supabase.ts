@@ -1,57 +1,37 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xbltuzyazsafxbacrzfs.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhibHR1enlhenNhZnhiYWNyemZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMzMjU5NjMsImV4cCI6MjA2ODkwMTk2M30.RwlAsXQ_sj9k9-5Zxs3aP0pC3seKOVe-NVVi-ioSykw'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-
-// ヘッダー値の検証
-const cleanUrl = supabaseUrl?.trim()
-const cleanKey = supabaseAnonKey?.trim()
-
-
-// より安全なクライアント作成でHeaders エラーを回避
-let supabaseClient: any
-
-try {
-  
-  // 環境変数をクリーンアップ
-  const safeUrl = cleanUrl || 'https://dummy.supabase.co'
-  const safeKey = cleanKey || 'dummy_key'
-  
-  
-  supabaseClient = createClient(
-    safeUrl,
-    safeKey,
-    {
-      auth: {
-        persistSession: false // セッション永続化を無効化
-      },
-      realtime: {
-        params: {
-          eventsPerSecond: 10
-        }
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'welfare-equipment-manager'
-        }
-      }
-    }
-  )
-} catch (error) {
-  console.error('❌ Error creating Supabase client:', error)
-  
-  // フォールバック: 最小設定でクライアントを作成
-  supabaseClient = createClient(
-    'https://dummy.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1bW15Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2NDk0MjYyNzAsImV4cCI6MTk2NTAwMjI3MH0.dummy',
-    {
-      auth: { persistSession: false }
-    }
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase environment variables. ' +
+    'Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.'
   )
 }
 
-export const supabase = supabaseClient
+const cleanUrl = supabaseUrl.trim()
+const cleanKey = supabaseAnonKey.trim()
+
+export const supabase = createClient(
+  cleanUrl,
+  cleanKey,
+  {
+    auth: {
+      persistSession: false
+    },
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    },
+    global: {
+      headers: {
+        'X-Client-Info': 'welfare-equipment-manager'
+      }
+    }
+  }
+)
 
 // Database types
 export type Database = {

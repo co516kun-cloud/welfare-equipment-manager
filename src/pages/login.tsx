@@ -11,12 +11,6 @@ export function Login() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  
-  // デバッグモード用の認証情報
-  const debugCredentials = {
-    email: 'claude.test@gmail.com',
-    password: 'test123456'
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,27 +18,6 @@ export function Login() {
     setError('')
 
     try {
-      // デバッグモード用の簡易認証
-      const isDebugMode = import.meta.env.VITE_SUPABASE_URL?.includes('dummy')
-      
-      if (isDebugMode) {
-        // デバッグモードでは固定の認証情報でログイン可能
-        if (email === debugCredentials.email && password === debugCredentials.password) {
-          // ローカルストレージにログイン状態を保存
-          localStorage.setItem('auth_user', JSON.stringify({
-            id: 'debug-user-1',
-            email: debugCredentials.email,
-            name: 'テストユーザー'
-          }))
-          // ページをリロードして認証状態を反映
-          window.location.reload()
-          return
-        } else {
-          throw new Error('デバッグモードでは claude.test@gmail.com / test123456 でログインしてください')
-        }
-      }
-      
-      // 通常のSupabase認証
       if (isSignUp) {
         await signUp(email, password, name)
         setError('サインアップが完了しました。メールを確認してください。')
@@ -71,15 +44,6 @@ export function Login() {
             <p className="text-muted-foreground mt-2">
               {isSignUp ? 'アカウントを作成' : 'ログインしてください'}
             </p>
-            {import.meta.env.VITE_SUPABASE_URL?.includes('dummy') && (
-              <div className="mt-3 p-3 bg-info/10 border border-info/20 rounded-lg">
-                <p className="text-sm text-info font-medium">🔧 デバッグモード</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Email: {debugCredentials.email}<br/>
-                  Password: {debugCredentials.password}
-                </p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -137,21 +101,6 @@ export function Login() {
               {loading ? '処理中...' : isSignUp ? 'アカウント作成' : 'ログイン'}
             </Button>
             
-            {import.meta.env.VITE_SUPABASE_URL?.includes('dummy') && !isSignUp && (
-              <Button 
-                type="button"
-                variant="outline"
-                className="w-full" 
-                onClick={() => {
-                  setEmail(debugCredentials.email)
-                  setPassword(debugCredentials.password)
-                }}
-                disabled={loading}
-              >
-                🔧 デバッグ用認証情報を入力
-              </Button>
-            )}
-
             <div className="text-center">
               <button
                 type="button"
