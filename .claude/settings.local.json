@@ -52,7 +52,8 @@
       "Bash(git check-ignore *)",
       "Bash(mkdir -p /home/taguchi/secrets/welfare-equipment-manager)",
       "Bash(chmod 700 /home/taguchi/secrets)",
-      "Bash(chmod 700 /home/taguchi/secrets/welfare-equipment-manager)"
+      "Bash(chmod 700 /home/taguchi/secrets/welfare-equipment-manager)",
+      "Bash(git fetch *)"
     ],
     "deny": [
       "Bash(rm -rf:*)",

@@ -31,6 +31,7 @@ export function ItemDetail() {
   
   // 編集関連
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({
     status: '',
     condition: '',
@@ -218,6 +219,17 @@ export function ItemDetail() {
     } catch (error) {
       console.error('編集エラー:', error)
       alert('編集中にエラーが発生しました')
+    }
+  }
+
+  const handleDeleteHistory = async (historyId: string) => {
+    try {
+      await supabaseDb.deleteItemHistory(historyId)
+      setHistories(prev => prev.filter(h => h.id !== historyId))
+      setDeletingHistoryId(null)
+    } catch (error) {
+      console.error('履歴削除エラー:', error)
+      alert('履歴の削除に失敗しました')
     }
   }
 
@@ -674,9 +686,41 @@ export function ItemDetail() {
                             {getStatusText(history.to_status)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          実行者: {history.performed_by}
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs text-muted-foreground">
+                            実行者: {history.performed_by}
+                          </p>
+                          {deletingHistoryId === history.id ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-destructive">削除しますか？</span>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="text-xs h-6 px-2"
+                                onClick={() => handleDeleteHistory(history.id)}
+                              >
+                                削除
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs h-6 px-2"
+                                onClick={() => setDeletingHistoryId(null)}
+                              >
+                                取消
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-6 px-2 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeletingHistoryId(history.id)}
+                            >
+                              🗑️
+                            </Button>
+                          )}
+                        </div>
                         {history.location && (
                           <p className="text-xs text-muted-foreground">
                             場所: {history.location}
@@ -687,7 +731,7 @@ export function ItemDetail() {
                             備考: {history.notes}
                           </p>
                         )}
-                        
+
                         {/* メンテナンス履歴の場合のチェックリスト詳細 */}
                         {history.action.includes('メンテナンス') && history.metadata?.maintenanceChecklist && (
                           <div className="mt-2">

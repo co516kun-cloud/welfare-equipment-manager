@@ -66,6 +66,10 @@ interface InventoryState {
   
   // UI reset action
   resetUIState: () => void
+
+  // Realtime sync
+  enableRealtimeSync: () => void
+  disableRealtimeSync: () => void
 }
 
 
@@ -641,6 +645,48 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       selectedProduct: null,
       viewMode: 'category'
     })
+  },
+
+  enableRealtimeSync: () => {
+    const channel = supabase
+      .channel('product-items-sync')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'product_items' },
+        (payload) => {
+          const updated = payload.new as ProductItem
+          const items = get().items
+          const newItems = items.map(item =>
+            item.id === updated.id ? { ...item, ...updated } : item
+          )
+          set({ items: newItems })
+          get().clearItemsCache()
+          console.log(`🔄 Realtime: ${updated.id} → ${updated.status}`)
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime sync connected')
+        } else if (status === 'CHANNEL_ERROR') {
+          console.warn('⚠️ Realtime connection error, retrying in 5s...')
+          setTimeout(() => {
+            get().disableRealtimeSync()
+            get().enableRealtimeSync()
+          }, 5000)
+        }
+      })
+
+    // チャンネル参照を保持（クリーンアップ用）
+    ;(window as any).__realtimeChannel = channel
+  },
+
+  disableRealtimeSync: () => {
+    const channel = (window as any).__realtimeChannel
+    if (channel) {
+      supabase.removeChannel(channel)
+      ;(window as any).__realtimeChannel = null
+      console.log('🔌 Realtime sync disconnected')
+    }
   },
 }))
 

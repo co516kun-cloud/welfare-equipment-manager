@@ -42,22 +42,22 @@ function App() {
   const [dataLoading, setDataLoading] = useState(false)
   
   // ストアの関数を取得
-  const { loadInitialData } = useInventoryStore()
-  
+  const { loadInitialData, enableRealtimeSync, disableRealtimeSync } = useInventoryStore()
+
   // 認証完了後にデータを初期化
   useEffect(() => {
     const initializeApp = async () => {
       // 認証されているユーザーがいて、まだデータ初期化が完了していない場合のみ実行
       if (user && hasSupabaseConfig && !dataInitialized && !dataLoading) {
         setDataLoading(true)
-        
+
         try {
           // シンプルな一括読み込み（カテゴリー分けなし）
           await loadInitialData()
-          
-          
+
+
           setDataInitialized(true)
-          
+
         } catch (error) {
           console.error('❌ App initialization failed:', error)
           // TODO: エラー時のフォールバック処理
@@ -66,9 +66,17 @@ function App() {
         }
       }
     }
-    
+
     initializeApp()
   }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadInitialData])
+
+  // データ初期化完了後にRealtime同期を開始
+  useEffect(() => {
+    if (dataInitialized && user) {
+      enableRealtimeSync()
+      return () => disableRealtimeSync()
+    }
+  }, [dataInitialized, user, enableRealtimeSync, disableRealtimeSync])
 
   
   // 環境変数がない場合はデバッグモードで起動

@@ -160,6 +160,23 @@ export function ScanActionDialog({
     const action = getAvailableActions(selectedItem.status).find(a => a.key === actionType)
     if (!action) return
 
+    // サーバー側の最新ステータスを確認（二重処理防止）
+    try {
+      const latestItem = await supabaseDb.getProductItemById(selectedItem.id)
+      if (latestItem && latestItem.status !== selectedItem.status) {
+        alert(`この商品は既に別の処理が行われています。\n\n現在のステータス: ${latestItem.status}\n\n画面を更新します。`)
+        // ストアを最新状態に更新
+        const currentItems = useInventoryStore.getState().items
+        useInventoryStore.setState({
+          items: currentItems.map(i => i.id === latestItem.id ? latestItem : i)
+        })
+        onOpenChange(false)
+        return
+      }
+    } catch (error) {
+      console.error('ステータス確認エラー:', error)
+    }
+
     // メンテナンス処理で、サブカテゴリが必要な商品の場合の検証
     if (actionType === 'maintenance' && selectedItem.product) {
       const categoryId = selectedItem.product.category_id || selectedItem.product.category
