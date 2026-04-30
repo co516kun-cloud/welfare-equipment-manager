@@ -1,10 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
+import { homedir } from 'os'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   base: './',
+  envDir: resolve(homedir(), 'secrets/welfare-equipment-manager'),
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
