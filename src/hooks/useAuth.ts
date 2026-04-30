@@ -87,26 +87,6 @@ export const login = async (email: string, password: string) => {
   return data
 }
 
-// サインアップ機能
-export const signUp = async (email: string, password: string, name?: string) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        name: name || email.split('@')[0]
-      }
-    }
-  })
-  
-  if (error) {
-    console.error('Signup error:', error)
-    throw error
-  }
-  
-  return data
-}
-
 // ログアウト機能
 export const logout = async () => {
   const isDebugMode = import.meta.env.VITE_SUPABASE_URL?.includes('dummy')

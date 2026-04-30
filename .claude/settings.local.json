@@ -53,7 +53,21 @@
       "Bash(mkdir -p /home/taguchi/secrets/welfare-equipment-manager)",
       "Bash(chmod 700 /home/taguchi/secrets)",
       "Bash(chmod 700 /home/taguchi/secrets/welfare-equipment-manager)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(npm audit *)",
+      "Bash(docker --version)",
+      "Bash(curl -sL \"https://api.github.com/repos/gitleaks/gitleaks/releases/latest\")",
+      "Bash(mkdir -p /tmp/gitleaks)",
+      "Read(//tmp/**)",
+      "Bash(curl -sL \"https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz\")",
+      "Bash(tar xz *)",
+      "Bash(./gitleaks version *)",
+      "Bash(/tmp/gitleaks/gitleaks detect *)",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:snyk.io)",
+      "Bash(git remote *)",
+      "Bash(sort -k2)"
     ],
     "deny": [
       "Bash(rm -rf:*)",

@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { login, signUp } from '../hooks/useAuth'
+import { login } from '../hooks/useAuth'
 
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -18,13 +16,8 @@ export function Login() {
     setError('')
 
     try {
-      if (isSignUp) {
-        await signUp(email, password, name)
-        setError('サインアップが完了しました。メールを確認してください。')
-      } else {
-        await login(email, password)
-        // ログイン成功時は、useAuthの状態変化によって自動的にメインアプリが表示される
-      }
+      await login(email, password)
+      // ログイン成功時は、useAuthの状態変化によって自動的にメインアプリが表示される
     } catch (err: any) {
       setError(err.message || 'エラーが発生しました')
     } finally {
@@ -41,28 +34,12 @@ export function Login() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-bold text-foreground">福祉用具管理システム</h1>
-            <p className="text-muted-foreground mt-2">
-              {isSignUp ? 'アカウントを作成' : 'ログインしてください'}
-            </p>
+            <p className="text-muted-foreground mt-2">ログインしてください</p>
           </div>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="name">お名前</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="田中太郎"
-                  required={isSignUp}
-                />
-              </div>
-            )}
-            
             <div className="space-y-2">
               <Label htmlFor="email">メールアドレス</Label>
               <Input
@@ -93,23 +70,13 @@ export function Login() {
               </div>
             )}
 
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="w-full"
               disabled={loading}
             >
-              {loading ? '処理中...' : isSignUp ? 'アカウント作成' : 'ログイン'}
+              {loading ? '処理中...' : 'ログイン'}
             </Button>
-            
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-sm text-primary hover:underline"
-              >
-                {isSignUp ? 'すでにアカウントをお持ちですか？ログイン' : 'アカウントをお持ちでない方はこちら'}
-              </button>
-            </div>
           </form>
         </div>
 

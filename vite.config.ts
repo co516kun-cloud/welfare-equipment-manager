@@ -4,10 +4,13 @@ import { resolve } from 'path'
 import { homedir } from 'os'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   base: './',
   envDir: resolve(homedir(), 'secrets/welfare-equipment-manager'),
+  esbuild: {
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -26,4 +29,4 @@ export default defineConfig({
     },
     cors: true,
   },
-})
+}))
