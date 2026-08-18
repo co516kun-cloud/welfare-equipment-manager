@@ -196,17 +196,24 @@ export function Inventory() {
       item.product_id === productId && item.status === 'available'
     ).length
 
-    // 未完了発注数（item_processing_status が 'waiting' の注文明細のみカウント）
-    // 'waiting' = 管理番号未割り当て（まだ物理在庫として残っている）
+    // 未完了発注数（item_processing_status が 'waiting' かつ 管理番号 *未* 割り当ての明細のみカウント）
+    // 'waiting' = 準備待ち
     // 'ready' = 管理番号割り当て済み（既に物理在庫から除外されている）→ カウント不要
     // 'delivered' = 配送完了 → カウント不要
     // 'cancelled' = キャンセル → カウント不要
+    //
+    // ⚠️ waiting でも assigned_item_ids が入っているものは引かない。
+    // 管理番号を指定した発注（handleOrderSubmit）は、waiting の明細を作ると同時に
+    // その個体を 'reserved' にするため、既に physicalStock（available）から抜けている。
+    // ここで引くと同じ1台を二重に引いてしまい、現物があるのに実質在庫0になる。
+    // 数量指定の通常発注（orders.tsx）は assigned_item_ids が空 = available に残っているので引く。
     const pendingOrders = orders
       .filter(order => ['pending', 'approved'].includes(order.status))
       .reduce((count, order) => {
         const productItems = order.items.filter(item =>
           item.product_id === productId &&
-          item.item_processing_status === 'waiting'  // waiting のみカウント
+          item.item_processing_status === 'waiting' &&
+          !(item.assigned_item_ids && item.assigned_item_ids.length > 0)
         )
         return count + productItems.reduce((sum, item) => {
           return sum + item.quantity
@@ -901,16 +908,19 @@ export function Inventory() {
             // 実質在庫を計算
             const { effectiveStock, physicalStock, pendingOrders } = getEffectiveStock(productId)
             const hasStock = effectiveStock > 0
+            // 閲覧の可否は「物理在庫があるか」だけで決める（発注の可否 = hasStock とは分ける）
+            // 全数が発注中で実質在庫0でも、現物がある限り管理番号は確認できる必要がある
+            const canViewItems = items.length > 0
             const isLow = isLowStock(productId)
 
             return (
               <div
                 key={productId}
                 className={`bg-white/95 backdrop-blur-xl rounded-xl p-4 shadow-lg ${
-                  hasStock ? 'cursor-pointer' : 'cursor-default opacity-60'
-                }`}
+                  hasStock ? '' : 'opacity-60'
+                } ${canViewItems ? 'cursor-pointer' : 'cursor-default'}`}
                 onClick={() => {
-                  if (hasStock && items.length > 0) {
+                  if (canViewItems) {
                     setSelectedProductItems(items)
                     setShowManagementNumbers(true)
                   }
@@ -947,7 +957,7 @@ export function Inventory() {
                 </div>
                 
                 {/* 管理番号リスト */}
-                {hasStock && items.length > 0 ? (
+                {canViewItems ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {items.slice(0, 4).map(item => (
                       <div
@@ -962,11 +972,16 @@ export function Inventory() {
                         他 {items.length - 4} 台
                       </div>
                     )}
+                    {!hasStock && (
+                      <div className="col-span-2 text-xs text-slate-500 text-center pt-1">
+                        発注中（確認のみ・発注不可）
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="mt-3 text-center py-4">
                     <div className="text-slate-400 text-sm">
-                      {physicalStock > 0 ? '実質在庫なし（発注中）' : '在庫なし'}
+                      在庫なし
                     </div>
                   </div>
                 )}
