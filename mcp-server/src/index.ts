@@ -387,6 +387,207 @@ server.tool("get_users", "ユーザー一覧を取得", {}, async () => {
 });
 
 // ============================================================
+// 書き込み（2026-08-18 追加）
+// ============================================================
+//
+// 🔴 なぜ MCP に足すのか
+//   Supabase MCP で DB を直接書くこともできるが、それだと**アプリと同じ手順**にならない。
+//   このアプリは status を変えるたびに item_histories に1行残す設計で、履歴が
+//   「いつ・誰が・何から何へ」の唯一の記録になっている。直書きはそれを飛ばす。
+//   → 書き込みは必ずここを通し、**本体の更新と履歴を必ずセット**にする。
+//
+// 🔴 MCP_AGGREGATE_ONLY=1 のセッション（共通層・他の軸）では、この2本も登録されない。
+//   AGGREGATE_SAFE に入れていないため上のラッパーが弾く。読みと同じ境界が自動で効く。
+
+const ITEM_STATUS = [
+  "available",
+  "reserved",
+  "ready_for_delivery",
+  "rented",
+  "returned",
+  "cleaning",
+  "maintenance",
+  "demo_cancelled",
+  "out_of_order",
+  "unknown",
+] as const;
+
+const ITEM_CONDITION = ["good", "fair", "caution", "needs_repair", "unknown"] as const;
+
+/** 履歴を1行残す。本体の更新が成功した後にだけ呼ぶ。 */
+async function writeHistory(args: {
+  itemId: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string | null;
+  performedBy: string;
+  location?: string | null;
+  condition?: string | null;
+  customerName?: string | null;
+  notes?: string | null;
+}): Promise<string | null> {
+  const { error } = await supabase.from("item_histories").insert({
+    item_id: args.itemId,
+    action: args.action,
+    from_status: args.fromStatus,
+    to_status: args.toStatus,
+    performed_by: args.performedBy,
+    timestamp: new Date().toISOString(),
+    location: args.location ?? null,
+    condition: args.condition ?? null,
+    customer_name: args.customerName ?? null,
+    notes: args.notes ?? null,
+  });
+  return error ? error.message : null;
+}
+
+// --- 新規登録 ---
+server.tool(
+  "create_product_item",
+  "商品アイテム（個体）を新規登録する。管理番号の重複と product_id の存在を先に確認し、履歴も1行残す",
+  {
+    id: z.string().describe("個別管理番号（例: RP-001）。既存と重複したら登録しない"),
+    product_id: z.string().describe("商品ID。存在しなければ登録しない"),
+    location: z.string().describe("倉庫での管理場所"),
+    status: z.enum(ITEM_STATUS).optional().describe("初期ステータス（既定: available）"),
+    condition: z.enum(ITEM_CONDITION).optional().describe("状態（既定: good）"),
+    qr_code: z.string().optional().describe("QRコード（既定: id と同じ）"),
+    condition_notes: z.string().optional().describe("状態メモ"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+  },
+  async (a) => {
+    const performedBy = a.performed_by ?? "MCP";
+    const status = a.status ?? "available";
+
+    const { data: dup } = await supabase
+      .from("product_items")
+      .select("id")
+      .eq("id", a.id)
+      .maybeSingle();
+    if (dup) {
+      return { content: [{ type: "text", text: `中止: 管理番号 ${a.id} は既に存在します` }] };
+    }
+
+    const { data: product, error: pErr } = await supabase
+      .from("products")
+      .select("id, name")
+      .eq("id", a.product_id)
+      .maybeSingle();
+    if (pErr) return { content: [{ type: "text", text: `Error: ${pErr.message}` }] };
+    if (!product) {
+      return { content: [{ type: "text", text: `中止: product_id ${a.product_id} が存在しません` }] };
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("product_items").insert({
+      id: a.id,
+      product_id: a.product_id,
+      status,
+      condition: a.condition ?? "good",
+      location: a.location,
+      qr_code: a.qr_code ?? a.id,
+      // ⚠️ 型定義(src/types)には current_setting があるが、**本番DBの列には無い**（2026-08-18 実測）。
+      //    書くと "Could not find the 'current_setting' column" で insert ごと失敗する。
+      //    型と実DBがずれている。足すなら先にマイグレーションから。
+      condition_notes: a.condition_notes ?? null,
+      created_at: now,
+      updated_at: now,
+    });
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+    const histErr = await writeHistory({
+      itemId: a.id,
+      action: "新規登録",
+      // ⚠️ item_histories.from_status は NOT NULL（2026-08-18 実測）。
+      //    新規登録には「前の状態」が無いので空文字を入れる。null だと insert が落ちる。
+      fromStatus: "",
+      toStatus: status,
+      performedBy,
+      location: a.location,
+      condition: a.condition ?? "good",
+      notes: a.condition_notes ?? null,
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            `登録しました: ${a.id}（${(product as any).name ?? a.product_id}）status=${status} 場所=${a.location}` +
+            (histErr ? `\n⚠️ 本体は登録済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました"),
+        },
+      ],
+    };
+  }
+);
+
+// --- ステータス更新 ---
+server.tool(
+  "update_item_status",
+  "商品アイテムのステータス等を更新する。現在値を読んでから更新し、履歴（from→to）を1行残す",
+  {
+    item_id: z.string().describe("個別管理番号（例: RP-001）"),
+    status: z.enum(ITEM_STATUS).describe("新しいステータス"),
+    condition: z.enum(ITEM_CONDITION).optional().describe("状態も変える場合"),
+    location: z.string().optional().describe("保管場所も変える場合"),
+    customer_name: z.string().optional().describe("貸与先。返却時は空文字を渡すとクリアされる"),
+    loan_start_date: z.string().optional().describe("貸与開始日 YYYY-MM-DD。空文字でクリア"),
+    condition_notes: z.string().optional().describe("状態メモ"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+    action: z.string().optional().describe("履歴に残す操作名（既定: ステータス更新）"),
+  },
+  async (a) => {
+    const performedBy = a.performed_by ?? "MCP";
+
+    const { data: current, error: cErr } = await supabase
+      .from("product_items")
+      .select("*")
+      .eq("id", a.item_id)
+      .maybeSingle();
+    if (cErr) return { content: [{ type: "text", text: `Error: ${cErr.message}` }] };
+    if (!current) {
+      return { content: [{ type: "text", text: `中止: ${a.item_id} が見つかりません` }] };
+    }
+
+    const from = (current as any).status as string;
+    const patch: Record<string, any> = { status: a.status, updated_at: new Date().toISOString() };
+    if (a.condition !== undefined) patch.condition = a.condition;
+    if (a.location !== undefined) patch.location = a.location;
+    if (a.condition_notes !== undefined) patch.condition_notes = a.condition_notes;
+    // 空文字はクリア（返却で貸与先を消す用途）
+    if (a.customer_name !== undefined) patch.customer_name = a.customer_name === "" ? null : a.customer_name;
+    if (a.loan_start_date !== undefined)
+      patch.loan_start_date = a.loan_start_date === "" ? null : a.loan_start_date;
+
+    const { error } = await supabase.from("product_items").update(patch).eq("id", a.item_id);
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+    const histErr = await writeHistory({
+      itemId: a.item_id,
+      action: a.action ?? "ステータス更新",
+      fromStatus: from,
+      toStatus: a.status,
+      performedBy,
+      location: patch.location ?? (current as any).location,
+      condition: patch.condition ?? (current as any).condition,
+      customerName: patch.customer_name ?? (current as any).customer_name ?? null,
+      notes: a.condition_notes ?? null,
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text:
+            `更新しました: ${a.item_id} ${from} → ${a.status}` +
+            (histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました"),
+        },
+      ],
+    };
+  }
+);
+
+// ============================================================
 // Start server
 // ============================================================
 async function main() {
