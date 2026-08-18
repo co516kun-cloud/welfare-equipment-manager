@@ -587,6 +587,57 @@ server.tool(
   }
 );
 
+// --- ラベル印刷キューに追加 ---
+//
+// 2026-08-18 追加。**足した理由を残しておく:**
+// Slack の L4 から「返却→消毒→入庫→ラベル追加」を1本で頼まれた時、ステータス3段は
+// update_item_status で通ったが、ラベル追加のツールが無かったので **Bash から DB を直接叩いた。**
+// 結果は正しかったが、それは「直書きは禁止」と自分で書いた経路そのもの。
+// **よく使う流れがツールで閉じていないと、直書きに逃げる。**だからここに足す。
+server.tool(
+  "queue_label_print",
+  "ラベル印刷キューに1件追加する。個体の存在と商品名を先に引いてから登録する",
+  {
+    item_id: z.string().describe("個別管理番号（例: RA-069）"),
+    condition_notes: z.string().optional().describe("状態メモ（既定: 空）"),
+    created_by: z.string().optional().describe("登録者名（既定: MCP）"),
+  },
+  async ({ item_id, condition_notes, created_by }) => {
+    const { data: item, error: iErr } = await supabase
+      .from("product_items")
+      .select("id, product_id")
+      .eq("id", item_id)
+      .maybeSingle();
+    if (iErr) return { content: [{ type: "text", text: `Error: ${iErr.message}` }] };
+    if (!item) return { content: [{ type: "text", text: `中止: ${item_id} が見つかりません` }] };
+
+    // 商品名はキューの表示に使う。取れなくても登録は止めない（管理番号だけでも印刷できる）
+    let productName = "";
+    const { data: product } = await supabase
+      .from("products")
+      .select("name")
+      .eq("id", (item as any).product_id)
+      .maybeSingle();
+    if (product) productName = (product as any).name || "";
+
+    const { error } = await supabase.from("label_print_queue").insert({
+      item_id,
+      product_name: productName,
+      management_id: item_id,
+      condition_notes: condition_notes ?? "",
+      status: "pending",
+      created_by: created_by ?? "MCP",
+    });
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+    return {
+      content: [
+        { type: "text", text: `ラベルキューに追加しました: ${item_id}（${productName || "商品名なし"}）status=pending` },
+      ],
+    };
+  }
+);
+
 // ============================================================
 // Start server
 // ============================================================
