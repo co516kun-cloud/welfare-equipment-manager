@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -441,6 +443,101 @@ async function writeHistory(args: {
   return error ? error.message : null;
 }
 
+/**
+ * ラベル印刷キューに1行入れる。成功なら error=null。
+ *
+ * 🔴 2026-08-18 田口さんの指示:「新規登録や入庫処理をしたときはラベル印刷はオンにしてほしい」
+ *   → 呼び出し側が明示しない限り、新規登録と入庫処理では**既定でここを通る**。
+ *   キューに入れるだけで印刷はしない。実際の印刷はアプリの「ラベル印刷待ち」ページから。
+ */
+async function queueLabel(args: {
+  itemId: string;
+  productName?: string | null;
+  conditionNotes?: string | null;
+  createdBy: string;
+}): Promise<{ error: string | null; productName: string; id: string | null }> {
+  let productName = args.productName ?? "";
+  // 商品名はキューの表示に使う。取れなくても登録は止めない（管理番号だけでも印刷できる）
+  if (!productName) {
+    const { data: item } = await supabase
+      .from("product_items")
+      .select("product_id")
+      .eq("id", args.itemId)
+      .maybeSingle();
+    if (item) {
+      const { data: product } = await supabase
+        .from("products")
+        .select("name")
+        .eq("id", (item as any).product_id)
+        .maybeSingle();
+      productName = ((product as any)?.name as string) || "";
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("label_print_queue")
+    .insert({
+      item_id: args.itemId,
+      product_name: productName,
+      management_id: args.itemId,
+      condition_notes: args.conditionNotes ?? "",
+      status: "pending",
+      created_by: args.createdBy,
+    })
+    .select("id")
+    .single();
+  return { error: error ? error.message : null, productName, id: (data as any)?.id ?? null };
+}
+
+/**
+ * キューに入れて、そのまま印刷まで行く。返すのは Slack にそのまま出せる1行。
+ *
+ * 2026-08-18 田口さん「これからの入庫処理や新規登録の際は指示せずとも自動でラベル印刷までいって」
+ * → **キューに入れる／印刷する を分けない。**分けると「入れたのに刷っていない」が溜まる。
+ *   刷りたくない時だけ print_label=false で止める。
+ */
+async function queueAndPrint(args: {
+  itemId: string;
+  productName?: string | null;
+  conditionNotes?: string | null;
+  by: string;
+}): Promise<string> {
+  // 🔴 ラベルで登録・更新ごと落とさない。
+  //   本体の登録は成功しているのに「エラー」と返ると、田口さんは登録し直そうとして重複する。
+  //   アプリ側も同じ考え方（new-item-dialog.tsx「ラベル印刷キューの追加に失敗してもアイテム登録は成功」）。
+  try {
+    return await queueAndPrintInner(args);
+  } catch (e: any) {
+    return `⚠️ 本体は反映済み。ラベルだけ失敗: ${e?.message ?? String(e)}`;
+  }
+}
+
+async function queueAndPrintInner(args: {
+  itemId: string;
+  productName?: string | null;
+  conditionNotes?: string | null;
+  by: string;
+}): Promise<string> {
+  const { error, productName, id } = await queueLabel({
+    itemId: args.itemId,
+    productName: args.productName ?? null,
+    conditionNotes: args.conditionNotes ?? null,
+    createdBy: args.by,
+  });
+  if (error) return `⚠️ ラベル印刷キューへの追加に失敗: ${error}`;
+  if (!id) return "ラベル印刷キューに追加しました（印刷は print_label_queue で）";
+
+  return await printQueueRow(
+    {
+      id,
+      management_id: args.itemId,
+      product_name: productName,
+      condition_notes: args.conditionNotes ?? null,
+    },
+    args.by
+  );
+}
+
 // --- 新規登録 ---
 server.tool(
   "create_product_item",
@@ -454,6 +551,10 @@ server.tool(
     qr_code: z.string().optional().describe("QRコード（既定: id と同じ）"),
     condition_notes: z.string().optional().describe("状態メモ"),
     performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+    print_label: z
+      .boolean()
+      .optional()
+      .describe("ラベルを**印刷まで**するか。**既定 true**（田口さん指示・2026-08-18）。要らない時だけ false"),
   },
   async (a) => {
     const performedBy = a.performed_by ?? "MCP";
@@ -508,13 +609,27 @@ server.tool(
       notes: a.condition_notes ?? null,
     });
 
+    // 新規登録は既定でラベルを**印刷まで**する（田口さん指示・2026-08-18）
+    let labelLine = "";
+    if (a.print_label ?? true) {
+      labelLine =
+        "\n" +
+        (await queueAndPrint({
+          itemId: a.id,
+          productName: (product as any).name ?? null,
+          conditionNotes: a.condition_notes ?? null,
+          by: performedBy,
+        }));
+    }
+
     return {
       content: [
         {
           type: "text",
           text:
             `登録しました: ${a.id}（${(product as any).name ?? a.product_id}）status=${status} 場所=${a.location}` +
-            (histErr ? `\n⚠️ 本体は登録済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました"),
+            (histErr ? `\n⚠️ 本体は登録済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました") +
+            labelLine,
         },
       ],
     };
@@ -534,7 +649,11 @@ server.tool(
     loan_start_date: z.string().optional().describe("貸与開始日 YYYY-MM-DD。空文字でクリア"),
     condition_notes: z.string().optional().describe("状態メモ"),
     performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
-    action: z.string().optional().describe("履歴に残す操作名（既定: ステータス更新）"),
+    action: z.string().optional().describe("履歴に残す操作名（既定: ステータス更新）。倉庫に戻す時は「入庫処理」"),
+    print_label: z
+      .boolean()
+      .optional()
+      .describe("ラベルを**印刷まで**するか。**既定は action に「入庫」を含む時 true**（田口さん指示・2026-08-18）"),
   },
   async (a) => {
     const performedBy = a.performed_by ?? "MCP";
@@ -562,9 +681,10 @@ server.tool(
     const { error } = await supabase.from("product_items").update(patch).eq("id", a.item_id);
     if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
 
+    const action = a.action ?? "ステータス更新";
     const histErr = await writeHistory({
       itemId: a.item_id,
-      action: a.action ?? "ステータス更新",
+      action,
       fromStatus: from,
       toStatus: a.status,
       performedBy,
@@ -574,13 +694,27 @@ server.tool(
       notes: a.condition_notes ?? null,
     });
 
+    // 入庫処理は既定でラベルを**印刷まで**する（アプリのスキャン画面が
+    // 入庫のあとに「ラベルを印刷しますか？」を出すのと同じ場面）
+    let labelLine = "";
+    if (a.print_label ?? /入庫/.test(action)) {
+      labelLine =
+        "\n" +
+        (await queueAndPrint({
+          itemId: a.item_id,
+          conditionNotes: a.condition_notes ?? (current as any).condition_notes ?? null,
+          by: performedBy,
+        }));
+    }
+
     return {
       content: [
         {
           type: "text",
           text:
             `更新しました: ${a.item_id} ${from} → ${a.status}` +
-            (histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました"),
+            (histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました") +
+            labelLine,
         },
       ],
     };
@@ -635,6 +769,151 @@ server.tool(
         { type: "text", text: `ラベルキューに追加しました: ${item_id}（${productName || "商品名なし"}）status=pending` },
       ],
     };
+  }
+);
+
+// --- 実際に印刷する ---
+//
+// 2026-08-18 追加。田口さん「作って」。
+// アプリ側（src/lib/label-printer.ts）は b-PAC の **ブラウザ拡張**を呼ぶので、
+// 画面を開いて人が押さないと刷れない。ここは同じ b-PAC を **COM** で叩くため、
+// WSL のリスナー（L4）から powershell.exe 越しに印刷できる。
+//
+// 🔴 プリンタのオンライン確認はしない。
+//   USB が消えていてもジョブは Windows のスプーラに溜まり、電源を入れると出る
+//   （田口さん「プリンタが落ちてても電源を入れたときに出てくる仕様じゃないの？」）。
+//   だから「送った」と「出た」を分けて記録する:
+//     printing  = スプーラに渡した（まだ紙は出ていないかもしれない）
+//     completed = スプーラからジョブが消えた＝出た
+//     failed    = ジョブが止まった / 例外
+const execFileAsync = promisify(execFile);
+const POWERSHELL = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+const PRINTER_NAME = "Brother QL-800";
+const PRINT_SCRIPT_WIN =
+  "C:\\Users\\taguchi\\Desktop\\claude-kanri\\welfare-equipment-manager\\scripts\\print-label.ps1";
+
+type PrintResult = { ok: boolean; stage: string; message?: string; states?: string[] };
+
+async function printOne(row: {
+  management_id: string;
+  product_name: string | null;
+  condition_notes: string | null;
+}): Promise<PrintResult> {
+  try {
+    const { stdout } = await execFileAsync(
+      POWERSHELL,
+      [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", PRINT_SCRIPT_WIN,
+        "-ManagementId", row.management_id,
+        "-ProductName", row.product_name ?? "",
+        "-ConditionNotes", row.condition_notes ?? "",
+      ],
+      { timeout: 90_000, maxBuffer: 4 * 1024 * 1024 }
+    );
+    // PowerShell が BOM や改行を混ぜることがあるので JSON の部分だけ取る
+    const m = stdout.match(/\{[\s\S]*\}/);
+    if (!m) return { ok: false, stage: "parse", message: `想定外の出力: ${stdout.slice(0, 200)}` };
+    return JSON.parse(m[0]) as PrintResult;
+  } catch (e: any) {
+    const msg = e?.code === "ENOENT" ? `powershell.exe が見つかりません: ${POWERSHELL}` : e?.message ?? String(e);
+    return { ok: false, stage: "spawn", message: msg };
+  }
+}
+
+/**
+ * 前回 printing のまま止まった行を拾い直す。
+ *
+ * ⚠️ 2026-08-18 実測: SL-119 が printing で残った。12秒待っても消えなかっただけで、
+ *   実際にはラベルは出ていた（田口さん確認・スプーラも空）。
+ *   **待ち時間を延ばしても同じことは起きる。**待つのではなく、後から辻褄を合わせる。
+ *   スプーラが空 = 送った分は全部出た、と見なせる。
+ */
+async function reconcilePrinting(): Promise<void> {
+  try {
+    const { stdout } = await execFileAsync(
+      POWERSHELL,
+      ["-NoProfile", "-Command", `@(Get-PrintJob -PrinterName '${PRINTER_NAME}' -ErrorAction SilentlyContinue).Count`],
+      { timeout: 20_000 }
+    );
+    const n = Number.parseInt(stdout.trim(), 10);
+    if (!Number.isFinite(n) || n > 0) return; // まだ待ちがいる間は触らない
+    await supabase
+      .from("label_print_queue")
+      .update({ status: "completed", printed_at: new Date().toISOString() })
+      .eq("status", "printing");
+  } catch {
+    // 見に行けなかっただけ。次の印刷でまた拾う
+  }
+}
+
+/** キューの1行を印刷して status を更新する。返すのは Slack にそのまま出せる1行。 */
+async function printQueueRow(
+  row: { id: string; management_id: string; product_name: string | null; condition_notes: string | null },
+  by: string
+): Promise<string> {
+  const name = row.product_name || "商品名なし";
+  await reconcilePrinting(); // 前回の取りこぼしを先に片づける
+  await supabase.from("label_print_queue").update({ status: "printing" }).eq("id", row.id);
+
+  const res = await printOne(row);
+
+  if (!res.ok) {
+    await supabase
+      .from("label_print_queue")
+      .update({ status: "failed", error_message: `${res.stage}: ${res.message ?? ""}`.slice(0, 500) })
+      .eq("id", row.id);
+    return `❌ ラベル ${row.management_id}（${name}）… ${res.message ?? res.stage}`;
+  }
+
+  if (res.stage === "queued") {
+    // スプーラで待っている。status は printing のまま（出たかどうかまだ分からない）
+    await supabase.from("label_print_queue").update({ printed_by: by }).eq("id", row.id);
+    return `🕒 ラベル ${row.management_id}（${name}）… プリンタに送信済み。電源が入れば出ます`;
+  }
+
+  await supabase
+    .from("label_print_queue")
+    .update({ status: "completed", printed_at: new Date().toISOString(), printed_by: by, error_message: null })
+    .eq("id", row.id);
+  return `✅ ラベル ${row.management_id}（${name}）… 印刷しました`;
+}
+
+server.tool(
+  "print_label_queue",
+  "ラベル印刷キューの pending を実際に印刷する（Brother QL-800・b-PAC COM 経由。ブラウザ不要）",
+  {
+    item_id: z.string().optional().describe("この個体の分だけ印刷する。省略すると pending を古い順に処理"),
+    limit: z.number().int().min(1).max(50).optional().describe("一度に印刷する上限（既定: 10）"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+  },
+  async ({ item_id, limit, performed_by }) => {
+    const by = performed_by ?? "MCP";
+    let q = supabase
+      .from("label_print_queue")
+      .select("id, item_id, management_id, product_name, condition_notes")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(limit ?? 10);
+    if (item_id) q = q.eq("item_id", item_id);
+
+    const { data: rows, error } = await q;
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    if (!rows || rows.length === 0) {
+      return {
+        content: [
+          { type: "text", text: item_id ? `${item_id} の未印刷ラベルはありません` : "未印刷のラベルはありません" },
+        ],
+      };
+    }
+
+    const lines: string[] = [];
+    for (const r of rows as any[]) {
+      lines.push(await printQueueRow(r, by));
+    }
+
+    return { content: [{ type: "text", text: lines.join("\n") }] };
   }
 );
 
