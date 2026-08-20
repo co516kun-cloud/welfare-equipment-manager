@@ -17,7 +17,7 @@ export interface Product {
 export interface ProductItem {
   id: string // 個別管理番号 (例: RP-001)
   product_id: string
-  status: 'available' | 'reserved' | 'ready_for_delivery' | 'rented' | 'returned' | 'cleaning' | 'maintenance' | 'demo_cancelled' | 'out_of_order' | 'unknown'
+  status: 'available' | 'reserved' | 'ready_for_delivery' | 'rented' | 'returned' | 'cleaning' | 'maintenance' | 'demo_cancelled' | 'out_of_order' | 'unknown' | 'disposed'
   condition: 'good' | 'fair' | 'caution' | 'needs_repair' | 'unknown'
   location: string // 倉庫での管理場所
   customer_name?: string // 貸与中の場合の顧客名

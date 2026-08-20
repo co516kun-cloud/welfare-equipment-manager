@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getAvailableActions as getItemActions, needsConfirm, STATUS_LABEL } from '../lib/item-status'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -106,59 +107,30 @@ export function ScanActionDialog({
     setShowMaintenanceChecklist(true)
   }
 
-  const getAvailableActions = (status: string) => {
-    const actions = []
-    
-    switch (status) {
-      case 'rented':
-        actions.push(
-          { key: 'return', label: '返却', nextStatus: 'returned' },
-          { key: 'demo_cancel', label: 'デモキャンセル', nextStatus: 'demo_cancelled' },
-          { key: 'demo_cancel_storage', label: 'デモキャン入庫', nextStatus: 'available' }
-        )
-        break
-      case 'returned':
-        actions.push(
-          { key: 'clean', label: '消毒完了', nextStatus: 'cleaning' }
-        )
-        break
-      case 'cleaning':
-        actions.push(
-          { key: 'maintenance', label: 'メンテナンス完了', nextStatus: 'maintenance' }
-        )
-        break
-      case 'maintenance':
-        actions.push(
-          { key: 'storage', label: '入庫処理', nextStatus: 'available' }
-        )
-        break
-      case 'demo_cancelled':
-        actions.push(
-          { key: 'storage', label: '入庫処理', nextStatus: 'available' }
-        )
-        break
-      case 'available':
-        if (availableOrders.length > 0) {
-          actions.push(
-            { key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }
-          )
-        }
-        break
-      case 'out_of_order':
-        actions.push(
-          { key: 'repair', label: '修理完了', nextStatus: 'available' }
-        )
-        break
-    }
-    
-    return actions
-  }
+  // 遷移表は src/lib/item-status.ts に集約した（2026-08-20）。ここで持たない。
+  const getAvailableActions = (status: string) =>
+    getItemActions(status, { hasAvailableOrders: availableOrders.length > 0 })
+
 
   const handleActionSubmit = async () => {
     if (!selectedItem) return
 
     const action = getAvailableActions(selectedItem.status).find(a => a.key === actionType)
-    if (!action) return
+    // 🔴 無言で return しない（2026-08-20）
+    //   以前はここで黙って終わっていたため、現物を持った現場が
+    //   「押しても何も起きない画面」を触ることになり、誰も報告できなかった。
+    if (!action) {
+      console.warn('[scan] この状態に対する操作が見つかりません:', selectedItem.status, actionType)
+      alert(`この商品は現在「${STATUS_LABEL[selectedItem.status] ?? selectedItem.status}」です。\nこの状態ではその操作を実行できません。`)
+      return
+    }
+
+    // 廃棄など戻すのが面倒な操作は、実行前に1枚挟む（誤タップ防止）
+    if (needsConfirm(action)) {
+      const name = selectedItem.product?.name || selectedItem.product_id
+      const no = selectedItem.qr_code || selectedItem.id
+      if (!window.confirm(`${name}（${no}）を「${STATUS_LABEL[action.nextStatus]}」にします。\n\nよろしいですか？`)) return
+    }
 
     // サーバー側の最新ステータスを確認（二重処理防止）
     try {
@@ -227,9 +199,12 @@ export function ScanActionDialog({
 
       // 商品状態が「要修理」の場合はステータスを「故障中」に変更
       const newCondition = (actionForm.condition || selectedItem.condition) as ProductItem['condition']
-      const finalStatus = newCondition === 'needs_repair'
-        ? 'out_of_order' as ProductItem['status']
-        : action.nextStatus as ProductItem['status']
+      // 🔴 廃棄は「要修理」より優先する（2026-08-20）
+      //   以前は condition='needs_repair' なら無条件に out_of_order へ倒していたため、
+      //   壊れているから廃棄したい個体が、廃棄ではなく故障中になっていた。
+      const finalStatus = (action.nextStatus === 'disposed' || newCondition !== 'needs_repair')
+        ? action.nextStatus as ProductItem['status']
+        : 'out_of_order' as ProductItem['status']
 
       // 全フィールドを含めて1回で保存（データベース + ストア更新）
       const updatedItem: ProductItem = {

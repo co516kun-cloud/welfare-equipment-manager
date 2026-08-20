@@ -1,4 +1,5 @@
 import { Button } from '../components/ui/button'
+import { getAvailableActions as getItemActions } from '../lib/item-status'
 import { Input } from '../components/ui/input'
 import { ScanActionDialog } from '../components/scan-action-dialog'
 import { MobileScanUI } from '../components/mobile-scan-ui'
@@ -184,6 +185,7 @@ function ScanComponent() {
       case 'maintenance': return 'bg-warning text-warning-foreground'
       case 'demo_cancelled': return 'bg-info text-info-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
+      case 'disposed': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
   }
@@ -197,73 +199,18 @@ function ScanComponent() {
       case 'maintenance': return 'メンテナンス済み'
       case 'demo_cancelled': return 'デモキャンセル'
       case 'out_of_order': return '故障中'
+      case 'disposed': return '廃棄済み'
       default: return status
     }
   }
 
-  const getAvailableActions = (status: string) => {
-    console.log('🎬 Getting available actions for status:', status)
-    const actions = []
-    
-    switch (status) {
-      case 'rented':
-        actions.push(
-          { key: 'return', label: '返却', nextStatus: 'returned' },
-          { key: 'demo_cancel', label: 'デモキャンセル', nextStatus: 'demo_cancelled' },
-          { key: 'demo_cancel_storage', label: 'デモキャン入庫', nextStatus: 'available' }
-        )
-        break
-      case 'returned':
-        actions.push(
-          { key: 'clean', label: '消毒完了', nextStatus: 'cleaning' }
-        )
-        break
-      case 'cleaning':
-        actions.push(
-          { key: 'maintenance', label: 'メンテナンス完了', nextStatus: 'maintenance' }
-        )
-        break
-      case 'maintenance':
-        actions.push(
-          { key: 'storage', label: '入庫処理', nextStatus: 'available' }
-        )
-        break
-      case 'demo_cancelled':
-        actions.push(
-          { key: 'storage', label: '入庫処理', nextStatus: 'available' }
-        )
-        break
-      case 'available':
-        // 利用可能な商品について、承認済みの発注があるかチェック
-        console.log('📋 Available orders count:', availableOrders.length)
-        if (availableOrders.length > 0) {
-          actions.push(
-            { key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }
-          )
-        } else {
-          // availableの場合でも基本アクションを追加
-          actions.push(
-            { key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }
-          )
-        }
-        break
-      case 'out_of_order':
-        actions.push(
-          { key: 'repair', label: '修理完了', nextStatus: 'available' }
-        )
-        break
-      default:
-        console.log('⚠️ Unknown status:', status)
-        // 不明なステータスでも基本操作を提供
-        actions.push(
-          { key: 'update_status', label: 'ステータス更新', nextStatus: 'available' }
-        )
-        break
-    }
-    
-    console.log('✅ Available actions:', actions)
-    return actions
-  }
+  // 遷移表は src/lib/item-status.ts に集約した（2026-08-20）。
+  // 以前はこの関数とダイアログ側が別々に同じ switch を持ち、内容がずれて
+  // unknown / ready_for_delivery で「押しても何も起きない」状態になっていた。
+  const getAvailableActions = (status: string) =>
+    getItemActions(status, { hasAvailableOrders: availableOrders.length > 0 })
+
+
 
   const handleActionSelect = useCallback(async (action: any) => {
     console.log('🎯 Action selected:', action)

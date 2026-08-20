@@ -491,6 +491,7 @@ export function Search() {
       case 'cleaning': return 'bg-warning text-warning-foreground'
       case 'maintenance': return 'bg-warning text-warning-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
+      case 'disposed': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
   }
@@ -506,6 +507,7 @@ export function Search() {
       case 'cleaning': return '清掃中'
       case 'maintenance': return 'メンテナンス中'
       case 'out_of_order': return '故障中'
+      case 'disposed': return '廃棄済み'
       default: return status
     }
   }
@@ -623,6 +625,7 @@ export function Search() {
                 <option value="cleaning">清掃中</option>
                 <option value="maintenance">メンテナンス中</option>
                 <option value="out_of_order">故障中</option>
+                <option value="disposed">廃棄済み</option>
               </Select>
             </div>
             
@@ -949,6 +952,7 @@ export function Search() {
                   <option value="maintenance">メンテナンス済み</option>
                   <option value="demo_cancelled">デモキャンセル</option>
                   <option value="out_of_order">故障中</option>
+                <option value="disposed">廃棄済み</option>
                   <option value="unknown">不明</option>
                 </Select>
               </div>

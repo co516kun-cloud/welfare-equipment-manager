@@ -245,6 +245,7 @@ export function Preparation() {
           'reserved': '予約済み',
           'demo_cancelled': 'デモキャンセル',
           'out_of_order': '故障中',
+      'disposed': '廃棄済み',
           'unknown': '状態不明'
         }[scannedItem.status] || scannedItem.status
         
@@ -503,6 +504,7 @@ export function Preparation() {
         'maintenance': 'メンテナンス中',
         'demo_cancelled': 'デモキャンセル',
         'out_of_order': '故障中',
+      'disposed': '廃棄済み',
         'unknown': '状態不明'
       }[productItem.status] || productItem.status
       

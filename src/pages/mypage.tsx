@@ -877,6 +877,7 @@ export function MyPage() {
         'maintenance': 'メンテナンス中',
         'demo_cancelled': 'デモキャンセル',
         'out_of_order': '故障中',
+      'disposed': '廃棄済み',
         'unknown': '状態不明'
       }
       setDirectRentalError(`この商品は現在利用できません\nステータス: ${statusText[productItem.status] || productItem.status}`)
