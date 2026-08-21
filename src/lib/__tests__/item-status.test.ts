@@ -125,3 +125,42 @@ describe('画面表示への反映', () => {
     expect(s).toMatch(/case 'disposed': return 'bg-muted text-muted-foreground'/)
   })
 })
+
+describe('デモの戻し（袋から出したかで分ける）', () => {
+  // 田口さん確定（2026-08-21）
+  //   袋から出していない → デモキャン入庫でそのまま倉庫へ
+  //   袋から出した       → デモキャンセル（返却と同じ扱い）でフローが回る
+  const rented = getAvailableActions('rented')
+
+  it('袋から出した分は消毒ラインに乗る', () => {
+    const a = rented.find(x => x.key === 'demo_cancel')
+    expect(a?.nextStatus).toBe('returned')
+    expect(a?.label).toContain('袋から出した')
+  })
+
+  it('未開封はそのまま倉庫へ（消毒を通さない）', () => {
+    const a = rented.find(x => x.key === 'demo_cancel_storage')
+    expect(a?.nextStatus).toBe('available')
+    expect(a?.label).toContain('未開封')
+  })
+
+  it('🔴 どちらを押すか、ラベルだけで判断できる', () => {
+    // 以前は「デモキャンセル」「デモキャン入庫」で見分けがつかず、
+    // 12ヶ月で24台が消毒の記録なしに再貸与されていた
+    const labels = rented.map(x => x.label)
+    expect(labels.some(l => /袋から出した/.test(l))).toBe(true)
+    expect(labels.some(l => /未開封/.test(l))).toBe(true)
+  })
+
+  it('返却と同じ行き先になる', () => {
+    const ret = rented.find(x => x.key === 'return')
+    const demo = rented.find(x => x.key === 'demo_cancel')
+    expect(demo?.nextStatus).toBe(ret?.nextStatus)
+  })
+
+  it('過去の demo_cancelled からも消毒へ回せる', () => {
+    const keys = getAvailableActions('demo_cancelled').map(x => x.key)
+    expect(keys).toContain('to_returned')
+    expect(keys).toContain('storage')
+  })
+})

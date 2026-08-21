@@ -51,10 +51,16 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
 
   switch (status as ItemStatus) {
     case 'rented':
+      // 🔴 デモの戻しは「袋から出したか」で分ける（田口さん確定・2026-08-21）
+      //   出した → 返却と同じ扱い。消毒ラインに乗せる
+      //   出していない → そのまま倉庫へ（消毒不要）
+      //   以前は「デモキャンセル」も消毒を通らなかったため、12ヶ月で24台が
+      //   消毒の記録が無いまま次の人へ再貸与されていた。
+      //   消毒記録は法令上の保存義務がある（kaizen/03_genba/CLAUDE.md）。
       return [
         { key: 'return', label: '返却', nextStatus: 'returned' },
-        { key: 'demo_cancel', label: 'デモキャンセル', nextStatus: 'demo_cancelled' },
-        { key: 'demo_cancel_storage', label: 'デモキャン入庫', nextStatus: 'available' },
+        { key: 'demo_cancel', label: 'デモキャンセル（袋から出した→消毒へ）', nextStatus: 'returned' },
+        { key: 'demo_cancel_storage', label: 'デモキャン入庫（未開封→そのまま倉庫）', nextStatus: 'available' },
         DISPOSE,
       ]
 
@@ -77,7 +83,12 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
       ]
 
     case 'demo_cancelled':
-      return [{ key: 'storage', label: '入庫処理', nextStatus: 'available' }]
+      // 過去データ用。いまは demo_cancel が returned へ行くのでここに入る個体は出ない。
+      // 消毒へ回す道も足しておく（袋から出していたものが紛れていた場合のため）
+      return [
+        { key: 'to_returned', label: '消毒へ回す', nextStatus: 'returned' },
+        { key: 'storage', label: '入庫処理（未開封）', nextStatus: 'available' },
+      ]
 
     case 'available':
       return ctx.hasAvailableOrders
