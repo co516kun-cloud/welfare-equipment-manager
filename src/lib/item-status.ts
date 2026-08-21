@@ -23,7 +23,16 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
 
 export interface ItemAction {
   key: string
+  /** ボタンに出す文言。分かりやすさのために変えてよい */
   label: string
+  /**
+   * 履歴に残す操作名。**変えてはいけない。**
+   * 🔴 履歴の action は集計の軸になっている。ラベルを変えるとここも変わってしまい、
+   *    「年間で何件デモキャンセルがあったか」のような集計が、その日を境に途切れる。
+   *    実際に 2026-08-21 にラベルを変えて壊しかけた。ラベルと記録名を分ける。
+   *    省略時は label を使う（従来どおり）。
+   */
+  record?: string
   nextStatus: ItemStatus
   /** 実行前に確認を挟む（廃棄など、戻すのが面倒な操作） */
   danger?: boolean
@@ -59,8 +68,10 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
       //   消毒記録は法令上の保存義務がある（kaizen/03_genba/CLAUDE.md）。
       return [
         { key: 'return', label: '返却', nextStatus: 'returned' },
-        { key: 'demo_cancel', label: 'デモキャンセル（袋から出した→消毒へ）', nextStatus: 'returned' },
-        { key: 'demo_cancel_storage', label: 'デモキャン入庫（未開封→そのまま倉庫）', nextStatus: 'available' },
+        { key: 'demo_cancel', label: 'デモキャンセル（袋から出した→消毒へ）',
+          record: 'デモキャンセル', nextStatus: 'returned' },
+        { key: 'demo_cancel_storage', label: 'デモキャン入庫（未開封→そのまま倉庫）',
+          record: 'デモキャン入庫', nextStatus: 'available' },
         DISPOSE,
       ]
 
@@ -86,8 +97,8 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
       // 過去データ用。いまは demo_cancel が returned へ行くのでここに入る個体は出ない。
       // 消毒へ回す道も足しておく（袋から出していたものが紛れていた場合のため）
       return [
-        { key: 'to_returned', label: '消毒へ回す', nextStatus: 'returned' },
-        { key: 'storage', label: '入庫処理（未開封）', nextStatus: 'available' },
+        { key: 'to_returned', label: '消毒へ回す', record: 'デモキャンセル', nextStatus: 'returned' },
+        { key: 'storage', label: '入庫処理（未開封）', record: '入庫処理', nextStatus: 'available' },
       ]
 
     case 'available':
@@ -126,6 +137,11 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
     default:
       return []
   }
+}
+
+/** 履歴に残す操作名。ラベルを変えても集計が途切れないようにする */
+export function recordName(action: ItemAction): string {
+  return action.record || action.label
 }
 
 /** 廃棄など、実行前に確認を挟むべき操作か */

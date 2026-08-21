@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { getAvailableActions, STATUS_LABEL, needsConfirm, type ItemStatus } from '../item-status'
+import { getAvailableActions, STATUS_LABEL, needsConfirm, recordName, type ItemStatus } from '../item-status'
 
 const ALL: ItemStatus[] = [
   'available', 'reserved', 'ready_for_delivery', 'rented', 'returned',
@@ -162,5 +162,41 @@ describe('デモの戻し（袋から出したかで分ける）', () => {
     const keys = getAvailableActions('demo_cancelled').map(x => x.key)
     expect(keys).toContain('to_returned')
     expect(keys).toContain('storage')
+  })
+})
+
+describe('ボタンの文言と、履歴に残す名前を分ける', () => {
+  // 🔴 履歴の action は集計の軸。ラベルを変えるとここも変わり、
+  //    「年間で何件デモキャンセルがあったか」がその日を境に途切れる。
+  //    2026-08-21 にラベルを変えて実際に壊しかけた。
+  const rented = getAvailableActions('rented')
+
+  it('デモキャンセルは、ボタンが長くても記録は「デモキャンセル」', () => {
+    const a = rented.find(x => x.key === 'demo_cancel')!
+    expect(a.label).toContain('袋から出した')
+    expect(recordName(a)).toBe('デモキャンセル')
+  })
+
+  it('デモキャン入庫も同じ', () => {
+    const a = rented.find(x => x.key === 'demo_cancel_storage')!
+    expect(recordName(a)).toBe('デモキャン入庫')
+  })
+
+  it('🔴 過去12ヶ月のデータと同じ名前で数えられる', () => {
+    // 実データに存在する action 名（2026-08-21 時点）
+    const 実在 = ['返却', 'デモキャンセル', 'デモキャン入庫', '消毒完了', 'メンテナンス完了', '入庫処理']
+    const all = ['rented', 'returned', 'cleaning', 'maintenance']
+      .flatMap(s => getAvailableActions(s)).map(recordName)
+    for (const name of 実在) expect(all, name).toContain(name)
+  })
+
+  it('record を指定していない操作は label がそのまま記録名になる', () => {
+    const a = rented.find(x => x.key === 'return')!
+    expect(a.record).toBeUndefined()
+    expect(recordName(a)).toBe('返却')
+  })
+
+  it('履歴を書くところで recordName を通している', () => {
+    expect(src('components/scan-action-dialog.tsx')).toMatch(/recordName\(action\)/)
   })
 })

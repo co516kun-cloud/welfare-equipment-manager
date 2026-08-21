@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getAvailableActions as getItemActions, needsConfirm, STATUS_LABEL } from '../lib/item-status'
+import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL } from '../lib/item-status'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -266,7 +266,7 @@ export function ScanActionDialog({
 
       await supabaseDb.createItemHistory(
         selectedItem.id,
-        newCondition === 'needs_repair' ? '故障中へ変更' : action.label,
+        newCondition === 'needs_repair' ? '故障中へ変更' : recordName(action),
         selectedItem.status,
         finalStatus,
         getCurrentUserName(),
