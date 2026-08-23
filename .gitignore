@@ -41,3 +41,9 @@ browser-debug.js
 create-test-order-with-dates.js
 final-test.js
 add-missing-columns.js
+
+# Claude Code のローカル設定（2026-08-23 追加）
+# 🔴 このリポジトリは public。ローカルの絶対パスとツール許可設定が
+#    初回コミット 2dec216 から追跡されていた。追跡を外した。
+#    ⚠️ 履歴からは消えていない（過去のコミットには残る）。
+.claude/
