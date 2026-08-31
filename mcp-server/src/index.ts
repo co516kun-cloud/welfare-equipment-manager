@@ -7,6 +7,10 @@ import { promisify } from "node:util";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+// 🔴 QRスキャン画面と**同じ遷移表**。手で写さない（scripts/sync-shared.mjs が生成する）。
+//   src/lib/item-status.ts が正。2026-08-20 に「同じ switch が2箇所にあってずれた」
+//   事故を直したファイルなので、ここで写し直すと元の木阿弥になる。
+import { getAvailableActions, recordName, STATUS_LABEL } from "./shared/item-status.js";
 
 // Load .env from parent directory (welfare-equipment-manager)
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -650,6 +654,11 @@ server.tool(
     condition_notes: z.string().optional().describe("状態メモ"),
     performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
     action: z.string().optional().describe("履歴に残す操作名（既定: ステータス更新）。倉庫に戻す時は「入庫処理」"),
+    // 🔴 2026-08-31 追加。累計貸与日数は scan_action の「返却」でしか増えない＝**直す道が無かった。**
+    //    誤って入った値（試験・二重計上・移行時のずれ）を戻せるようにする。
+    //    増やす用途では使わない。増やすのは返却だけ。
+    total_rental_days: z.number().int().min(0).optional()
+      .describe("累計貸与日数を**上書き**する。訂正専用。通常は触らない（増えるのは scan_action の返却のみ）"),
     print_label: z
       .boolean()
       .optional()
@@ -677,6 +686,7 @@ server.tool(
     if (a.customer_name !== undefined) patch.customer_name = a.customer_name === "" ? null : a.customer_name;
     if (a.loan_start_date !== undefined)
       patch.loan_start_date = a.loan_start_date === "" ? null : a.loan_start_date;
+    if (a.total_rental_days !== undefined) patch.total_rental_days = a.total_rental_days;
 
     const { error } = await supabase.from("product_items").update(patch).eq("id", a.item_id);
     if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
@@ -718,6 +728,134 @@ server.tool(
         },
       ],
     };
+  }
+);
+
+// --- QRスキャンで出せる操作の一覧 ---
+//
+// 2026-08-31 追加。田口さん「返却・消毒・メンテ・入庫は単にステータスを書き換えるのでは
+// なく QRスキャン時のフローに従って行ってほしい」。
+// **何ができるかは呼ぶ側が数え上げない。**ここに聞く。
+server.tool(
+  "list_scan_actions",
+  "その個体に対していま実行できる操作（QRスキャン画面と同じ）を返す。scan_action の前に必ず呼ぶ",
+  { item_id: z.string().describe("個別管理番号（例: SL-128）") },
+  async ({ item_id }) => {
+    const { data: item, error } = await supabase
+      .from("product_items").select("id, status, condition, customer_name, loan_start_date, location, total_rental_days")
+      .eq("id", item_id).maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    if (!item) return { content: [{ type: "text", text: `中止: ${item_id} が見つかりません` }] };
+    const st = (item as any).status as string;
+    const actions = getAvailableActions(st);
+    const lines = actions.map(
+      (a) => `- ${a.key} … ${a.label} → ${STATUS_LABEL[a.nextStatus] ?? a.nextStatus} (${a.nextStatus})` +
+             (a.danger ? "  ⚠️ 確認が要る操作" : "")
+    );
+    return { content: [{ type: "text", text:
+      `${item_id} はいま「${STATUS_LABEL[st as keyof typeof STATUS_LABEL] ?? st}」(${st})` +
+      `${(item as any).customer_name ? " / 貸与先 " + (item as any).customer_name : ""}` +
+      `${(item as any).loan_start_date ? " / 貸与開始 " + (item as any).loan_start_date : ""}\n` +
+      (lines.length ? `いまできる操作:\n${lines.join("\n")}` :
+        "いまできる操作はありません（遷移表にこの状態からの道がない）") }] };
+  }
+);
+
+// --- QRスキャンと同じ流れで動かす ---
+//
+// 🔴 update_item_status との違い: **こちらは流れに従う。**
+//   ① いまの状態から行ける操作しか受け付けない（遷移表はアプリと共有）
+//   ② 履歴の action 名を固定のものにする（集計の軸。ラベル文言を変えても途切れない）
+//   ③ 返却では貸与日数を計算して total_rental_days に足し、貸与先と開始日を消す
+//   ④ condition が needs_repair なら status を out_of_order に倒す（廃棄は優先）
+//   ⑤ 状態メモはメンテナンス・修理完了のときだけ保存する
+//   ⑥ 入庫はラベルを印刷まで行く
+//   ここは src/components/scan-action-dialog.tsx の handleActionSubmit と同じ挙動。
+server.tool(
+  "scan_action",
+  "QRスキャン画面と同じ流れで個体を動かす。返却・消毒・メンテ・入庫はこちらを使う（update_item_status は流れを通らない）",
+  {
+    item_id: z.string().describe("個別管理番号（例: SL-128）"),
+    action_key: z.string().describe("操作キー。list_scan_actions で確認してから渡す（return / clean / maintenance / storage 等）"),
+    condition: z.enum(ITEM_CONDITION).optional().describe("状態も変える場合。needs_repair なら故障中へ倒れる"),
+    condition_notes: z.string().optional().describe("状態メモ。メンテナンス完了・修理完了のときだけ保存される"),
+    location: z.string().optional().describe("保管場所も変える場合"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+    print_label: z.boolean().optional().describe("ラベルを印刷まで行くか。既定は操作名に「入庫」を含む時 true"),
+  },
+  async (a) => {
+    const performedBy = a.performed_by ?? "MCP";
+    const { data: item, error: iErr } = await supabase
+      .from("product_items").select("*").eq("id", a.item_id).maybeSingle();
+    if (iErr) return { content: [{ type: "text", text: `Error: ${iErr.message}` }] };
+    if (!item) return { content: [{ type: "text", text: `中止: ${a.item_id} が見つかりません` }] };
+
+    const cur = item as any;
+    const from = cur.status as string;
+    const actions = getAvailableActions(from);
+    const action = actions.find((x) => x.key === a.action_key);
+    if (!action) {
+      return { content: [{ type: "text", text:
+        `中止: 「${from}」から ${a.action_key} には行けません。` +
+        `いまできるのは ${actions.length ? actions.map((x) => `${x.key}(${x.label})`).join(" / ") : "なし"}` }] };
+    }
+
+    // ④ 要修理なら故障中へ倒す。ただし廃棄が優先（アプリと同じ）
+    const newCondition = (a.condition ?? cur.condition) as string;
+    const finalStatus = (action.nextStatus === "disposed" || newCondition !== "needs_repair")
+      ? action.nextStatus : "out_of_order";
+
+    // ⑤ 状態メモはメンテナンス完了・修理完了のときだけ
+    const savesNotes = ["maintenance", "repair"].includes(action.key);
+    const notes = savesNotes ? (a.condition_notes ?? cur.condition_notes ?? null) : (cur.condition_notes ?? null);
+
+    const patch: Record<string, any> = {
+      status: finalStatus,
+      condition: newCondition,
+      location: a.location ?? cur.location,
+      condition_notes: notes,
+      updated_at: new Date().toISOString(),
+    };
+
+    // ③ 返却は貸与日数を足して、貸与先と開始日を消す
+    let rentalLine = "";
+    if (action.key === "return") {
+      if (cur.loan_start_date) {
+        const start = new Date(cur.loan_start_date); start.setHours(0, 0, 0, 0);
+        const end = new Date(); end.setHours(0, 0, 0, 0);
+        const days = Math.ceil(Math.abs(end.getTime() - start.getTime()) / 86400000);
+        patch.total_rental_days = (cur.total_rental_days || 0) + days;
+        rentalLine = `\n貸与 ${days}日を加算（累計 ${patch.total_rental_days}日）`;
+      }
+      patch.customer_name = null;
+      patch.loan_start_date = null;
+    }
+
+    const { error } = await supabase.from("product_items").update(patch).eq("id", a.item_id);
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+    // ② 履歴の操作名は固定。要修理で倒れた時だけアプリと同じく「故障中へ変更」
+    const record = newCondition === "needs_repair" && finalStatus === "out_of_order"
+      ? "故障中へ変更" : recordName(action);
+    const histErr = await writeHistory({
+      itemId: a.item_id, action: record, fromStatus: from, toStatus: finalStatus, performedBy,
+      location: patch.location, condition: newCondition,
+      customerName: action.key === "return" ? null : (cur.customer_name ?? null),
+      notes: savesNotes ? (a.condition_notes ?? null) : null,
+    });
+
+    // ⑥ 入庫はラベルまで（田口さん 2026-08-31「新規登録と入庫処理をした場合はラベルは常に印刷」）
+    let labelLine = "";
+    if (a.print_label ?? /入庫/.test(record)) {
+      labelLine = "\n" + (await queueAndPrint({ itemId: a.item_id, conditionNotes: notes, by: performedBy }));
+    }
+
+    return { content: [{ type: "text", text:
+      `${record}: ${a.item_id} ${from} → ${finalStatus}` +
+      (finalStatus !== action.nextStatus ? `（要修理のため ${action.nextStatus} ではなく故障中へ）` : "") +
+      rentalLine +
+      (histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました") +
+      labelLine }] };
   }
 );
 
