@@ -837,11 +837,24 @@ server.tool(
     // ② 履歴の操作名は固定。要修理で倒れた時だけアプリと同じく「故障中へ変更」
     const record = newCondition === "needs_repair" && finalStatus === "out_of_order"
       ? "故障中へ変更" : recordName(action);
+    // 🔴 返却で消すものを、消す前に履歴へ残す（2026-09-02・実際に失って直した）。
+    //
+    //   それまでは返却時に customerName に null を渡していた（アプリと同じ作り）。
+    //   その結果、誤って返却処理を流した個体（AU-003）の**貸与先と貸与開始日が
+    //   完全に消え、履歴のどこにも残らなかった。**復元の道が無くなる。
+    //
+    //   「誰にいつ貸していたか」は**消す前にしか書けない。消す側が残す。**
+    const clearedNote = action.key === "return"
+      ? [`貸与先 ${cur.customer_name || "（記録なし）"}`,
+         cur.loan_start_date ? `貸与開始 ${cur.loan_start_date}` : null,
+         rentalLine ? rentalLine.replace(/^\n/, "") : null].filter(Boolean).join(" / ")
+      : null;
     const histErr = await writeHistory({
       itemId: a.item_id, action: record, fromStatus: from, toStatus: finalStatus, performedBy,
       location: patch.location, condition: newCondition,
-      customerName: action.key === "return" ? null : (cur.customer_name ?? null),
-      notes: savesNotes ? (a.condition_notes ?? null) : null,
+      // 返却でも**消す前の貸与先を残す。**null を入れると辿れなくなる
+      customerName: cur.customer_name ?? null,
+      notes: clearedNote ?? (savesNotes ? (a.condition_notes ?? null) : null),
     });
 
     // ⑥ 入庫はラベルまで（田口さん 2026-08-31「新規登録と入庫処理をした場合はラベルは常に印刷」）
