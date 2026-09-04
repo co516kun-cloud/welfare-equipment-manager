@@ -4,17 +4,30 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import { loadLayeredEnv, defaultSecretsPath } from "./env.js";
 // 🔴 QRスキャン画面と**同じ遷移表**。手で写さない（scripts/sync-shared.mjs が生成する）。
 //   src/lib/item-status.ts が正。2026-08-20 に「同じ switch が2箇所にあってずれた」
 //   事故を直したファイルなので、ここで写し直すと元の木阿弥になる。
 import { getAvailableActions, recordName, STATUS_LABEL } from "./shared/item-status.js";
 
-// Load .env from parent directory (welfare-equipment-manager)
+// .env は ~/secrets/welfare-equipment-manager/.env を優先し、リポジトリ直下は補助（2026-09-04、env.ts 参照）。
+// 以前は直下しか読んでいなかった。直下は public リポの作業ツリー内で /mnt/c 上（WSL 側から誰でも読める）。
+// __dirname 基準なので、どの cwd から spawn されても同じ場所を見る。
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+{
+  const envInfo = loadLayeredEnv({
+    secretsPath: defaultSecretsPath(),
+    fallbackPath: path.resolve(__dirname, "../../.env"),
+    watch: /^(VITE_SUPABASE_|MCP_USER_)/,
+  });
+  if (envInfo.filledFromFallback.length > 0) {
+    console.error(
+      `[env] ${envInfo.filledFromFallback.join(", ")} をリポジトリ直下の .env から補いました。${defaultSecretsPath()} へ移してください`
+    );
+  }
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
@@ -981,7 +994,7 @@ async function printOne(row: {
  *   **待ち時間を延ばしても同じことは起きる。**待つのではなく、後から辻褄を合わせる。
  *   スプーラが空 = 送った分は全部出た、と見なせる。
  */
-async function reconcilePrinting(): Promise<void> {
+async function reconcilePrinting(excludeId?: string): Promise<void> {
   try {
     const { stdout } = await execFileAsync(
       POWERSHELL,
@@ -990,10 +1003,12 @@ async function reconcilePrinting(): Promise<void> {
     );
     const n = Number.parseInt(stdout.trim(), 10);
     if (!Number.isFinite(n) || n > 0) return; // まだ待ちがいる間は触らない
-    await supabase
+    let q = supabase
       .from("label_print_queue")
       .update({ status: "completed", printed_at: new Date().toISOString() })
       .eq("status", "printing");
+    if (excludeId) q = q.neq("id", excludeId); // いま掴んだ行はこれから刷るので触らない
+    await q;
   } catch {
     // 見に行けなかっただけ。次の印刷でまた拾う
   }
@@ -1005,8 +1020,25 @@ async function printQueueRow(
   by: string
 ): Promise<string> {
   const name = row.product_name || "商品名なし";
-  await reconcilePrinting(); // 前回の取りこぼしを先に片づける
-  await supabase.from("label_print_queue").update({ status: "printing" }).eq("id", row.id);
+
+  // 🔴 2026-09-04: PC 常駐の印刷エージェント（mcp-server/src/print-agent）と行を取り合う。
+  //   status='pending' を条件に掴み、0 行なら相手が先に取ったので**降りる**（二重印刷防止）。
+  //   以前は条件なしで printing にしていたので、エージェントが Realtime で先に刷った行を
+  //   ここでもう一度刷っていた（音声取り込み側セッションの指摘）。
+  //   reconcilePrinting() は掴んだ**後**に呼ぶ。前だと Get-PrintJob の待ち時間ぶん隙間が広がる。
+  const { data: claimed, error: claimError } = await supabase
+    .from("label_print_queue")
+    .update({ status: "printing", printed_by: by })
+    .eq("id", row.id)
+    .eq("status", "pending")
+    .select("id");
+  if (claimError) {
+    return `❌ ラベル ${row.management_id}（${name}）… 取得失敗: ${claimError.message}`;
+  }
+  if (!claimed || claimed.length === 0) {
+    return `🕒 ラベル ${row.management_id}（${name}）… 印刷エージェントが処理中です`;
+  }
+  await reconcilePrinting(row.id); // 前回の取りこぼしを片づける（いま掴んだ行は除く）
 
   const res = await printOne(row);
 
