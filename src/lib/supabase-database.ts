@@ -1667,6 +1667,35 @@ export class SupabaseDatabase {
   }
 
   /**
+   * 再印刷: 行を pending に戻す（2026-09-04 追加）
+   *
+   * 実際の印刷は PC 常駐の印刷エージェントが pending を拾って行う。
+   * 前回の結果（printed_at / printed_by / error_message）はここで消す。
+   * 消さないと「完了」と「印刷待ち」が同時に見える行ができる。
+   */
+  async requeueLabelPrint(id: string): Promise<void> {
+    if (useMockDatabase()) {
+      return
+    }
+
+    const { error } = await supabase
+      .from('label_print_queue')
+      .update({
+        status: 'pending',
+        error_message: null,
+        printed_at: null,
+        printed_by: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+
+    if (error) {
+      console.error('Error requeueing label print:', error)
+      throw error
+    }
+  }
+
+  /**
    * 印刷キュー削除
    */
   async deleteLabelPrintQueue(id: string): Promise<void> {

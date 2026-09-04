@@ -160,7 +160,8 @@ export function NewItemDialog({
         }
       )
 
-      // ラベル印刷キューに追加（チェックが入っている場合）
+      // ラベル印刷を指示（チェックが入っている場合）
+      // 実際の印刷は事務所PCの印刷エージェントが label_print_queue を拾って行う
       if (addToLabelQueue && product) {
         try {
           await supabaseDb.addLabelPrintQueue({
@@ -171,16 +172,16 @@ export function NewItemDialog({
             status: 'pending',
             created_by: currentUser
           })
-          console.log('✅ ラベル印刷キューに追加しました')
+          console.log('✅ ラベル印刷を指示しました')
         } catch (labelError) {
-          console.error('❌ ラベル印刷キューへの追加エラー:', labelError)
-          // ラベル印刷キューの追加に失敗してもアイテム登録は成功
+          console.error('❌ ラベル印刷の指示エラー:', labelError)
+          // ラベル印刷の指示に失敗してもアイテム登録は成功
         }
       }
 
       // 成功メッセージ
       const successMessage = addToLabelQueue
-        ? `管理番号 ${newItem.id} を登録し、ラベル印刷キューに追加しました`
+        ? `管理番号 ${newItem.id} を登録しました。ラベルは事務所PCのプリンタから出ます`
         : `管理番号 ${newItem.id} を登録しました`
       alert(successMessage)
       
@@ -418,7 +419,7 @@ export function NewItemDialog({
                 className="w-4 h-4 rounded border-gray-300"
               />
               <Label htmlFor="addToLabelQueue" className="cursor-pointer">
-                ラベル印刷キューに追加する
+                ラベルを印刷する
               </Label>
             </div>
           </div>

@@ -97,11 +97,11 @@ export function ItemDetail() {
     return user.user_metadata?.name || user.email?.split('@')[0] || user.email || 'ユーザー'
   }
 
-  // ラベル印刷待ちに追加
+  // ラベル印刷（label_print_queue に入れる。印刷は事務所PCの印刷エージェントが即座に行う）
   const handleAddLabelPrintQueue = async () => {
     if (!item || !product) return
 
-    if (!confirm('この商品をラベル印刷待ちに追加しますか？')) {
+    if (!confirm('この商品のラベルを印刷しますか？（事務所PCのプリンタから出ます）')) {
       return
     }
 
@@ -115,10 +115,10 @@ export function ItemDetail() {
         created_by: getCurrentUserName()
       })
 
-      alert('✅ 印刷待ちキューに追加しました')
+      alert('✅ ラベルを印刷しています')
     } catch (error) {
-      console.error('印刷キューへの追加エラー:', error)
-      alert('❌ 印刷待ちキューへの追加に失敗しました')
+      console.error('ラベル印刷の指示エラー:', error)
+      alert('❌ ラベル印刷の指示に失敗しました')
     }
   }
 

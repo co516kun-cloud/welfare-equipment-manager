@@ -304,11 +304,11 @@ export function ScanActionDialog({
   }
 
   // ラベル印刷確認ダイアログの処理
+  // label_print_queue に入れるだけ。実際の印刷は事務所PCの印刷エージェントが即座に拾う
   const handleLabelPrintConfirm = async () => {
     if (!selectedItem) return
 
     try {
-      // 印刷待ちキューに追加
       await supabaseDb.addLabelPrintQueue({
         item_id: selectedItem.id,
         product_name: selectedItem.product?.name || '不明な商品',
@@ -318,10 +318,10 @@ export function ScanActionDialog({
         created_by: getCurrentUserName()
       })
 
-      alert('印刷待ちキューに追加しました')
+      alert('ラベルを印刷しています。事務所PCのプリンタから出ます')
     } catch (error) {
-      console.error('印刷キューへの追加エラー:', error)
-      alert('印刷待ちキューへの追加に失敗しました')
+      console.error('ラベル印刷の指示エラー:', error)
+      alert('ラベル印刷の指示に失敗しました')
     }
 
     // ダイアログを閉じる
@@ -586,7 +586,7 @@ export function ScanActionDialog({
             </div>
 
             <p className="text-sm text-muted-foreground">
-              ※ 印刷待ちキューに追加されます。「ラベル印刷待ち」ページから印刷してください。
+              ※ 事務所PCのプリンタから自動で出ます。状況は「ラベル印刷状況」で確認できます。
             </p>
 
             <div className="flex justify-end space-x-2">
@@ -594,7 +594,7 @@ export function ScanActionDialog({
                 印刷しない
               </Button>
               <Button onClick={handleLabelPrintConfirm}>
-                印刷待ちに追加
+                ラベルを印刷する
               </Button>
             </div>
           </div>
