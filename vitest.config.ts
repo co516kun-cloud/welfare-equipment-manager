@@ -9,6 +9,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    // mcp-server 配下の純粋ロジック（印刷エージェント等）もここで回す
+    include: ['src/**/*.test.{ts,tsx}', 'mcp-server/src/**/*.test.ts'],
   },
 })
