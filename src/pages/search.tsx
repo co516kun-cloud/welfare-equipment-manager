@@ -9,9 +9,12 @@ import { useInventoryStore } from '../stores/useInventoryStore'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
+import { buildProductItemUpdate } from '../lib/product-item-update'
+import { matchesAssignee } from '../lib/item-assignee'
+import type { ProductItem } from '../types'
 
 export function Search() {
-  const { products, items, categories, users, updateItemStatus } = useInventoryStore()
+  const { products, items, categories, users, orders, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
   
@@ -119,9 +122,11 @@ export function Search() {
           if (searchFilters.dateTo && loanDate > new Date(searchFilters.dateTo)) return false
         }
         
-        // 担当者フィルター（商品アイテムの担当者情報を使用）
-        if (searchFilters.assignedTo && 
-            !item.assigned_to?.toLowerCase().includes(searchFilters.assignedTo.toLowerCase())) {
+        // 担当者フィルター
+        // 🔴 以前は item.assigned_to を見ていたが product_items にその列は無く、
+        //   何を入力しても0件になっていた。担当者は発注（orders.assigned_to / carried_by）が持つので、
+        //   その個体が割り当てられている発注を経由して引く。
+        if (!matchesAssignee(item.id, orders, searchFilters.assignedTo)) {
           return false
         }
         
@@ -235,20 +240,14 @@ export function Search() {
     if (!selectedItem) return
     
     try {
-      const updatedItem = {
-        id: selectedItem.id,
-        qr_code: selectedItem.qr_code,
-        product_id: selectedItem.product_id,
-        status: statusForm.status,
-        condition: selectedItem.condition,
-        location: selectedItem.location,
-        customer_name: selectedItem.customer_name,
-        loan_start_date: selectedItem.loan_start_date,
-        notes: selectedItem.notes
-      }
-      
+      // 🔴 部分オブジェクトを手で組むと condition_notes が null で潰れる（saveProductItem の仕様）。
+      //   ProductItem の列だけを拾って差分を当てるヘルパーを通す。
+      const updatedItem = buildProductItemUpdate(selectedItem, {
+        status: statusForm.status as ProductItem['status']
+      })
+
       // 楽観的更新でステータスを即座に反映
-      await updateItemStatus(item.id, updatedItem.status)
+      await updateItemStatus(selectedItem.id, updatedItem.status)
       
       // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
@@ -288,20 +287,16 @@ export function Search() {
     if (!selectedItem) return
     
     try {
-      const updatedItem = {
-        id: selectedItem.id,
-        qr_code: selectedItem.qr_code,
-        product_id: selectedItem.product_id,
-        status: selectedItem.status,
-        condition: editForm.condition,
+      // 保管場所は「利用可能」のときだけ編集できる（貸与中は顧客先にあるので動かさない）
+      const updatedItem = buildProductItemUpdate(selectedItem, {
+        condition: editForm.condition as ProductItem['condition'],
         location: selectedItem.status === 'available' ? editForm.location : selectedItem.location,
         customer_name: editForm.customerName || undefined,
-        loan_start_date: editForm.loanStartDate || undefined,
-        notes: editForm.notes
-      }
-      
+        loan_start_date: editForm.loanStartDate || undefined
+      })
+
       // 楽観的更新でステータスを即座に反映
-      await updateItemStatus(item.id, updatedItem.status)
+      await updateItemStatus(selectedItem.id, updatedItem.status)
       
       // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
@@ -404,21 +399,14 @@ export function Search() {
       
       await supabaseDb.saveOrder(newOrder)
       
-      // 商品ステータスを「予約済み」に変更（不要なプロパティを除外）
-      const updatedItem = {
-        id: selectedItem.id,
-        qr_code: selectedItem.qr_code,
-        product_id: selectedItem.product_id,
-        status: 'reserved' as const,
-        condition: selectedItem.condition,
-        location: selectedItem.location,
-        customer_name: orderForm.customerName.trim(),
-        loan_start_date: selectedItem.loan_start_date,
-        notes: selectedItem.notes
-      }
-      
+      // 商品ステータスを「予約済み」に変更
+      const updatedItem = buildProductItemUpdate(selectedItem, {
+        status: 'reserved',
+        customer_name: orderForm.customerName.trim()
+      })
+
       // 楽観的更新でステータスを即座に反映
-      await updateItemStatus(item.id, updatedItem.status)
+      await updateItemStatus(selectedItem.id, updatedItem.status)
       
       // ステータス以外の属性も更新が必要な場合は追加で保存
       await supabaseDb.saveProductItem(updatedItem)
