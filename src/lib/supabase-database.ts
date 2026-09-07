@@ -985,6 +985,9 @@ export class SupabaseDatabase {
     details?: {
       location?: string
       condition?: string
+      /** 操作時のメモ。item_histories.notes に入る（履歴画面の「備考」列） */
+      notes?: string
+      /** 個体の状態メモ。condition_notes 列。notes とは別物 */
       conditionNotes?: string
       customerName?: string
       photos?: string[]
@@ -1001,6 +1004,10 @@ export class SupabaseDatabase {
       location: details?.location,
       condition: details?.condition,
       customer_name: details?.customerName,
+      // 🔴 2026-09-07 まで書いていなかった。item_histories.notes 列は元からあり
+      //   MCP 側の writeHistory は書いている。アプリ側だけ捨てていたので、
+      //   検索画面の「メモ」入力と履歴の「備考」列がずっと空だった。
+      notes: details?.notes,
       condition_notes: details?.conditionNotes,
       photos: details?.photos,
       metadata: details?.metadata
@@ -1362,35 +1369,11 @@ export class SupabaseDatabase {
     }
   }
 
-  // Clear all data
-  async clearAllData(): Promise<void> {
-    try {
-      // Delete in correct order due to foreign key constraints
-      // preparation_tasksとitem_historiesは存在しない可能性があるため個別処理
-      try {
-        await supabase.from('preparation_tasks').delete().neq('id', '')
-      } catch (error) {
-        console.warn('preparation_tasks table does not exist, skipping deletion')
-      }
-      
-      try {
-        await supabase.from('item_histories').delete().neq('id', '')
-      } catch (error) {
-        console.warn('item_histories table does not exist, skipping deletion')
-      }
-      
-      await supabase.from('order_items').delete().neq('id', '')
-      await supabase.from('orders').delete().neq('id', '')
-      await supabase.from('product_items').delete().neq('id', '')
-      await supabase.from('products').delete().neq('id', '')
-      await supabase.from('categories').delete().neq('id', '')
-      await supabase.from('users').delete().neq('id', '')
-      
-    } catch (error) {
-      console.error('Error clearing data:', error)
-      throw error
-    }
-  }
+  // 🔴 clearAllData() は 2026-09-07 に削除した。
+  //   全11テーブルを .delete().neq('id','') で全行削除するメソッドで、
+  //   唯一の到達経路だった /manual-import・/csv-import（csv-to-database.ts:245）ごと消した。
+  //   本番の実顧客データを消す操作をアプリのコードに残さない。
+  //   もし全消しが必要になったら、Supabase ダッシュボードで人が実行する。
 
   // Demo Equipment Management
   async getDemoEquipment(): Promise<DemoEquipment[]> {

@@ -195,13 +195,8 @@ export class MockDatabase {
     console.log('📊 Total histories now:', filtered.length)
   }
 
-  // Clear all data
-  async clearAllData(): Promise<void> {
-    Object.values(STORAGE_KEYS).forEach(key => {
-      localStorage.removeItem(key)
-    })
-    this.initializeData()
-  }
+  // clearAllData() は 2026-09-07 に削除（supabaseDb 側と対で消した。呼び出し元だった
+  // /manual-import・/csv-import ごと廃止したため）
 
   // Demo Equipment Management
   async getDemoEquipment(): Promise<DemoEquipment[]> {

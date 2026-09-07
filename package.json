@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "type-check": "tsc --noEmit"
+    "type-check": "node scripts/typecheck/gate.mjs",
+    "type-check:all": "tsc -p tsconfig.app.json --noEmit",
+    "type-check:accept": "node scripts/typecheck/gate.mjs --accept"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",
@@ -21,7 +23,6 @@
     "react-router-dom": "^7.6.3",
     "recharts": "^3.7.0",
     "tailwind-merge": "^2.5.3",
-    "xlsx": "^0.18.5",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

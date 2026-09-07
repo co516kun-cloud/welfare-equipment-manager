@@ -17,7 +17,6 @@ import { AIFeatures } from './pages/ai-features-simple'
 import { Menu } from './pages/menu'
 import { Demo } from './pages/demo'
 import { Deposits } from './pages/deposits'
-import { ManualImport } from './pages/manual-import'
 import { Search } from './pages/search'
 import { StockAlert } from './pages/stock-alert'
 import { DataImport } from './pages/data-import'
@@ -25,8 +24,11 @@ import Notifications from './pages/notifications'
 import { LabelQueuePage } from './pages/label-queue'
 import { ProductAnalysis } from './pages/product-analysis'
 import { WorkManagement } from './pages/work-management'
-// import { CSVImport } from './pages/csv-import'
-// import { Import } from './pages/import' // Disabled due to installation issues
+// 🔴 2026-09-07 削除: /manual-import /csv-import /import の3画面。
+//   いずれも supabaseDb.clearAllData()（全11テーブル全行削除）に到達する経路を持っていた。
+//   /manual-import は UI リンクこそ無かったが Route が生きており、vercel.json の SPA rewrite で
+//   URL 直打ちすると本番で開き、確認ダイアログ無しで全データを消せる状態だった。
+//   現役の一括取込は /data-import（data-import.tsx。upsert のみで全消ししない）。
 
 
 function App() {
@@ -133,13 +135,10 @@ function App() {
           <Route path="search" element={<Search />} />
           <Route path="stock-alert" element={<StockAlert />} />
           <Route path="data-import" element={<DataImport />} />
-          <Route path="manual-import" element={<ManualImport />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="label-queue" element={<LabelQueuePage />} />
           <Route path="product-analysis" element={<ProductAnalysis />} />
           <Route path="work-management" element={<WorkManagement />} />
-          {/* <Route path="csv-import" element={<CSVImport />} />
-          <Route path="import" element={<Import />} /> Disabled due to installation issues */}
         </Route>
       </Routes>
     </BrowserRouter>

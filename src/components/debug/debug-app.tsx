@@ -12,7 +12,6 @@ import { AIFeatures } from '../../pages/ai-features-simple'
 import { Menu } from '../../pages/menu'
 import { Demo } from '../../pages/demo'
 import { Deposits } from '../../pages/deposits'
-import { ManualImport } from '../../pages/manual-import'
 
 export function DebugApp() {
   return (
@@ -36,7 +35,6 @@ export function DebugApp() {
             <Route path="menu" element={<Menu />} />
             <Route path="demo" element={<Demo />} />
             <Route path="deposits" element={<Deposits />} />
-            <Route path="manual-import" element={<ManualImport />} />
           </Route>
         </Routes>
       </Router>
