@@ -112,6 +112,12 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
+    // 🔴 スクロール位置は「読み取る前」に控えておく（2026-09-07 修正）。
+    //   末尾に復元処理はあったが、控える側が無く scrollPosition が未定義だった。
+    //   setTimeout の中なのでスキャン自体は進むが、毎回 ReferenceError を投げていて
+    //   コメントが言う「スクロール位置の復元」は一度も動いていなかった。
+    const scrollPosition = window.scrollY
+
     // データが読み込まれていない場合は処理しない
     if (!productItems || !products) {
       console.warn('Data not loaded yet, skipping scan result:', qrCode)
@@ -461,17 +467,11 @@ function ScanComponent() {
         )}
       </div>
 
-      {/* Action Dialog */}
-      <ScanActionDialog
-        open={showActionDialog}
-        onOpenChange={setShowActionDialog}
-        selectedItem={selectedItem}
-        actionType={actionType}
-        availableOrders={availableOrders}
-        onSuccess={handleActionSuccess}
-        getCurrentUserName={getCurrentUserName}
-        orders={orders}
-      />
+      {/* 🔴 ここにあった ScanActionDialog は削除した（2026-09-07）。
+          この下（DesktopScanUI の外・scan.tsx 末尾）にも同じものが描画されていて、
+          position:fixed / zIndex:999999 のダイアログが同じ座標に2枚重なっていた。
+          「処理実行」が完全に同一座標に2つ存在し、奥側は前面に遮られて押せない状態だった。
+          デモモードの自動操作で発覚。 */}
     </div>
   )
   

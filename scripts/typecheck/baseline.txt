@@ -19,12 +19,6 @@ src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '
 src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
 src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
 src/lib/japanese-parser.ts|TS2739|Type '{ available: string; rented: string; returned: string; cleaning: string; maintenance: string; demo_cancelled: string; out_of_order: string; unknown: string; }' is missing the following properties from type 'Record<"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed", string>': reserved, ready_for_delivery, disposed
-src/lib/mock-database.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
-src/lib/mock-database.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
-src/lib/mock-database.ts|TS2339|Property 'ITEM_HISTORIES' does not exist on type '{ CATEGORIES: string; PRODUCTS: string; PRODUCT_ITEMS: string; USERS: string; ORDERS: string; }'.
-src/lib/mock-database.ts|TS2339|Property 'getItemHistories' does not exist on type 'MockDatabase'.
-src/lib/mock-database.ts|TS2353|Object literal may only specify known properties, and 'notes' does not exist in type 'ProductItem'.
-src/lib/mock-database.ts|TS2353|Object literal may only specify known properties, and 'notes' does not exist in type 'ProductItem'.
 src/lib/notification-generator.ts|TS2339|Property 'created_at' does not exist on type 'ProductItem'.
 src/lib/notification-generator.ts|TS2339|Property 'created_at' does not exist on type 'ProductItem'.
 src/lib/notification-generator.ts|TS2339|Property 'updated_at' does not exist on type 'ProductItem'.
@@ -95,7 +89,6 @@ src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unk
 src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
 src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
 src/pages/preparation.tsx|TS2551|Property 'fromStatus' does not exist on type 'ItemHistory'. Did you mean 'from_status'?
-src/pages/scan.tsx|TS2304|Cannot find name 'scrollPosition'.
 src/pages/stock-alert.tsx|TS2339|Property 'available_count' does not exist on type 'unknown'.
 src/pages/stock-alert.tsx|TS2339|Property 'available_count' does not exist on type 'unknown'.
 src/pages/stock-alert.tsx|TS2339|Property 'product_id' does not exist on type 'unknown'.

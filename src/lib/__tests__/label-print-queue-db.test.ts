@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// useMockDatabase() を false にする（未設定だとモック DB に逃げて何もしない）
+// isDemoMode() を false にする（未設定だとモック DB に逃げて何もしない）
 vi.stubEnv('VITE_SUPABASE_URL', 'https://test.supabase.co')
 vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
 

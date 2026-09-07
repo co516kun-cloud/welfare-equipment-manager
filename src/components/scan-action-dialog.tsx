@@ -52,6 +52,12 @@ export function ScanActionDialog({
   const [checklistResult, setChecklistResult] = useState<ChecklistResult | null>(null)
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null)
   const [showLabelPrintDialog, setShowLabelPrintDialog] = useState(false)
+  // 🔴 ラベル印刷ダイアログが使う個体を、開いた時点で控えておく（2026-09-07）。
+  //   連続モードでは処理完了の3秒後に scan.tsx:273-279 が setSelectedItem(null) するため、
+  //   ユーザーが3秒以上迷ってから「ラベルを印刷する」を押すと selectedItem が消えていて、
+  //   何も起きずに黙って終わっていた（alert も出ずキューにも入らない）。
+  const [labelTarget, setLabelTarget] = useState<typeof selectedItem>(null)
+  const [labelConditionNotes, setLabelConditionNotes] = useState('')
 
   // フォームをリセット
   const resetForm = () => {
@@ -290,6 +296,9 @@ export function ScanActionDialog({
 
       // 入庫処理の場合は印刷確認ダイアログを表示
       if (actionType === 'storage') {
+        // 開いた時点の個体と状態メモを控える（この後 selectedItem が消えても印刷できる）
+        setLabelTarget(selectedItem)
+        setLabelConditionNotes(actionForm.conditionNotes || selectedItem.condition_notes || '')
         setShowLabelPrintDialog(true)
       } else {
         resetForm()
@@ -306,14 +315,22 @@ export function ScanActionDialog({
   // ラベル印刷確認ダイアログの処理
   // label_print_queue に入れるだけ。実際の印刷は事務所PCの印刷エージェントが即座に拾う
   const handleLabelPrintConfirm = async () => {
-    if (!selectedItem) return
+    // 控えておいた個体を使う。selectedItem は3秒で消えることがある（labelTarget の宣言を参照）
+    const target = labelTarget ?? selectedItem
+    if (!target) {
+      // ここに来るのは想定外。黙って終わると「押したのに出ない」になるので必ず知らせる
+      console.error('ラベル印刷: 対象の個体が特定できませんでした')
+      alert('ラベル印刷の対象が分かりませんでした。もう一度スキャンしてください')
+      setShowLabelPrintDialog(false)
+      return
+    }
 
     try {
       await supabaseDb.addLabelPrintQueue({
-        item_id: selectedItem.id,
-        product_name: selectedItem.product?.name || '不明な商品',
-        management_id: selectedItem.id,
-        condition_notes: actionForm.conditionNotes || selectedItem.condition_notes || '',
+        item_id: target.id,
+        product_name: target.product?.name || '不明な商品',
+        management_id: target.id,
+        condition_notes: labelConditionNotes || target.condition_notes || '',
         status: 'pending',
         created_by: getCurrentUserName()
       })
@@ -325,6 +342,8 @@ export function ScanActionDialog({
     }
 
     // ダイアログを閉じる
+    setLabelTarget(null)
+    setShowLabelPrintDialog(false)
     resetForm()
     onOpenChange(false)
     onSuccess()
@@ -332,6 +351,8 @@ export function ScanActionDialog({
 
   const handleLabelPrintCancel = () => {
     // 印刷しない場合もダイアログを閉じる
+    setLabelTarget(null)
+    setShowLabelPrintDialog(false)
     resetForm()
     onOpenChange(false)
     onSuccess()
@@ -568,19 +589,21 @@ export function ScanActionDialog({
 
           <div className="space-y-4">
             <div className="p-4 bg-secondary/20 rounded-lg">
+              {/* 控えておいた labelTarget を使う。selectedItem は3秒で消えることがあり、
+                  そのままだと印刷内容が空欄で表示される */}
               <h3 className="font-bold mb-2">印刷内容</h3>
               <dl className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">商品名:</dt>
-                  <dd className="font-medium">{selectedItem?.product?.name}</dd>
+                  <dd className="font-medium">{(labelTarget ?? selectedItem)?.product?.name}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">管理番号:</dt>
-                  <dd className="font-mono font-medium">{selectedItem?.id}</dd>
+                  <dd className="font-mono font-medium">{(labelTarget ?? selectedItem)?.id}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-muted-foreground">商品状態:</dt>
-                  <dd>{actionForm.conditionNotes || selectedItem?.condition_notes || '(メモなし)'}</dd>
+                  <dd>{labelConditionNotes || (labelTarget ?? selectedItem)?.condition_notes || '(メモなし)'}</dd>
                 </div>
               </dl>
             </div>

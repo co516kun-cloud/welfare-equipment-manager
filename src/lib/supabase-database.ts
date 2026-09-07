@@ -14,8 +14,9 @@ import type {
   LabelPrintQueue
 } from '../types'
 
-// Check if we should use mock database (when Supabase is not properly configured)
-const useMockDatabase = () => {
+// デモモードか判定する。VITE_SUPABASE_URL / ANON_KEY に dummy が含まれるか、未設定のとき true。
+// 🔴 関数名を use で始めないこと。ESLint が React Hook と誤認して rules-of-hooks が大量に出る（2026-09-07）
+const isDemoMode = () => {
   const url = import.meta.env.VITE_SUPABASE_URL
   const key = import.meta.env.VITE_SUPABASE_ANON_KEY
   
@@ -37,7 +38,7 @@ export class SupabaseDatabase {
 
   // Categories
   async getCategories(): Promise<ProductCategory[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getCategories()
     }
     
@@ -55,6 +56,12 @@ export class SupabaseDatabase {
   }
 
   async saveCategory(category: ProductCategory): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.saveCategory(category)
+    }
+
     const { error } = await supabase
       .from('categories')
       .upsert(category)
@@ -66,6 +73,12 @@ export class SupabaseDatabase {
   }
 
   async deleteCategory(id: string): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.deleteCategory(id)
+    }
+
     const { error } = await supabase
       .from('categories')
       .delete()
@@ -79,7 +92,7 @@ export class SupabaseDatabase {
 
   // Products
   async getProducts(): Promise<Product[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getProducts()
     }
     
@@ -97,6 +110,12 @@ export class SupabaseDatabase {
   }
 
   async getProductsByCategory(categoryId: string): Promise<Product[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getProductsByCategory(categoryId)
+    }
+
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -112,6 +131,12 @@ export class SupabaseDatabase {
   }
 
   async getProductById(id: string): Promise<Product | null> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getProductById(id)
+    }
+
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -127,6 +152,12 @@ export class SupabaseDatabase {
   }
 
   async saveProduct(product: Product): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.saveProduct(product)
+    }
+
     const { error } = await supabase
       .from('products')
       .upsert(product)
@@ -138,6 +169,12 @@ export class SupabaseDatabase {
   }
 
   async deleteProduct(id: string): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.deleteProduct(id)
+    }
+
     const { error } = await supabase
       .from('products')
       .delete()
@@ -151,7 +188,7 @@ export class SupabaseDatabase {
 
   // Product Items
   async getProductItems(): Promise<ProductItem[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getProductItems()
     }
     
@@ -173,12 +210,18 @@ export class SupabaseDatabase {
 
   // 全商品アイテムを一括取得（初回読み込み用）
   async getAllProductItems(): Promise<ProductItem[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getAllProductItems()
+    }
+
     return await this.getProductItems()
   }
 
   // 差分同期用: 指定された日時以降に更新されたアイテムを取得
   async getRecentlyUpdatedProductItems(since: string): Promise<ProductItem[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       const items = await mockDb.getProductItems()
       // モックデータでは全件返す（実際の環境では使われない）
       return items
@@ -202,7 +245,7 @@ export class SupabaseDatabase {
   }
 
   async getProductItemsByProductId(productId: string): Promise<ProductItem[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       const items = await mockDb.getProductItems()
       return items.filter(item => item.product_id === productId)
     }
@@ -222,7 +265,7 @@ export class SupabaseDatabase {
   }
 
   async getProductItemsByCategoryId(categoryId: string): Promise<ProductItem[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       const items = await mockDb.getProductItems()
       const products = await mockDb.getProducts()
       const categoryProducts = products.filter(p => p.category_id === categoryId)
@@ -263,6 +306,12 @@ export class SupabaseDatabase {
   }
 
   async getProductItemsByStatus(status: ProductItem['status']): Promise<ProductItem[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getProductItemsByStatus(status)
+    }
+
     const { data, error } = await supabase
       .from('product_items')
       .select('*')
@@ -278,6 +327,12 @@ export class SupabaseDatabase {
   }
 
   async getProductItemById(id: string): Promise<ProductItem | null> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getProductItemById(id)
+    }
+
     const { data, error } = await supabase
       .from('product_items')
       .select('*')
@@ -293,6 +348,12 @@ export class SupabaseDatabase {
   }
 
   async saveProductItem(item: ProductItem): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.saveProductItem(item)
+    }
+
     // undefinedをnullに変換（Supabaseでフィールドをクリアするため）
     const itemData: any = {
       ...item,
@@ -313,6 +374,12 @@ export class SupabaseDatabase {
   }
 
   async deleteProductItem(id: string): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.deleteProductItem(id)
+    }
+
     const { error } = await supabase
       .from('product_items')
       .delete()
@@ -326,7 +393,7 @@ export class SupabaseDatabase {
 
   // Users
   async getUsers(): Promise<User[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getUsers()
     }
     
@@ -344,6 +411,12 @@ export class SupabaseDatabase {
   }
 
   async getUserById(id: string): Promise<User | null> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getUserById(id)
+    }
+
     const { data, error } = await supabase
       .from('users')
       .select('*')
@@ -359,7 +432,7 @@ export class SupabaseDatabase {
   }
 
   async getCurrentUserName(): Promise<string> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return 'テストユーザー'
     }
 
@@ -394,6 +467,12 @@ export class SupabaseDatabase {
   }
 
   async saveUser(user: User): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.saveUser(user)
+    }
+
     const { error } = await supabase
       .from('users')
       .upsert(user)
@@ -405,6 +484,12 @@ export class SupabaseDatabase {
   }
 
   async deleteUser(id: string): Promise<void> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.deleteUser(id)
+    }
+
     const { error } = await supabase
       .from('users')
       .delete()
@@ -418,7 +503,7 @@ export class SupabaseDatabase {
 
   // Orders (完全実装)
   async getOrders(): Promise<Order[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getOrders()
     }
 
@@ -489,7 +574,7 @@ export class SupabaseDatabase {
 
   // 完了済み注文を取得（遅延ロード用）
   async getCompletedOrders(): Promise<Order[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getOrders()
     }
 
@@ -561,7 +646,7 @@ export class SupabaseDatabase {
 
   // 差分同期用: 指定された日時以降に更新されたオーダーを取得
   async getRecentlyUpdatedOrders(since: string): Promise<Order[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       const orders = await mockDb.getOrders()
       // モックデータでは全件返す（実際の環境では使われない）
       return orders
@@ -623,6 +708,12 @@ export class SupabaseDatabase {
   }
 
   async getOrderById(id: string): Promise<Order | null> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getOrderById(id)
+    }
+
     try {
       // 注文の基本情報を取得（アーカイブ状態に関係なく取得）
       const { data: orderData, error: orderError } = await supabase
@@ -670,7 +761,7 @@ export class SupabaseDatabase {
   }
 
   async saveOrder(order: Order): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.saveOrder(order)
     }
     
@@ -746,7 +837,7 @@ export class SupabaseDatabase {
 
   // Order Items
   async saveOrderItem(orderItem: OrderItem & { order_id: string }): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       // Mock database doesn't have separate order items handling
       return
     }
@@ -792,8 +883,9 @@ export class SupabaseDatabase {
 
   // 個別order_itemのステータス更新
   async updateOrderItemStatus(orderItemId: string, status: string, updatedBy?: string): Promise<void> {
-    if (useMockDatabase()) {
-      return
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.updateOrderItemStatus(orderItemId, status, updatedBy)
     }
 
     try {
@@ -829,7 +921,7 @@ export class SupabaseDatabase {
 
   // 複数order_itemのステータス一括更新
   async batchUpdateOrderItemStatus(orderItemIds: string[], status: string, updatedBy?: string): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return
     }
 
@@ -866,6 +958,12 @@ export class SupabaseDatabase {
 
   // Item Histories
   async getItemHistories(): Promise<ItemHistory[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getItemHistories()
+    }
+
     const { data, error } = await supabase
       .from('item_histories')
       .select('*')
@@ -902,6 +1000,11 @@ export class SupabaseDatabase {
     totalPages: number
     currentPage: number
   }> {
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.getItemHistoriesPaginated(page, limit, filters)
+    }
+
     try {
       let query = supabase
         .from('item_histories')
@@ -962,6 +1065,12 @@ export class SupabaseDatabase {
   }
 
   async getItemHistoriesByItemId(itemId: string): Promise<ItemHistory[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getItemHistoriesByItemId(itemId)
+    }
+
     const { data, error } = await supabase
       .from('item_histories')
       .select('*')
@@ -994,6 +1103,11 @@ export class SupabaseDatabase {
       metadata?: any
     }
   ): Promise<void> {
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.createItemHistory(itemId, action, fromStatus, toStatus, userName, details)
+    }
+
     const history: Omit<ItemHistory, 'id'> = {
       item_id: itemId,
       action,
@@ -1028,6 +1142,12 @@ export class SupabaseDatabase {
     year: number,
     month?: number
   ): Promise<ItemHistory[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getHistoriesForAnalysis()
+    }
+
     try {
       let query = supabase
         .from('item_histories')
@@ -1070,6 +1190,12 @@ export class SupabaseDatabase {
     month?: number,
     day?: number
   ): Promise<ItemHistory[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getWorkHistories()
+    }
+
     try {
       let query = supabase
         .from('item_histories')
@@ -1115,6 +1241,12 @@ export class SupabaseDatabase {
 
   // Preparation Tasks
   async getPreparationTasks(): Promise<PreparationTask[]> {
+    // デモモード（URL に dummy）ではモックへ委譲する。
+    // ガードが無いと dummy.supabase.co を実際に叩いて失敗する
+    if (isDemoMode()) {
+      return mockDb.getPreparationTasks() as any
+    }
+
     const { data, error } = await supabase
       .from('preparation_tasks')
       .select('*')
@@ -1195,7 +1327,7 @@ export class SupabaseDatabase {
 
   // Batch upsert methods for import
   async upsertCategories(categories: ProductCategory[]): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       for (const category of categories) {
         await mockDb.saveCategory(category)
       }
@@ -1213,7 +1345,7 @@ export class SupabaseDatabase {
   }
 
   async upsertProducts(products: Product[]): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       for (const product of products) {
         await mockDb.saveProduct(product)
       }
@@ -1231,7 +1363,7 @@ export class SupabaseDatabase {
   }
 
   async upsertProductItems(items: ProductItem[]): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       for (const item of items) {
         await mockDb.saveProductItem(item)
       }
@@ -1253,7 +1385,7 @@ export class SupabaseDatabase {
   }
 
   async upsertUsers(users: User[]): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       for (const user of users) {
         await mockDb.saveUser(user)
       }
@@ -1272,7 +1404,7 @@ export class SupabaseDatabase {
 
   // Delete item history
   async deleteItemHistory(historyId: string): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.deleteItemHistory(historyId)
     }
     
@@ -1289,7 +1421,7 @@ export class SupabaseDatabase {
 
   // Delete order and its items
   async deleteOrder(orderId: string): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.deleteOrder(orderId)
     }
     
@@ -1377,7 +1509,7 @@ export class SupabaseDatabase {
 
   // Demo Equipment Management
   async getDemoEquipment(): Promise<DemoEquipment[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getDemoEquipment()
     }
     
@@ -1413,7 +1545,7 @@ export class SupabaseDatabase {
   }
 
   async saveDemoEquipment(equipment: DemoEquipment): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.saveDemoEquipment(equipment)
     }
     
@@ -1442,7 +1574,7 @@ export class SupabaseDatabase {
   }
 
   async deleteDemoEquipment(id: string): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.deleteDemoEquipment(id)
     }
     
@@ -1459,7 +1591,7 @@ export class SupabaseDatabase {
 
   // Deposit Items Management
   async getDepositItems(): Promise<DepositItem[]> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.getDepositItems()
     }
     
@@ -1490,7 +1622,7 @@ export class SupabaseDatabase {
   }
 
   async saveDepositItem(item: DepositItem): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.saveDepositItem(item)
     }
     
@@ -1514,7 +1646,7 @@ export class SupabaseDatabase {
   }
 
   async deleteDepositItem(id: string): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return await mockDb.deleteDepositItem(id)
     }
 
@@ -1534,9 +1666,9 @@ export class SupabaseDatabase {
    * 印刷待ちキューの全取得
    */
   async getLabelPrintQueue(): Promise<LabelPrintQueue[]> {
-    if (useMockDatabase()) {
-      console.warn('Mock database does not support label print queue')
-      return []
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.getLabelPrintQueue()
     }
 
     const { data, error } = await supabase
@@ -1561,8 +1693,9 @@ export class SupabaseDatabase {
    * ステータス別の印刷待ちキュー取得
    */
   async getLabelPrintQueueByStatus(status: LabelPrintQueue['status']): Promise<LabelPrintQueue[]> {
-    if (useMockDatabase()) {
-      return []
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.getLabelPrintQueueByStatus(status)
     }
 
     const { data, error } = await supabase
@@ -1583,8 +1716,9 @@ export class SupabaseDatabase {
    * 印刷待ちキューに追加
    */
   async addLabelPrintQueue(queueItem: Omit<LabelPrintQueue, 'id' | 'created_at'>): Promise<LabelPrintQueue> {
-    if (useMockDatabase()) {
-      throw new Error('Mock database does not support label print queue')
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.addLabelPrintQueue(queueItem)
     }
 
     const { data, error } = await supabase
@@ -1620,8 +1754,9 @@ export class SupabaseDatabase {
     printedBy?: string,
     errorMessage?: string
   ): Promise<void> {
-    if (useMockDatabase()) {
-      return
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.updateLabelPrintQueueStatus(id, status, printedBy, errorMessage)
     }
 
     const updateData: any = {
@@ -1657,8 +1792,9 @@ export class SupabaseDatabase {
    * 消さないと「完了」と「印刷待ち」が同時に見える行ができる。
    */
   async requeueLabelPrint(id: string): Promise<void> {
-    if (useMockDatabase()) {
-      return
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.requeueLabelPrint(id)
     }
 
     const { error } = await supabase
@@ -1682,8 +1818,9 @@ export class SupabaseDatabase {
    * 印刷キュー削除
    */
   async deleteLabelPrintQueue(id: string): Promise<void> {
-    if (useMockDatabase()) {
-      return
+    // デモモードではモックへ委譲する（本番の Supabase を叩かない）
+    if (isDemoMode()) {
+      return mockDb.deleteLabelPrintQueue(id)
     }
 
     const { error } = await supabase
@@ -1701,7 +1838,7 @@ export class SupabaseDatabase {
    * 完了済み印刷キューの一括削除
    */
   async deleteCompletedLabelPrintQueue(): Promise<void> {
-    if (useMockDatabase()) {
+    if (isDemoMode()) {
       return
     }
 
