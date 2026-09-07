@@ -12,6 +12,7 @@ import { Preparation } from './pages/preparation'
 import { History } from './pages/history'
 import { ItemDetail } from './pages/item-detail'
 import { MyPage } from './pages/mypage'
+import { Home } from './pages/home'
 import { Approval } from './pages/approval'
 import { Menu } from './pages/menu'
 import { Demo } from './pages/demo'
@@ -119,7 +120,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<MyPage />} />
+          {/* PC はメニュー画面、モバイルはマイページ（2026-09-07 田口さん） */}
+          <Route index element={<Home />} />
           <Route path="scan" element={<Scan />} />
           <Route path="inventory" element={<Inventory />} />
           <Route path="orders" element={<Orders />} />

@@ -89,7 +89,8 @@ for (const route of routes) {
   const errors = []
   // デモモードでは Realtime の接続先が dummy.supabase.co なので必ず失敗する。
   // これはモードの仕様であって不具合ではないので数えない。
-  const EXPECTED_IN_DEMO = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket connection/
+  // 天気APIキーもデモでは空にしてあるので、その失敗は仕様
+  const EXPECTED_IN_DEMO = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket connection|Weather API key not configured/
   page.on('console', m => {
     if (m.type() === 'error' && !EXPECTED_IN_DEMO.test(m.text())) errors.push(`console: ${m.text()}`)
   })

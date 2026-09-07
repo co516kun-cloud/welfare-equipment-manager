@@ -24,7 +24,8 @@ const OUT = process.env.OUT ?? '/tmp/demo-e2e'
 const HEADED = process.env.HEADED === '1'
 
 // デモモードでは Realtime の接続先が dummy になり必ず失敗する。仕様なので数えない
-const EXPECTED_IN_DEMO = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket connection/
+// 天気APIキーもデモでは空にしてあるので、その失敗は仕様
+const EXPECTED_IN_DEMO = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket connection|Weather API key not configured/
 
 function resolvePlaywright() {
   const require = createRequire(import.meta.url)

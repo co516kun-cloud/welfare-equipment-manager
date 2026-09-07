@@ -7,6 +7,7 @@ import { Preparation } from '../../pages/preparation'
 import { History } from '../../pages/history'
 import { ItemDetail } from '../../pages/item-detail'
 import { MyPage } from '../../pages/mypage'
+import { Home } from '../../pages/home'
 import { Approval } from '../../pages/approval'
 import { Menu } from '../../pages/menu'
 import { Demo } from '../../pages/demo'
@@ -21,7 +22,8 @@ export function DebugApp() {
       <Router>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<MyPage />} />
+            {/* 本番の App.tsx と揃える（PC はメニュー、モバイルはマイページ） */}
+            <Route index element={<Home />} />
             <Route path="scan" element={<Scan />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="orders" element={<Orders />} />
