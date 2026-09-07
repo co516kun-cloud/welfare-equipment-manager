@@ -40,3 +40,6 @@ dist-ssr
 
 # 脆弱性診断レポート（public リポなので追跡しない）
 .vuln-scan/
+
+# デモモードのスクリーンショット出力
+demo-shots/

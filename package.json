@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "type-check": "node scripts/typecheck/gate.mjs",
     "type-check:all": "tsc -p tsconfig.app.json --noEmit",
-    "type-check:accept": "node scripts/typecheck/gate.mjs --accept"
+    "type-check:accept": "node scripts/typecheck/gate.mjs --accept",
+    "dev:demo": "vite --config vite.config.demo.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.52.0",
