@@ -54,16 +54,18 @@ describe('toCsvCell', () => {
 })
 
 describe('toCsv', () => {
+  const BOM = '\uFEFF'
+
   it('行と列を組み立て、先頭に BOM を付ける（Excel で日本語が化けないため）', () => {
     const csv = toCsv([
       ['日時', '顧客名'],
       ['2026-09-07', '山田, 太郎'],
     ])
-    expect(csv.startsWith('﻿')).toBe(true)
-    expect(csv).toBe('﻿日時,顧客名\r\n2026-09-07,"山田, 太郎"')
+    expect(csv.startsWith(BOM)).toBe(true)
+    expect(csv).toBe(BOM + '日時,顧客名\r\n2026-09-07,"山田, 太郎"')
   })
 
   it('行区切りは CRLF（Excel の既定）', () => {
-    expect(toCsv([['a'], ['b']])).toBe('﻿a\r\nb')
+    expect(toCsv([['a'], ['b']])).toBe(BOM + 'a\r\nb')
   })
 })

@@ -49,7 +49,9 @@ export function toCsvCell(value: unknown): string {
  * 先頭に BOM を付ける（付けないと Excel が UTF-8 と判別できず日本語が化ける）。
  * 行区切りは CRLF（Excel の既定）。
  */
+const BOM = '\uFEFF'
+
 export function toCsv(rows: unknown[][]): string {
   const body = rows.map(row => row.map(toCsvCell).join(',')).join('\r\n')
-  return `﻿${body}`
+  return BOM + body
 }
