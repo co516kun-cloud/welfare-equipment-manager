@@ -66,7 +66,6 @@ export function Header() {
     { name: '履歴管理', href: '/history', icon: '📈' },
     { name: 'デモ管理', href: '/demo', icon: '🎯' },
     { name: '預かり物', href: '/deposits', icon: '📦' },
-    { name: 'AI機能', href: '/ai-features', icon: '🤖' },
   ]
 
   // メニュー項目をタップした時の処理
@@ -251,7 +250,6 @@ export function Header() {
                             {item.name === '履歴管理' && '取引履歴・分析'}
                             {item.name === 'デモ管理' && 'デモ商品管理'}
                             {item.name === '預かり物' && '預かり物管理'}
-                            {item.name === 'AI機能' && 'AI支援ツール'}
                           </p>
                         </div>
                         <div className="ml-auto opacity-40 group-hover:opacity-100 transition-opacity">

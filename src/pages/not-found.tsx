@@ -8,8 +8,11 @@ import { Link, useLocation } from 'react-router-dom'
  * それらをブックマークしている人が白い画面に当たらないよう、行き先を案内する。
  */
 
-/** 廃止したページ → 代わりの案内 */
-const RETIRED: Record<string, { label: string; to: string; note: string }> = {
+/**
+ * 廃止したページ → 案内。
+ * label / to は「代わりに行ける場所」がある場合だけ持たせる（無ければトップへ戻る導線のみ）
+ */
+const RETIRED: Record<string, { note: string; label?: string; to?: string }> = {
   '/manual-import': {
     label: 'データ取込',
     to: '/data-import',
@@ -24,6 +27,9 @@ const RETIRED: Record<string, { label: string; to: string; note: string }> = {
     label: 'データ取込',
     to: '/data-import',
     note: 'このページは廃止しました。CSV の取込は下のページで行えます。',
+  },
+  '/ai-features': {
+    note: 'このページは廃止しました。中身がすべて試作のままで、実際には動いていなかったためです。',
   },
 }
 
@@ -42,7 +48,7 @@ export function NotFound() {
         {retired && <p className="text-sm">{retired.note}</p>}
 
         <div className="flex flex-wrap gap-3 pt-2">
-          {retired && (
+          {retired?.to && retired.label && (
             <Link
               to={retired.to}
               className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"

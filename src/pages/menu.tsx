@@ -99,27 +99,35 @@ const menuItems = [
         shortcut: 'D',
         badge: null
       },
-      { 
-        name: '預かり物', 
-        href: '/deposits', 
-        icon: '📦', 
+      {
+        name: '預かり物',
+        href: '/deposits',
+        icon: '📦',
         systemIcon: '🏪',
         description: '預かり物管理',
         shortcut: 'Dep',
         badge: null
       },
-      { 
-        name: 'AI機能', 
-        href: '/ai-features', 
-        icon: '🤖', 
-        systemIcon: '🧠',
-        description: 'AI支援ツール',
-        shortcut: 'AI',
-        badge: 'beta'
-      },
     ]
   }
 ]
+
+// PC版グリッドに並べる項目（3件ずつ×3行）。menuItems の並び順がそのまま表示順になる
+const gridItems = menuItems.flatMap(category => category.items)
+
+// 行ごとの帯の色。gridItems を3件ずつに切ったまとまりと1対1で対応する
+const GRID_ROW_STYLES = [
+  'from-emerald-800/80 via-teal-800/70 to-cyan-800/80 border-teal-400/40 shadow-teal-500/30 hover:shadow-teal-400/40 hover:border-teal-300/60',
+  'from-orange-800/80 via-amber-800/70 to-yellow-800/80 border-amber-400/40 shadow-amber-500/30 hover:shadow-amber-400/40 hover:border-amber-300/60',
+  'from-rose-800/80 via-pink-800/70 to-fuchsia-800/80 border-pink-400/40 shadow-pink-500/30 hover:shadow-pink-400/40 hover:border-pink-300/60',
+]
+
+/** 配列を size 件ずつのまとまりに切る */
+function chunk<T>(list: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
+  return out
+}
 
 export function Menu() {
   const { orders, items, users, loadData } = useInventoryStore()
@@ -418,173 +426,45 @@ export function Menu() {
             {/* 中央：3x3グリッド */}
             <div className="flex-1 self-start">
               <div className="space-y-4 max-w-md mr-24 ml-auto -mt-16">
-              {/* 1行目 */}
-              <div className="bg-gradient-to-r from-emerald-800/80 via-teal-800/70 to-cyan-800/80 backdrop-blur-xl rounded-2xl border border-teal-400/40 p-4 shadow-2xl shadow-teal-500/30 hover:shadow-teal-400/40 transition-all duration-300 hover:border-teal-300/60">
-                <div className="grid grid-cols-3 gap-4">
-                  {menuItems.flatMap(category => 
-                    category.items.filter(item => item.name !== 'AI機能')
-                  ).slice(0, 3).map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className="group relative bg-white/90 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border-2 border-slate-200/80 dark:border-slate-600/60 hover:border-blue-300 dark:hover:border-blue-400 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-white dark:hover:bg-slate-700/90 hover:border-blue-400 aspect-square flex flex-col items-center justify-center p-2"
-                    >
-                      {/* バッジ */}
-                      {item.badge && getBadgeValue(item.badge) && (
-                        <div className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow-md">
-                          {getBadgeValue(item.badge)}
+              {/* 3件ずつのまとまりを行にする。以前は同じ JSX を3回コピペして
+                  slice(0,3)/(3,6)/(6,9) で切っていた（各35行） */}
+              {chunk(gridItems, 3).map((row, rowIndex) => (
+                <div
+                  key={rowIndex}
+                  className={`bg-gradient-to-r ${GRID_ROW_STYLES[rowIndex % GRID_ROW_STYLES.length]} backdrop-blur-xl rounded-2xl border p-4 shadow-2xl transition-all duration-300`}
+                >
+                  <div className="grid grid-cols-3 gap-4">
+                    {row.map((item) => (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className="group relative bg-white/90 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border-2 border-slate-200/80 dark:border-slate-600/60 hover:border-blue-300 dark:hover:border-blue-400 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-white dark:hover:bg-slate-700/90 hover:border-blue-400 aspect-square flex flex-col items-center justify-center p-2"
+                      >
+                        {/* バッジ */}
+                        {item.badge && getBadgeValue(item.badge) && (
+                          <div className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow-md">
+                            {getBadgeValue(item.badge)}
+                          </div>
+                        )}
+
+                        {/* アイコンエリア */}
+                        <div className="relative">
+                          <span className="text-4xl group-hover:scale-110 transition-transform duration-300">{item.icon}</span>
+                          <span className="absolute -bottom-0.5 -right-0.5 text-base opacity-60">{item.systemIcon}</span>
                         </div>
-                      )}
 
-                      {/* アイコンエリア */}
-                      <div className="relative">
-                        <span className="text-4xl group-hover:scale-110 transition-transform duration-300">{item.icon}</span>
-                        <span className="absolute -bottom-0.5 -right-0.5 text-base opacity-60">{item.systemIcon}</span>
-                      </div>
+                        {/* コンテンツ */}
+                        <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mt-3">
+                          {item.name}
+                        </h3>
 
-                      {/* コンテンツ */}
-                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mt-3">
-                        {item.name}
-                      </h3>
-
-                      {/* ホバーエフェクト */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* 2行目 */}
-              <div className="bg-gradient-to-r from-orange-800/80 via-amber-800/70 to-yellow-800/80 backdrop-blur-xl rounded-2xl border border-amber-400/40 p-4 shadow-2xl shadow-amber-500/30 hover:shadow-amber-400/40 transition-all duration-300 hover:border-amber-300/60">
-                <div className="grid grid-cols-3 gap-4">
-                  {menuItems.flatMap(category => 
-                    category.items.filter(item => item.name !== 'AI機能')
-                  ).slice(3, 6).map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className="group relative bg-white/90 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border-2 border-slate-200/80 dark:border-slate-600/60 hover:border-blue-300 dark:hover:border-blue-400 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-white dark:hover:bg-slate-700/90 hover:border-blue-400 aspect-square flex flex-col items-center justify-center p-2"
-                    >
-                      {/* バッジ */}
-                      {item.badge && getBadgeValue(item.badge) && (
-                        <div className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow-md">
-                          {getBadgeValue(item.badge)}
-                        </div>
-                      )}
-
-                      {/* アイコンエリア */}
-                      <div className="relative">
-                        <span className="text-4xl group-hover:scale-110 transition-transform duration-300">{item.icon}</span>
-                        <span className="absolute -bottom-0.5 -right-0.5 text-base opacity-60">{item.systemIcon}</span>
-                      </div>
-
-                      {/* コンテンツ */}
-                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mt-3">
-                        {item.name}
-                      </h3>
-
-                      {/* ホバーエフェクト */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* 3行目 */}
-              <div className="bg-gradient-to-r from-rose-800/80 via-pink-800/70 to-fuchsia-800/80 backdrop-blur-xl rounded-2xl border border-pink-400/40 p-4 shadow-2xl shadow-pink-500/30 hover:shadow-pink-400/40 transition-all duration-300 hover:border-pink-300/60">
-                <div className="grid grid-cols-3 gap-4">
-                  {menuItems.flatMap(category => 
-                    category.items.filter(item => item.name !== 'AI機能')
-                  ).slice(6, 9).map((item) => (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className="group relative bg-white/90 dark:bg-slate-800/80 backdrop-blur-md rounded-lg border-2 border-slate-200/80 dark:border-slate-600/60 hover:border-blue-300 dark:hover:border-blue-400 transition-all duration-300 hover:shadow-lg hover:scale-105 hover:bg-white dark:hover:bg-slate-700/90 hover:border-blue-400 aspect-square flex flex-col items-center justify-center p-2"
-                    >
-                      {/* バッジ */}
-                      {item.badge && getBadgeValue(item.badge) && (
-                        <div className="absolute -top-1 -right-1 bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow-md">
-                          {getBadgeValue(item.badge)}
-                        </div>
-                      )}
-
-                      {/* アイコンエリア */}
-                      <div className="relative">
-                        <span className="text-4xl group-hover:scale-110 transition-transform duration-300">{item.icon}</span>
-                        <span className="absolute -bottom-0.5 -right-0.5 text-base opacity-60">{item.systemIcon}</span>
-                      </div>
-
-                      {/* コンテンツ */}
-                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors mt-3">
-                        {item.name}
-                      </h3>
-
-                      {/* ホバーエフェクト */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              </div>
-            </div>
-          </div>
-
-          {/* AI機能セクション */}
-          <div className="mt-8 mb-6">
-            <h2 className="text-2xl font-bold text-white mb-6 text-center">AI機能</h2>
-            <div className="grid grid-cols-3 gap-8 max-w-6xl mx-auto">
-              {/* AIアシスタント */}
-              <div className="bg-white/95 dark:bg-white/90 backdrop-blur-xl rounded-2xl border-2 border-slate-200/80 p-8 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="flex flex-col items-center mb-6">
-                  <div className="h-16 w-16 rounded-full bg-orange-500/20 flex items-center justify-center mb-4">
-                    <span className="text-orange-500 text-3xl">💬</span>
+                        {/* ホバーエフェクト */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+                      </Link>
+                    ))}
                   </div>
-                  <h3 className="text-xl font-bold text-slate-800">AIアシスタント</h3>
                 </div>
-                <p className="text-base text-slate-600 mb-6 text-center">
-                  アプリの使い方についてAIがお答えします
-                </p>
-                <Link to="/ai-features">
-                  <Button className="w-full text-lg py-6">
-                    質問する
-                  </Button>
-                </Link>
-              </div>
-
-              {/* レポート生成 */}
-              <div className="bg-white/95 dark:bg-white/90 backdrop-blur-xl rounded-2xl border-2 border-slate-200/80 p-8 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="flex flex-col items-center mb-6">
-                  <div className="h-16 w-16 rounded-full bg-purple-500/20 flex items-center justify-center mb-4">
-                    <span className="text-purple-500 text-3xl">📊</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-800">レポート生成</h3>
-                </div>
-                <p className="text-base text-slate-600 mb-6 text-center">
-                  業務データから詳細なレポートを自動生成
-                </p>
-                <Link to="/ai-features">
-                  <Button className="w-full text-lg py-6">
-                    生成開始
-                  </Button>
-                </Link>
-              </div>
-
-              {/* AI分析 */}
-              <div className="bg-white/95 dark:bg-white/90 backdrop-blur-xl rounded-2xl border-2 border-slate-200/80 p-8 shadow-lg hover:shadow-xl transition-shadow">
-                <div className="flex flex-col items-center mb-6">
-                  <div className="h-16 w-16 rounded-full bg-red-500/20 flex items-center justify-center mb-4">
-                    <span className="text-red-500 text-3xl">📈</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-800">AI分析</h3>
-                </div>
-                <p className="text-base text-slate-600 mb-6 text-center">
-                  利用パターンを分析し最適化提案
-                </p>
-                <Link to="/ai-features">
-                  <Button className="w-full text-lg py-6">
-                    分析開始
-                  </Button>
-                </Link>
+              ))}
               </div>
             </div>
           </div>

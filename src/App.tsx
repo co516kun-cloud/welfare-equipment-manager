@@ -13,7 +13,6 @@ import { History } from './pages/history'
 import { ItemDetail } from './pages/item-detail'
 import { MyPage } from './pages/mypage'
 import { Approval } from './pages/approval'
-import { AIFeatures } from './pages/ai-features-simple'
 import { Menu } from './pages/menu'
 import { Demo } from './pages/demo'
 import { Deposits } from './pages/deposits'
@@ -129,7 +128,6 @@ function App() {
           <Route path="item/:itemId" element={<ItemDetail />} />
           <Route path="approval" element={<Approval />} />
           <Route path="mypage" element={<MyPage />} />
-          <Route path="ai-features" element={<AIFeatures />} />
           <Route path="menu" element={<Menu />} />
           <Route path="demo" element={<Demo />} />
           <Route path="deposits" element={<Deposits />} />

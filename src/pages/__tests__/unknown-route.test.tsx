@@ -43,6 +43,18 @@ describe('NotFound', () => {
     expect(screen.queryByRole('link', { name: /データ取込/ })).not.toBeInTheDocument()
   })
 
+  it('廃止した AI機能ページを開いた場合は、廃止した旨を伝えてトップへ案内する', () => {
+    render(
+      <MemoryRouter initialEntries={['/ai-features']}>
+        <NotFound />
+      </MemoryRouter>
+    )
+    expect(screen.getByText(/廃止/)).toBeInTheDocument()
+    // 代替ページは無いので、取込への案内は出さない
+    expect(screen.queryByRole('link', { name: /データ取込/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /トップ/ })).toHaveAttribute('href', '/')
+  })
+
   it('トップへ戻る導線がある', () => {
     render(<MemoryRouter><NotFound /></MemoryRouter>)
     expect(screen.getByRole('link', { name: /トップ/ })).toHaveAttribute('href', '/')
