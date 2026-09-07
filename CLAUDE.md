@@ -98,12 +98,17 @@ npm run lint
 
 このプロジェクトは Supabase 本番DB・Vercel本番環境・実顧客データに接続している。以下を厳守すること。
 
-### 禁止コマンド (settings.local.json の deny でも強制ブロック済み)
-- `rm -rf` 系すべて — ディレクトリ一括削除は人間に依頼する
+### 権限の3段階 (.claude/settings.json で設定。.claude/ は gitignore なのでこの PC 専用)
+- **deny**（Claude は実行できない。人間が手で行う）: 下の禁止コマンドと、`.env` / `~/secrets` の読み書き
+- **ask**（Claude は実行前に確認する）: `git push`、`git reset --hard` / `git clean` / `git checkout .` / `git restore .` / `git branch -D`、一時領域以外への `rm -r`（`~/.claude/hooks/safety-guard.py` が判定。node_modules / dist / build / tmp 配下は通る）、`vercel` / `npx vercel`、Supabase CLI の本番操作（`db` / `migration up` / `functions deploy` / `secrets` / `link`）、`gh pr merge`、`sudo`、`pkill`、第三者に届く MCP 送信（メール送信・Slack 投稿・カレンダー招待・Drive 共有）、Vercel のデプロイ・課金・設定変更
+- **allow**（それ以外すべて。確認なしで実行してよい）: Bash 全般、ファイル編集、参照系 MCP、ブラウザ操作、Notion への書き込み
+
+### 禁止コマンド (.claude/settings.json の deny と ~/.claude/hooks/safety-guard.py で強制ブロック済み)
 - `git push --force` / `--force-with-lease` / `-f` — main への強制 push 禁止
-- `git reset --hard` / `git clean -f*` / `git checkout .` — 未コミット変更を破壊する操作
-- `psql` 直接実行 / `supabase db reset` / `supabase db push` — 本番DB操作は手動のみ
-- `vercel --prod` 系 — 本番デプロイは人間が確認後に実行
+- `rm -rf /` / `rm -rf ~` — ルート・ホーム直下の再帰削除
+- `psql` 直接実行 / `supabase db reset` / `supabase db push` / `supabase projects delete` — 本番DB操作は手動のみ
+- `DROP TABLE` / `TRUNCATE` / WHERE 無しの `DELETE` を含むコマンド — 復元できない
+- `vercel --prod` 系 / `gh repo delete` — 本番デプロイ・リポジトリ削除は人間が確認後に実行
 
 ### SQL ファイルの扱い
 - リポジトリ直下の `*.sql` ファイル (add-*.sql / fix-*.sql / create-*.sql 等 31本) は**実行履歴ではなくマイグレーション草稿**
