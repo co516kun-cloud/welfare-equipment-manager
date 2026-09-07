@@ -13,9 +13,13 @@
 
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
+import * as os from 'os'
+import * as path from 'path'
 
-// .envファイルから環境変数を読み込む
-dotenv.config()
+// 環境変数は ~/secrets/welfare-equipment-manager/.env から読む。
+// 🔴 2026-09-04 にリポジトリ直下の .env を廃止した（public リポの作業ツリー内に秘密を置かないため）。
+//   dotenv.config() は cwd の .env を見るので、そのままでは動かなくなっていた。
+dotenv.config({ path: path.join(os.homedir(), 'secrets', 'welfare-equipment-manager', '.env') })
 
 // Supabase設定
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL

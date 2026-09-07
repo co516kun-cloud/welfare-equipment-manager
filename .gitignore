@@ -29,18 +29,8 @@ dist-ssr
 *.sw?
 .vercel
 
-# Debug/test scripts with hardcoded credentials
-create-auth-user.js
-check-order-fields.js
-check-schema.js
-cleanup-old-orders.js
-debug-mypage-issue.js
-debug-order-flow.js
-debug-product-items.js
-browser-debug.js
-create-test-order-with-dates.js
-final-test.js
-add-missing-columns.js
+# 上にあった「Debug/test scripts with hardcoded credentials」11本は
+# 2026-09-07 に実ファイルごと削除したので、無視指定も不要になった。
 
 # Claude Code のローカル設定（2026-08-23 追加）
 # 🔴 このリポジトリは public。ローカルの絶対パスとツール許可設定が
