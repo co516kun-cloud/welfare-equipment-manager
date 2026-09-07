@@ -44,8 +44,14 @@ npm run build
 # プレビュー
 npm run preview
 
-# 型チェック
+# 型チェック（新規エラーだけを止めるゲート。既存分は baseline.txt で据え置き）
 npm run type-check
+
+# 型エラーを全部見る
+npm run type-check:all
+
+# 型エラーを直したあと、ベースラインに反映する
+npm run type-check:accept
 
 # リンター
 npm run lint
@@ -83,7 +89,9 @@ npm run lint
 
 - esbuild に問題がある可能性があるため、依存関係のインストール時は注意が必要
 - CSS variables を使用したテーマシステムでダークモード対応
-- TypeScript strict mode で型安全性を保証
+- **TypeScript は strict:false**（tsconfig.app.json）。既存の型エラーが約100件あり、
+  `npm run type-check` は「新規エラーだけを止める」ゲートとして動く。詳細は
+  `scripts/typecheck/gate.mjs` の先頭コメント
 - 日本語UI/UX に最適化された設計
 
 ## Safety Rules (Claude Code 必読)
@@ -116,6 +124,7 @@ npm run lint
 3. `npm run dev` で起動確認
 
 ### 変更の検証
-- `src/` 配下の変更はコミット前に `npm run type-check` と `npm run lint` を通す
+- `src/` 配下の変更はコミット前に `npm run type-check`（新規型エラーを止める）と `npm test` を通す
+- `npm run lint` は既存エラーが多いので「自分の変更で増やしていないか」を差分で見る
 - UI 変更はユーザーに動作確認を依頼してからコミット・デプロイへ進む
 - 本番ユーザー (顧客名簿・貸与履歴) に影響しうる変更は必ず事前確認

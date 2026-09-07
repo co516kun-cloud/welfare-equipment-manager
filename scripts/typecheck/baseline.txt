@@ -1,0 +1,103 @@
+src/components/layout/header.tsx|TS2322|Type '"absolute !important"' is not assignable to type 'Position'.
+src/components/layout/header.tsx|TS2322|Type '"absolute !important"' is not assignable to type 'Position'.
+src/components/layout/header.tsx|TS2322|Type '"fixed !important"' is not assignable to type 'Position'.
+src/components/maintenance-checklist.tsx|TS2322|Type '{ children: (string | Element)[]; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogTitleProps'.
+src/components/maintenance-checklist.tsx|TS2322|Type '{ children: string; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogTitleProps'.
+src/components/scan-action-dialog.tsx|TS2339|Property 'category' does not exist on type 'Product'.
+src/components/scan-action-dialog.tsx|TS2339|Property 'category' does not exist on type 'Product'.
+src/components/scan-action-dialog.tsx|TS2339|Property 'category' does not exist on type 'Product'.
+src/components/scan-action-dialog.tsx|TS2551|Property 'assignedTo' does not exist on type 'Order'. Did you mean 'assigned_to'?
+src/components/scan-action-dialog.tsx|TS2551|Property 'carriedBy' does not exist on type 'Order'. Did you mean 'carried_by'?
+src/components/scan-action-dialog.tsx|TS2551|Property 'requiredDate' does not exist on type 'Order'. Did you mean 'required_date'?
+src/hooks/useProtectedAction.ts|TS1294|This syntax is not allowed when 'erasableSyntaxOnly' is enabled.
+src/hooks/useProtectedAction.ts|TS2554|Expected 1 arguments, but got 0.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/japanese-parser.ts|TS2739|Type '{ available: string; rented: string; returned: string; cleaning: string; maintenance: string; demo_cancelled: string; out_of_order: string; unknown: string; }' is missing the following properties from type 'Record<"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed", string>': reserved, ready_for_delivery, disposed
+src/lib/mock-database.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/mock-database.ts|TS2322|Type '"excellent"' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/mock-database.ts|TS2339|Property 'ITEM_HISTORIES' does not exist on type '{ CATEGORIES: string; PRODUCTS: string; PRODUCT_ITEMS: string; USERS: string; ORDERS: string; }'.
+src/lib/mock-database.ts|TS2339|Property 'getItemHistories' does not exist on type 'MockDatabase'.
+src/lib/mock-database.ts|TS2353|Object literal may only specify known properties, and 'notes' does not exist in type 'ProductItem'.
+src/lib/mock-database.ts|TS2353|Object literal may only specify known properties, and 'notes' does not exist in type 'ProductItem'.
+src/lib/notification-generator.ts|TS2339|Property 'created_at' does not exist on type 'ProductItem'.
+src/lib/notification-generator.ts|TS2339|Property 'created_at' does not exist on type 'ProductItem'.
+src/lib/notification-generator.ts|TS2339|Property 'updated_at' does not exist on type 'ProductItem'.
+src/lib/notification-generator.ts|TS2339|Property 'updated_at' does not exist on type 'ProductItem'.
+src/lib/supabase-database.ts|TS2322|Type 'string' is not assignable to type '"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed"'.
+src/lib/supabase-database.ts|TS2322|Type 'string' is not assignable to type '"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed"'.
+src/lib/supabase-database.ts|TS2322|Type 'string' is not assignable to type '"unknown" | "good" | "fair" | "caution" | "needs_repair"'.
+src/lib/supabase-database.ts|TS2322|Type '{ id: any; customer_name: any; order_date: any; required_date: any; assigned_to: any; carried_by: any; status: any; notes: any; created_by: any; needs_approval: any; approved_by: any; approved_date: any; approval_notes: any; items: OrderItem[]; }[]' is not assignable to type 'Order[]'.
+src/lib/supabase-database.ts|TS2322|Type '{ id: any; customer_name: any; order_date: any; required_date: any; assigned_to: any; carried_by: any; status: any; notes: any; created_by: any; needs_approval: any; approved_by: any; approved_date: any; approval_notes: any; items: OrderItem[]; }[]' is not assignable to type 'Order[]'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2339|Property 'order_id' does not exist on type 'OrderItem'.
+src/lib/supabase-database.ts|TS2739|Type '{ id: any; customer_name: any; order_date: any; required_date: any; assigned_to: any; carried_by: any; status: any; notes: any; approved_by: any; approved_date: any; approval_notes: any; items: any[]; }' is missing the following properties from type 'Order': created_at, created_by
+src/pages/data-import.tsx|TS2345|Argument of type '{ id: any; product_id: any; status: string; condition: string; location: any; customer_name: any; loan_start_date: any; qr_code: any; condition_notes: any; }[]' is not assignable to parameter of type 'ProductItem[]'.
+src/pages/inventory.tsx|TS2339|Property 'minimum_stock' does not exist on type 'Product'.
+src/pages/inventory.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/inventory.tsx|TS2353|Object literal may only specify known properties, and 'notes' does not exist in type 'ProductItem'.
+src/pages/item-detail.tsx|TS2322|Type '{ children: (string | number)[]; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogTitleProps'.
+src/pages/item-detail.tsx|TS2322|Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogHeaderProps'.
+src/pages/item-detail.tsx|TS2339|Property 'category' does not exist on type 'Product'.
+src/pages/item-detail.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/item-detail.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/item-detail.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/item-detail.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/item-detail.tsx|TS2345|Argument of type 'string' is not assignable to parameter of type '"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed"'.
+src/pages/item-detail.tsx|TS2345|Argument of type '{ id: string; qr_code: string; product_id: string; status: string; condition: string; location: string; customer_name: string; loan_start_date: string; condition_notes: string; notes: string; }' is not assignable to parameter of type 'ProductItem'.
+src/pages/mypage.tsx|TS2322|Type '{ children: Element[]; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogHeaderProps'.
+src/pages/mypage.tsx|TS2322|Type '{ onScan: (scannedCode: string) => Promise<void>; onError: (error: string) => void; isActive: boolean; }' is not assignable to type 'IntrinsicAttributes & QRCameraScannerProps'.
+src/pages/mypage.tsx|TS2322|Type '{ onScan: (scannedCode: string) => Promise<void>; onError: (error: string) => void; isActive: boolean; }' is not assignable to type 'IntrinsicAttributes & QRCameraScannerProps'.
+src/pages/mypage.tsx|TS2339|Property 'condition_notes' does not exist on type 'OrderItem'.
+src/pages/mypage.tsx|TS2339|Property 'customer' does not exist on type 'unknown'.
+src/pages/mypage.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/mypage.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/mypage.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/mypage.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/mypage.tsx|TS2551|Property 'fromStatus' does not exist on type 'ItemHistory'. Did you mean 'from_status'?
+src/pages/mypage.tsx|TS2561|Object literal may only specify known properties, but 'customer_name' does not exist in type '{ location?: string; condition?: string; notes?: string; conditionNotes?: string; customerName?: string; photos?: string[]; metadata?: any; }'. Did you mean to write 'customerName'?
+src/pages/mypage.tsx|TS2561|Object literal may only specify known properties, but 'customer_name' does not exist in type '{ location?: string; condition?: string; notes?: string; conditionNotes?: string; customerName?: string; photos?: string[]; metadata?: any; }'. Did you mean to write 'customerName'?
+src/pages/mypage.tsx|TS2561|Object literal may only specify known properties, but 'customer_name' does not exist in type '{ location?: string; condition?: string; notes?: string; conditionNotes?: string; customerName?: string; photos?: string[]; metadata?: any; }'. Did you mean to write 'customerName'?
+src/pages/mypage.tsx|TS2561|Object literal may only specify known properties, but 'customer_name' does not exist in type '{ location?: string; condition?: string; notes?: string; conditionNotes?: string; customerName?: string; photos?: string[]; metadata?: any; }'. Did you mean to write 'customerName'?
+src/pages/mypage.tsx|TS2561|Object literal may only specify known properties, but 'customer_name' does not exist in type '{ location?: string; condition?: string; notes?: string; conditionNotes?: string; customerName?: string; photos?: string[]; metadata?: any; }'. Did you mean to write 'customerName'?
+src/pages/preparation.tsx|TS2339|Property 'customer' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'customer' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'items' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/preparation.tsx|TS2339|Property 'notes' does not exist on type 'ProductItem'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2339|Property 'priority' does not exist on type 'unknown'.
+src/pages/preparation.tsx|TS2551|Property 'fromStatus' does not exist on type 'ItemHistory'. Did you mean 'from_status'?
+src/pages/scan.tsx|TS2304|Cannot find name 'scrollPosition'.
+src/pages/stock-alert.tsx|TS2339|Property 'available_count' does not exist on type 'unknown'.
+src/pages/stock-alert.tsx|TS2339|Property 'available_count' does not exist on type 'unknown'.
+src/pages/stock-alert.tsx|TS2339|Property 'product_id' does not exist on type 'unknown'.
+src/pages/stock-alert.tsx|TS2339|Property 'product_id' does not exist on type 'unknown'.
+src/stores/useInventoryStore.ts|TS2353|Object literal may only specify known properties, and 'lastSyncTime' does not exist in type 'InventoryState | Partial<InventoryState> | ((state: InventoryState) => InventoryState | Partial<InventoryState>)'.

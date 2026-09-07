@@ -10,6 +10,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     // mcp-server 配下の純粋ロジック（印刷エージェント等）もここで回す
-    include: ['src/**/*.test.{ts,tsx}', 'mcp-server/src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'mcp-server/src/**/*.test.ts', 'scripts/**/*.test.ts'],
   },
 })
