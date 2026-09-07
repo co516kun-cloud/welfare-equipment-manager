@@ -99,6 +99,7 @@ export interface ItemHistory {
   location?: string
   condition?: ProductItem['condition']
   customer_name?: string
+  notes?: string // 操作時のメモ（履歴画面の「備考」列）。condition_notes とは別物
   condition_notes?: string // 状態メモ（メンテナンス済み・入庫処理時のみ記録）
   photos?: string[] // 写真データ（Base64形式、メンテナンス完了時のみ記録）
   metadata?: Record<string, any>
