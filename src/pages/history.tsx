@@ -5,6 +5,7 @@ import { Select } from '../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { useState, useEffect } from 'react'
 import { supabaseDb } from '../lib/supabase-database'
+import { toCsv } from '../lib/csv-export'
 import type { ItemHistory, ProductItem, Product } from '../types'
 
 export function History() {
@@ -281,7 +282,9 @@ export function History() {
       ])
     ]
 
-    const csv = csvData.map(row => row.join(',')).join('\n')
+    // 🔴 以前は row.join(',') で素のまま連結していた。値は DB 由来なので、
+    //   カンマ・改行で列がずれ、= や @ で始まる値は Excel が数式として実行していた。
+    const csv = toCsv(csvData)
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
