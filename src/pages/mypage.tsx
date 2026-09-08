@@ -2253,7 +2253,7 @@ export function MyPage() {
               {useDirectRentalCamera ? (
                 <div className="space-y-2">
                   <QRCameraScanner
-                    onScan={handleDirectRentalScanResult}
+                    onScanResult={handleDirectRentalScanResult}
                     onError={(error) => setDirectRentalError(error)}
                     isActive={showDirectRentalScan && useDirectRentalCamera}
                   />
@@ -2832,7 +2832,7 @@ export function MyPage() {
             {useDirectRentalCamera ? (
               <div className="space-y-2">
                 <QRCameraScanner
-                  onScan={handleDirectRentalScanResult}
+                  onScanResult={handleDirectRentalScanResult}
                   onError={(error) => setDirectRentalError(error)}
                   isActive={showDirectRentalScan && useDirectRentalCamera}
                 />

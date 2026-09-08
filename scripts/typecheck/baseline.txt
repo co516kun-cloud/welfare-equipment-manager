@@ -52,8 +52,6 @@ src/pages/item-detail.tsx|TS2339|Property 'notes' does not exist on type 'Produc
 src/pages/item-detail.tsx|TS2345|Argument of type 'string' is not assignable to parameter of type '"available" | "reserved" | "ready_for_delivery" | "rented" | "returned" | "cleaning" | "maintenance" | "demo_cancelled" | "out_of_order" | "unknown" | "disposed"'.
 src/pages/item-detail.tsx|TS2345|Argument of type '{ id: string; qr_code: string; product_id: string; status: string; condition: string; location: string; customer_name: string; loan_start_date: string; condition_notes: string; notes: string; }' is not assignable to parameter of type 'ProductItem'.
 src/pages/mypage.tsx|TS2322|Type '{ children: Element[]; className: string; }' is not assignable to type 'IntrinsicAttributes & DialogHeaderProps'.
-src/pages/mypage.tsx|TS2322|Type '{ onScan: (scannedCode: string) => Promise<void>; onError: (error: string) => void; isActive: boolean; }' is not assignable to type 'IntrinsicAttributes & QRCameraScannerProps'.
-src/pages/mypage.tsx|TS2322|Type '{ onScan: (scannedCode: string) => Promise<void>; onError: (error: string) => void; isActive: boolean; }' is not assignable to type 'IntrinsicAttributes & QRCameraScannerProps'.
 src/pages/mypage.tsx|TS2339|Property 'condition_notes' does not exist on type 'OrderItem'.
 src/pages/mypage.tsx|TS2339|Property 'customer' does not exist on type 'unknown'.
 src/pages/mypage.tsx|TS2339|Property 'items' does not exist on type 'unknown'.

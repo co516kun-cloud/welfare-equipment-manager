@@ -25,6 +25,8 @@ export function QRCameraScanner({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
+  // 「再試行」で初期化をやり直すための番号。増やすと下の useEffect が走り直す
+  const [retryToken, setRetryToken] = useState(0)
 
   // エラー回復機能
   const resetCamera = useCallback(async () => {
@@ -39,10 +41,14 @@ export function QRCameraScanner({
     }
     
     // 少し待ってから再初期化
+    //
+    // ⚠️ ここは setFacingMode(prev => prev) だった。同じ値を入れても React は
+    //    状態を更新せず再描画もしないので、依存配列が変わらず useEffect が走らない。
+    //    その結果「再試行」を押すとスキャナだけ壊れて、エラー表示だけ消えた
+    //    無反応状態になっていた（2026-09-08 修正）。
     setTimeout(() => {
       if (videoRef.current && hasCamera && isActive) {
-        // useEffectの依存配列を変更して再初期化をトリガー
-        setFacingMode(prev => prev)
+        setRetryToken(n => n + 1)
       }
     }, 500)
   }, [hasCamera, isActive])
@@ -74,7 +80,7 @@ export function QRCameraScanner({
     checkCamera()
   }, [])
 
-  // QRスキャナーの初期化
+  // QRスキャナーの初期化（retryToken を増やすと開き直す）
   useEffect(() => {
     if (!videoRef.current || !hasCamera || !isActive) return
 
@@ -135,7 +141,7 @@ export function QRCameraScanner({
         setIsScanning(false)
       }
     }
-  }, [hasCamera, isActive, facingMode])
+  }, [hasCamera, isActive, facingMode, retryToken])
 
   // カメラの切り替え
   const switchCamera = async () => {

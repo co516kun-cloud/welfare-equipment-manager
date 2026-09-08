@@ -236,6 +236,8 @@ export function Search() {
   // QRスキャン関連
   const [showQRScanner, setShowQRScanner] = useState(false)
   const [qrScanError, setQrScanError] = useState('')
+  // カメラが使えないときの手入力（2026-09-08）
+  const [qrManualCode, setQrManualCode] = useState('')
   
   // ステータス変更ダイアログを開く
   const handleStatusChange = (item: any) => {
@@ -1157,7 +1159,7 @@ export function Search() {
         </Dialog>
         
         {/* QRスキャナーダイアログ */}
-        <Dialog open={showQRScanner} onOpenChange={setShowQRScanner}>
+        <Dialog open={showQRScanner} onOpenChange={(open) => { setShowQRScanner(open); if (!open) { setQrManualCode(''); setQrScanError('') } }}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>QRコードスキャン</DialogTitle>
@@ -1175,10 +1177,41 @@ export function Search() {
               
               <QRCameraScanner
                 onScanResult={handleQRScanResult}
+                onError={(error) => setQrScanError(error)}
                 continuousMode={false}
                 className="w-full"
               />
-              
+
+              {/* カメラが使えないときの逃げ道（2026-09-08 追加）
+                  このダイアログにだけ手入力が無く、カメラが開けないと
+                  キャンセルするしかない行き止まりになっていた。
+                  スマホから http で開いた場合や、カメラの許可を断った場合に起きる */}
+              <div className="space-y-2 border-t border-border pt-3">
+                <Label htmlFor="qrManualCode" className="text-sm">
+                  カメラが使えないときは管理番号を入力
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="qrManualCode"
+                    value={qrManualCode}
+                    onChange={(e) => setQrManualCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && qrManualCode.trim()) {
+                        handleQRScanResult(qrManualCode.trim())
+                      }
+                    }}
+                    placeholder="例: WC-001"
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => qrManualCode.trim() && handleQRScanResult(qrManualCode.trim())}
+                    disabled={!qrManualCode.trim()}
+                  >
+                    開く
+                  </Button>
+                </div>
+              </div>
+
               <div className="flex justify-end">
                 <Button variant="outline" onClick={() => setShowQRScanner(false)}>
                   キャンセル
