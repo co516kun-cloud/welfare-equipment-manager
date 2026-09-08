@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url'
 import { loadLayeredEnv, defaultSecretsPath } from '../env.js'
 import { parsePrintOutput, buildPrintArgs, type PrintResult } from './core.js'
 import { createAgent, type QueueRow } from './agent.js'
+import { isRetryableAuthError, backoffMs } from './auth-retry.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -120,13 +121,44 @@ async function spoolerJobCount(): Promise<number | null> {
 // ---------------------------------------------------------------- Supabase
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * ログイン。つながるまで粘る（2026-09-08）
+ *
+ * 以前は失敗したら process.exit(1) だった。ネットの無い場所で Windows を
+ * 起動するとその場で終了し、Windows のタスクは「ログオン時」しか動かないので、
+ * 事務所に戻ってネットが復帰しても再ログオンするまで死んだままだった。
+ *
+ * 認証情報そのものが違う場合だけは、待っても直らないので止める。
+ */
 async function signIn(): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email: EMAIL!, password: PASSWORD! })
-  if (error) {
-    log(`ログイン失敗: ${error.message}`)
-    process.exit(1)
+  for (let attempt = 1; ; attempt++) {
+    const { error } = await supabase.auth.signInWithPassword({ email: EMAIL!, password: PASSWORD! })
+    if (!error) {
+      if (attempt > 1) log(`ログイン成功（${attempt} 回目）`)
+      log(`ログイン成功: ${EMAIL} として動作（printed_by = ${AGENT_NAME}）`)
+      return
+    }
+
+    if (!isRetryableAuthError(error)) {
+      log(`ログイン失敗（認証情報を確認してください）: ${error.message}`)
+      process.exit(1)
+    }
+
+    const wait = backoffMs(attempt)
+    log(`ログイン失敗（${attempt} 回目・${error.message}）。${wait / 1000} 秒後に再試行します`)
+    await sleep(wait)
   }
-  log(`ログイン成功: ${EMAIL} として動作（printed_by = ${AGENT_NAME}）`)
+}
+
+/** セッションが切れていたら入り直す。ネット断からの復帰で使う */
+async function ensureSignedIn(): Promise<boolean> {
+  const { data } = await supabase.auth.getSession()
+  if (data.session) return true
+  log('セッションが切れています。ログインし直します')
+  await signIn()
+  return true
 }
 
 /**
@@ -234,8 +266,16 @@ async function main(): Promise<void> {
     })
 
   const poll = setInterval(async () => {
-    await reconcileOwnPrinting()
-    await agent.drain()
+    try {
+      // ネットが切れている間にセッションが切れることがある。
+      // 復帰したら入り直してから拾いに行く
+      await ensureSignedIn()
+      await reconcileOwnPrinting()
+      await agent.drain()
+    } catch (err) {
+      // ここで投げると常駐が落ちる。次の polling で拾い直す
+      log(`polling で失敗: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }, POLL_MS)
 
   const shutdown = async (sig: string) => {

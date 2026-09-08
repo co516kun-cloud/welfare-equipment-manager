@@ -153,6 +153,18 @@ export function Menu() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // モバイルはマイページへ寄せる（下部タブで移動する作りのため）
+  //
+  // ⚠️ この useEffect は if (isMobile) の中に置いてあった。isMobile は初期値 false で
+  //    描画後に true になるので、2回目の描画でフックが1つ増え
+  //    「Rendered more hooks than during the previous render」で画面が真っ白になっていた。
+  //    条件分岐の外に出して、毎回同じ数のフックを呼ぶようにしている。
+  useEffect(() => {
+    if (isMobile) {
+      navigate('/mypage', { replace: true })
+    }
+  }, [isMobile, navigate])
+
   // 認証ユーザーから現在のユーザー名を取得
   const getCurrentUserName = () => {
     if (!user) return 'ゲスト'
@@ -232,10 +244,6 @@ export function Menu() {
 
   // モバイル版では専用のタブナビゲーションを使用するため、マイページにリダイレクト
   if (isMobile) {
-    useEffect(() => {
-      navigate('/mypage')
-    }, [navigate])
-    
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 flex items-center justify-center">
         <div className="text-center">

@@ -10,6 +10,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
+import {
+  selectableDeliveryIds,
+  isAllDeliverySelected,
+  pruneSelection,
+  resolveBatchDeliveryTargets,
+  summarizeBatchDelivery,
+} from '../lib/batch-delivery'
 
 export function MyPage() {
   const { orders, products, items, loadData, users, isDataInitialized, updateItemStatus } = useInventoryStore()
@@ -242,6 +249,19 @@ export function MyPage() {
       updateDisplayedItems()
     }
   }, [orders, products, items, users, selectedUser, currentUser])
+
+  // 一覧が入れ替わったら、もう画面に無い選択を捨てる（2026-09-08）
+  //
+  // 担当者プルダウンを切り替えても selectedItems が残っていたため、
+  // 前の担当者のIDが混ざったまま「全選択」や「一括配送完了」を押すことになり、
+  // 件数が合わない・押しても何も起きない、が起きていた。
+  useEffect(() => {
+    setSelectedItems(prev => {
+      if (prev.size === 0) return prev
+      const next = pruneSelection(prev, displayedItems)
+      return next.size === prev.size ? prev : next
+    })
+  }, [displayedItems])
   
   // 利用可能な営業マンリストを更新
   const updateAvailableUsers = () => {
@@ -741,12 +761,11 @@ export function MyPage() {
   }
 
   const handleSelectAllDeliveryItems = () => {
-    const deliveryItems = displayedItems.filter(item => item.readyForDelivery)
-    // 個別のアイテムIDを使用（orderItemIdではなく）
-    const allDeliveryIds = deliveryItems.map(item => item.id).filter(id => id)
-    
-    
-    if (selectedItems.size === allDeliveryIds.length && allDeliveryIds.length > 0) {
+    const allDeliveryIds = selectableDeliveryIds(displayedItems)
+
+    // 件数ではなく中身で見る。件数比較だけだと、古いIDが残っているときに
+    // 偶然一致して「全選択」を押した瞬間に全解除になっていた
+    if (isAllDeliverySelected(selectedItems, allDeliveryIds)) {
       setSelectedItems(new Set())
     } else {
       setSelectedItems(new Set(allDeliveryIds))
@@ -754,93 +773,98 @@ export function MyPage() {
   }
 
   // 選択されたアイテムの一括配送完了処理
+  //
+  // 2026-09-08 全面的に直した。以前は
+  //   ・処理できない個体を黙って飛ばしたうえで「N件配送完了しました」と出す
+  //   ・1件目で失敗すると残り全部が未処理のまま「エラーが発生しました」だけ
+  //   ・単体の配送完了にはあるサポート履歴のクリアが一括には無い
+  // という状態で、「一括ができる場合とできない場合がある」ように見えていた。
   const handleBatchDeliveryUnsafe = async () => {
     if (selectedItems.size === 0) {
       alert('配送完了する項目を選択してください')
       return
     }
 
-    try {
-      // 選択されたアイテムを取得（個別のアイテムIDを使用）
-      const selectedDisplayItems = displayedItems.filter(item => selectedItems.has(item.id))
-      
-      
-      console.log(`🚚 Batch delivery for ${selectedDisplayItems.length} items:`, selectedDisplayItems.map(item => ({
-        id: item.id,
-        orderItemId: item.orderItemId,
-        name: item.name,
-        customer: item.customer,
-        readyForDelivery: item.readyForDelivery,
-        assignedItemId: item.assignedItemId
-      })))
-      
-      // 各選択されたアイテムに対して個別に処理
-      const processedOrderItemIds = new Set<string>()
-      
-      for (const item of selectedDisplayItems) {
-        
-        if (item.assignedItemId && item.orderItemId) {
-          // 同じorderItemIdは一度だけ処理する
-          if (!processedOrderItemIds.has(item.orderItemId)) {
-            await supabaseDb.updateOrderItemStatus(item.orderItemId, 'delivered', currentUser)
-            processedOrderItemIds.add(item.orderItemId)
-          } else {
-          }
-          
-          // 商品アイテムのステータスを個別に更新
-          const productItem = await supabaseDb.getProductItemById(item.assignedItemId)
-          if (productItem) {
-            const updatedProductItem = {
-              ...productItem,
-              status: 'rented' as const,
-              customer_name: item.customer,
-              loan_start_date: new Date().toISOString().split('T')[0]
-            }
-            await supabaseDb.saveProductItem(updatedProductItem)
-            
-            // 自分の商品か代理配送かで履歴を分ける
-            const isOwnDelivery = selectedUser === currentUser
-            const actionText = isOwnDelivery ? '一括配送完了（貸与開始）' : '一括代理配送完了（貸与開始）'
-            const deliveryType = isOwnDelivery ? 'batch' : 'batch_proxy'
-            
-            // 配送完了の履歴を記録
-            await supabaseDb.createItemHistory(
-              productItem.id,
-              actionText,
-              productItem.status,
-              'rented' as const,
-              currentUser,
-              {
-                location: `${item.customer}様宅`,
-                customer_name: item.customer,
-                metadata: {
-                  orderId: item.orderId,
-                  deliveryType: deliveryType,
-                  deliverer: currentUser,
-                  originalAssignee: isOwnDelivery ? currentUser : selectedUser,
-                  proxyDeliverer: isOwnDelivery ? undefined : currentUser,
-                  deliveryDate: new Date().toISOString()
-                }
-              }
-            )
-          }
-        } else {
-        }
-      }
-      
-      
-      const isOwnDelivery = selectedUser === currentUser
-      const completionMessage = isOwnDelivery 
-        ? `${selectedDisplayItems.length}件の項目が配送完了しました`
-        : `${selectedUser}さんの代理で${selectedDisplayItems.length}件の項目が配送完了しました`
-      
+    const isProxy = selectedUser !== currentUser
+    const { targets, skipped } = resolveBatchDeliveryTargets(displayedItems, selectedItems)
+
+    if (targets.length === 0) {
       setSelectedItems(new Set())
-      loadData()
-      alert(completionMessage)
-    } catch (error) {
-      console.error('Batch delivery error:', error)
-      alert('一括配送完了処理中にエラーが発生しました')
+      await loadData()
+      alert(summarizeBatchDelivery({ succeeded: 0, failed: [], skipped, isProxy, proxyFor: selectedUser }))
+      return
     }
+
+    const failed: { id: string; name: string; message: string }[] = []
+    const processedOrderItemIds = new Set<string>()
+    let succeeded = 0
+
+    // 1件ずつ独立して処理する。途中で失敗しても残りは進める。
+    for (const item of targets) {
+      try {
+        // 同じ order_item は一度だけ配送完了にする（個体は下で1件ずつ更新する）
+        if (!processedOrderItemIds.has(item.orderItemId as string)) {
+          await supabaseDb.updateOrderItemStatus(item.orderItemId as string, 'delivered', currentUser)
+          processedOrderItemIds.add(item.orderItemId as string)
+        }
+
+        const productItem = await supabaseDb.getProductItemById(item.assignedItemId as string)
+        if (!productItem) {
+          throw new Error(`個体 ${item.assignedItemId} が見つかりません`)
+        }
+
+        await supabaseDb.saveProductItem({
+          ...productItem,
+          status: 'rented' as const,
+          customer_name: item.customer,
+          loan_start_date: new Date().toISOString().split('T')[0]
+        })
+
+        // 単体の配送完了と揃える: 配送が済んだらサポート履歴を消す
+        try {
+          const allSupportHistories = JSON.parse(localStorage.getItem('wem_support_histories') || '[]')
+          const filteredHistories = allSupportHistories.filter(
+            (history: { itemId?: string }) => history.itemId !== item.assignedItemId
+          )
+          localStorage.setItem('wem_support_histories', JSON.stringify(filteredHistories))
+        } catch (e) {
+          console.warn('サポート履歴のクリアに失敗しました（配送自体は完了）', e)
+        }
+
+        await supabaseDb.createItemHistory(
+          productItem.id,
+          isProxy ? '一括代理配送完了（貸与開始）' : '一括配送完了（貸与開始）',
+          productItem.status,
+          'rented' as const,
+          currentUser,
+          {
+            location: `${item.customer}様宅`,
+            customer_name: item.customer as string,
+            metadata: {
+              orderId: item.orderId,
+              deliveryType: isProxy ? 'batch_proxy' : 'batch',
+              deliverer: currentUser,
+              originalAssignee: isProxy ? selectedUser : currentUser,
+              proxyDeliverer: isProxy ? currentUser : undefined,
+              deliveryDate: new Date().toISOString()
+            }
+          }
+        )
+
+        succeeded++
+      } catch (error) {
+        console.error('一括配送: 1件失敗しました', item.id, error)
+        failed.push({
+          id: item.id,
+          name: (item.name as string) || '不明',
+          message: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+
+    setSelectedItems(new Set())
+    await loadData()
+    alert(summarizeBatchDelivery({ succeeded, failed, skipped, isProxy, proxyFor: selectedUser }))
   }
 
   // ダイレクト貸与: スキャンダイアログを開く
@@ -1517,9 +1541,11 @@ export function MyPage() {
             
             {/* バッチ処理ボタン */}
             {(() => {
-              const readyItems = displayedItems.filter(item => item.readyForDelivery)
-              
-              return readyItems.length > 0 && (
+              const readyIds = selectableDeliveryIds(displayedItems)
+              const allSelected = isAllDeliverySelected(selectedItems, readyIds)
+              const isProxy = selectedUser !== currentUser
+
+              return readyIds.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
@@ -1527,7 +1553,7 @@ export function MyPage() {
                     onClick={handleSelectAllDeliveryItems}
                     className="text-xs"
                   >
-                    {selectedItems.size === readyItems.length ? '選択解除' : '全選択'}
+                    {allSelected ? '選択解除' : `全選択 (${readyIds.length}件)`}
                   </Button>
                   {selectedItems.size > 0 && (
                     <Button
@@ -1537,7 +1563,9 @@ export function MyPage() {
                       className="bg-success hover:bg-success/90 text-success-foreground text-xs"
                     >
                       <span className="mr-1">{batchDeliveryProtection.isLoading ? '⏳' : '🚚'}</span>
-                      {batchDeliveryProtection.isLoading ? '配送処理中...' : `一括配送完了 (${selectedItems.size})`}
+                      {batchDeliveryProtection.isLoading
+                        ? '配送処理中...'
+                        : `${isProxy ? '一括代理配送' : '一括配送完了'} (${selectedItems.size})`}
                     </Button>
                   )}
                 </div>
@@ -1737,6 +1765,22 @@ export function MyPage() {
                                       ) : (
                                         // 他の営業マンの商品の場合
                                         <div className="space-y-2">
+                                          {/* 一括代理配送用のチェックボックス。
+                                              2026-09-08 まで代理配送のときだけここに無く、
+                                              上の一括ボタンは出ているのに個別に選べなかった */}
+                                          <div className="flex items-center justify-center mb-2">
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedItems.has(item.id)}
+                                              onChange={() => handleSelectItem(item.id)}
+                                              className="w-4 h-4 mr-2"
+                                              id={`checkbox-mobile-${item.id}`}
+                                            />
+                                            <label htmlFor={`checkbox-mobile-${item.id}`} className="text-xs text-gray-600">
+                                              一括代理配送用
+                                            </label>
+                                          </div>
+
                                           <div className="flex space-x-2">
                                             <Button 
                                               size="sm" 
@@ -2454,9 +2498,10 @@ export function MyPage() {
         
         {/* デスクトップ版一括処理ボタン */}
         {(() => {
-          const readyItems = displayedItems.filter(item => item.readyForDelivery)
-          
-          return readyItems.length > 0 && (
+          const readyIds = selectableDeliveryIds(displayedItems)
+          const allSelected = isAllDeliverySelected(selectedItems, readyIds)
+
+          return readyIds.length > 0 && (
             <div className="flex items-center justify-center gap-3 mb-6 p-4 bg-white/10 rounded-lg border border-white/20">
               <Button
                 size="sm"
@@ -2464,7 +2509,7 @@ export function MyPage() {
                 onClick={handleSelectAllDeliveryItems}
                 className="text-xs bg-white/10 border-white/30 text-white hover:bg-white/20"
               >
-                {selectedItems.size === readyItems.length ? '選択解除' : '全選択'} ({readyItems.length}件)
+                {allSelected ? '選択解除' : '全選択'} ({readyIds.length}件)
               </Button>
               {selectedItems.size > 0 && (
                 <Button

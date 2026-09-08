@@ -5,6 +5,7 @@ import { Select } from '../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useGoBack } from '../hooks/useGoBack'
 import { supabaseDb } from '../lib/supabase-database'
 import { getChecklistConfig } from '../lib/maintenance-checklist-config'
 import { calculateRentalDays } from '../lib/utils'
@@ -15,6 +16,9 @@ import type { ProductItem, Product, ItemHistory } from '../types'
 export function ItemDetail() {
   const { itemId } = useParams<{ itemId: string }>()
   const navigate = useNavigate()
+  // 商品検索から来たら検索結果へ、在庫一覧から来たら在庫一覧へ。
+  // 以前は経路にかかわらず /inventory 固定で、検索結果が毎回消えていた
+  const goBack = useGoBack('/inventory')
   const { user } = useAuth()
   const { users, updateItemStatus } = useInventoryStore()
   
@@ -424,7 +428,7 @@ export function ItemDetail() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
-          <Button variant="outline" onClick={() => navigate('/inventory')}>
+          <Button variant="outline" onClick={goBack}>
             <span className="mr-2">←</span>
             戻る
           </Button>
@@ -441,7 +445,7 @@ export function ItemDetail() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">商品詳細</h1>
-          <Button variant="outline" onClick={() => navigate('/inventory')}>
+          <Button variant="outline" onClick={goBack}>
             <span className="mr-2">←</span>
             戻る
           </Button>
@@ -472,7 +476,7 @@ export function ItemDetail() {
           >
             ✏️ 編集
           </Button>
-          <Button variant="outline" onClick={() => navigate('/inventory')}>
+          <Button variant="outline" onClick={goBack}>
             <span className="mr-2">←</span>
             戻る
           </Button>

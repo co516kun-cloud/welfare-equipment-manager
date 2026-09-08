@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -6,7 +6,7 @@ import { Select } from '../components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog'
 import { QRCameraScanner } from '../components/qr-camera-scanner'
 import { useInventoryStore } from '../stores/useInventoryStore'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabaseDb } from '../lib/supabase-database'
 import { buildProductItemUpdate } from '../lib/product-item-update'
@@ -17,6 +17,7 @@ export function Search() {
   const { products, items, categories, users, orders, updateItemStatus } = useInventoryStore()
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   
   // 認証ユーザーから現在のユーザー名を取得
   const getCurrentUserName = () => {
@@ -64,9 +65,45 @@ export function Search() {
   
   
   // 商品検索ページはproduct_itemsのみを使用（App.tsxで初期化済み）
+
+  // handleSearch から最新のフィルタを読むための箱。
+  // 復元時に「setState してから検索」だと1回分古い値で検索してしまうため
+  const filtersRef = useRef(searchFilters)
+  useEffect(() => {
+    filtersRef.current = searchFilters
+  }, [searchFilters])
+
+  // 個体詳細から戻ってきたときに検索条件を戻して、もう一度検索する（2026-09-08）
+  //
+  // 田口さんの指摘「戻るを押した時にちゃんと一つ前に戻るように」への対応。
+  // これまでは戻ると検索結果が消え、条件を入れ直す必要があった。
+  // 結果そのものではなく条件だけを履歴に持たせているのは、
+  // 結果を history.state に入れると容量制限に当たるのと、
+  // 戻った時点の最新のステータスで出したいため。
+  const restoredRef = useRef(false)
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+
+    const state = location.state as { searchFilters?: typeof searchFilters } | null
+    if (state?.searchFilters) {
+      setSearchFilters(state.searchFilters)
+      handleSearch(state.searchFilters)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 検索したら、その条件を今いる履歴エントリに焼き付けておく。
+  // こうしておくと個体詳細から戻ってきたときに上の復元が効く
+  useEffect(() => {
+    if (!hasSearched) return
+    navigate('.', { replace: true, state: { searchFilters } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSearched, searchResults])
   
   // 検索実行
-  const handleSearch = async () => {
+  const handleSearch = async (filtersOverride?: typeof searchFilters) => {
+    const searchFilters = filtersOverride ?? filtersRef.current
     setIsSearching(true)
     setHasSearched(true)
     
@@ -682,7 +719,7 @@ export function Search() {
               条件をクリア
             </Button>
             <Button
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={isSearching}
               className="bg-primary hover:bg-primary/90"
             >

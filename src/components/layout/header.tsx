@@ -2,6 +2,8 @@ import { Button } from '../ui/button'
 import { useState, useEffect } from 'react'
 import { useAuth, logout } from '../../hooks/useAuth'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { canGoBackInApp } from '../../lib/history-nav'
+import { useGoBack } from '../../hooks/useGoBack'
 import { useNotificationStore } from '../../stores/useNotificationStore'
 import { generateNotifications } from '../../lib/notification-generator'
 import { GlobalRefreshButton } from '../global-refresh-button'
@@ -14,6 +16,8 @@ export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const { unreadCount } = useNotificationStore()
+  // 戻り先が無ければトップへ。トップは PC ならメニュー、モバイルならマイページ
+  const goBack = useGoBack('/')
   
   // 手動更新用の状態
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -58,7 +62,18 @@ export function Header() {
   }
 
   // メニュー画面かどうかをチェック
-  const isMenuPage = location.pathname === '/menu'
+  //
+  // 2026-09-07 に PC のトップ(/)をメニュー画面にしたので、PC ではメニューのURLが
+  // / と /menu の2つある。/ を「メニューではない」と扱うと ☰ が出てしまい、押すと
+  // 見た目の同じ /menu が履歴に積まれる。戻っても画面が変わらないので
+  // 「戻りすぎる」「戻っても戻れない」ように見えていた。
+  const isMenuPage = location.pathname === '/menu' || (!isMobile && location.pathname === '/')
+
+  // メニューへ行くときの行き先。PC はトップがメニューなので / を使い、URLを一本化する
+  const menuHref = isMobile ? '/menu' : '/'
+
+  // 戻り先がアプリ内にあるか。無いのに「戻る」を出すと押しても何も起きない
+  const canGoBack = canGoBackInApp(typeof window !== 'undefined' ? window.history.state : null)
 
   // モバイルメニューの項目
   const mobileMenuItems = [
@@ -112,11 +127,14 @@ export function Header() {
           {/* メニューボタンまたは戻るボタン */}
           <div className="flex items-center mr-3">
             {isMenuPage ? (
-              <Link to="/mypage">
-                <Button variant="ghost" size="sm" className="p-2 text-white hover:bg-white/10">
+              // 以前は行き先が /mypage 固定で、どこから来てもマイページへ飛んでいた
+              canGoBack ? (
+                <Button variant="ghost" size="sm" className="p-2 text-white hover:bg-white/10" onClick={goBack}>
                   <span className="text-xl">←</span>
                 </Button>
-              </Link>
+              ) : (
+                <div className="w-9" aria-hidden="true" />
+              )
             ) : (
               <Button 
                 variant="ghost" 
@@ -282,14 +300,18 @@ export function Header() {
         {/* メニューボタンまたは戻るボタン */}
         <div className="flex items-center mr-4">
           {isMenuPage ? (
-            <Link to="/mypage">
-              <Button variant="ghost" size="sm" className="p-2">
+            // 以前は行き先が /mypage 固定。PC はトップがメニューなので、
+            // メニューで「戻る」を押すとマイページに飛ぶのが「変なとこへ飛ぶ」の正体だった
+            canGoBack ? (
+              <Button variant="ghost" size="sm" className="p-2" onClick={goBack}>
                 <span className="text-xl">←</span>
                 <span className="ml-2 text-sm">戻る</span>
               </Button>
-            </Link>
+            ) : (
+              <div className="w-[104px]" aria-hidden="true" />
+            )
           ) : (
-            <Link to="/menu">
+            <Link to={menuHref}>
               <Button variant="ghost" size="sm" className="p-2">
                 <span className="text-xl">☰</span>
                 <span className="ml-2 text-sm">メニュー</span>

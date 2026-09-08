@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useGoBack } from '../hooks/useGoBack'
 import { Button } from '../components/ui/button'
 import { useInventoryStore } from '../stores/useInventoryStore'
 import { supabaseDb } from '../lib/supabase-database'
@@ -47,6 +48,8 @@ const importOptions: ImportOption[] = [
 
 export function DataImport() {
   const navigate = useNavigate()
+  // 直接開いた場合にアプリの外へ出ないよう、戻り先が無ければ取込画面の入口へ
+  const goBack = useGoBack('/menu')
   const { loadData } = useInventoryStore()
   const [selectedType, setSelectedType] = useState<ImportType | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -268,7 +271,7 @@ export function DataImport() {
       
       await loadData() // データリロード
       alert('インポートが完了しました')
-      navigate(-1)
+      goBack()
       
     } catch (error) {
       console.error('Import error:', error)

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useGoBack } from '../hooks/useGoBack'
 import { Button } from '../components/ui/button'
 import { supabaseDb } from '../lib/supabase-database'
 import { LabelPrinter } from '../lib/label-printer'
@@ -40,6 +41,8 @@ const STATUS_CLASS: Record<LabelPrintQueue['status'], string> = {
 
 export function LabelQueuePage() {
   const navigate = useNavigate()
+  // ラベル印刷状況は通知やブックマークから直接開かれる。戻り先が無ければメニューへ
+  const goBack = useGoBack('/menu')
   const { user } = useAuth()
   const [queue, setQueue] = useState<LabelPrintQueue[]>([])
   const [loading, setLoading] = useState(true)
@@ -150,7 +153,7 @@ export function LabelQueuePage() {
               印刷は事務所PCの印刷エージェントが自動で行います
             </p>
           </div>
-          <Button variant="outline" onClick={() => navigate(-1)}>
+          <Button variant="outline" onClick={goBack}>
             戻る
           </Button>
         </div>

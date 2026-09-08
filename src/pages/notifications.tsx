@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useGoBack } from '../hooks/useGoBack'
 import { Button } from '../components/ui/button'
 import { useNotificationStore } from '../stores/useNotificationStore'
 import { generateNotifications } from '../lib/notification-generator'
 
 export default function NotificationsPage() {
   const navigate = useNavigate()
+  // 通知はプッシュやブックマークから直接開かれる。戻り先が無ければメニューへ
+  const goBack = useGoBack('/menu')
   const { 
     notifications, 
     unreadCount, 
@@ -87,7 +90,7 @@ export default function NotificationsPage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate(-1)}
+              onClick={goBack}
               className="text-gray-600"
             >
               ✕ 閉じる

@@ -10,6 +10,13 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 import type { ProductItem } from '../types'
+import {
+  INVENTORY_TOP,
+  inventoryViewFromState,
+  drillToCategory,
+  drillToProduct,
+  type InventoryView,
+} from '../lib/inventory-view'
 
 export function Inventory() {
   const {
@@ -26,7 +33,6 @@ export function Inventory() {
     setSelectedProduct,
     getInventorySummary,
     getReservations,
-    resetUIState,
     updateItemStatus,
   } = useInventoryStore()
   const { user } = useAuth()
@@ -102,40 +108,41 @@ export function Inventory() {
   // モバイル検出とPC版でのUI状態リセット
   useEffect(() => {
     const checkMobile = () => {
-      const isMobileView = window.innerWidth < 768
-      setIsMobile(isMobileView)
-      
-      // PC版の場合、UI状態をリセット
-      if (!isMobileView) {
-        resetUIState()
-      }
+      setIsMobile(window.innerWidth < 768)
     }
-    
+
+    // 2026-09-08: PC のときに resetUIState() を呼んでいたのをやめた。
+    // resize のたびに階層が種類一覧へ戻され、ウィンドウを動かしただけで
+    // 見ていた個体一覧から飛ばされていた。階層は履歴が持つ（下の useEffect）。
     checkMobile()
     window.addEventListener('resize', checkMobile)
     
     return () => window.removeEventListener('resize', checkMobile)
-  }, [resetUIState])
+  }, [])
 
-  // 検索結果からの遷移時の処理
+  // 階層（種類 → 商品 → 個体）は履歴が持つ（2026-09-08）
+  //
+  // 以前は zustand の中だけに階層があり、ブラウザの戻るで階層を飛ばして
+  // 前のページへ出てしまっていた（＝戻りすぎる）。
+  // location.key を見ているので、進む・戻るのどちらでもその履歴の階層に揃う。
+  //
+  // ⚠️ ここには window.history.replaceState({}, ...) があった。あれは
+  //    react-router が持つ {usr, key, idx} ごと消してしまい、以降の
+  //    navigate(-1) が効かなくなる（＝戻るが変な所へ飛ぶ）ので外した。
   useEffect(() => {
-    if (location.state) {
-      const { viewMode: stateViewMode, selectedProduct: stateProduct, selectedCategory: stateCategory } = location.state as any
-      
-      if (stateViewMode) {
-        setViewMode(stateViewMode)
-      }
-      if (stateProduct) {
-        setSelectedProduct(stateProduct)
-      }
-      if (stateCategory) {
-        setSelectedCategory(stateCategory)
-      }
-      
-      // stateをクリア（再読み込み時に残らないように）
-      window.history.replaceState({}, document.title)
-    }
-  }, [location.state, setViewMode, setSelectedProduct, setSelectedCategory])
+    const view = inventoryViewFromState(location.state)
+    setViewMode(view.viewMode)
+    setSelectedCategory(view.selectedCategory)
+    setSelectedProduct(view.selectedProduct)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key])
+
+  /** 階層を1つ進める。履歴に積むので、戻るで一つ上の階層に返れる */
+  const goToInventoryView = (view: InventoryView) => {
+    navigate('/inventory', { state: view })
+  }
+
+  const currentInventoryView: InventoryView = { viewMode, selectedCategory, selectedProduct }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -523,10 +530,7 @@ export function Inventory() {
           <div
             key={category.id}
             className="bg-card rounded-lg border border-border p-6 hover:bg-accent/50 cursor-pointer transition-colors"
-            onClick={() => {
-              setSelectedCategory(category.id)
-              setViewMode('product')
-            }}
+            onClick={() => goToInventoryView(drillToCategory(category.id))}
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -559,10 +563,7 @@ export function Inventory() {
           <div
             key={product.id}
             className="bg-card rounded-lg border border-border p-6 hover:bg-accent/50 cursor-pointer transition-colors"
-            onClick={() => {
-              setSelectedProduct(product.id)
-              setViewMode('item')
-            }}
+            onClick={() => goToInventoryView(drillToProduct(currentInventoryView, product.id))}
           >
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1165,27 +1166,21 @@ export function Inventory() {
               <Button
                 variant={viewMode === 'category' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => {
-                  setViewMode('category')
-                  setSelectedCategory(null)
-                  setSelectedProduct(null)
-                }}
+                onClick={() => goToInventoryView(INVENTORY_TOP)}
               >
                 種類別
               </Button>
               <Button
                 variant={viewMode === 'product' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => {
-                  setViewMode('product')
-                }}
+                onClick={() => goToInventoryView({ ...currentInventoryView, viewMode: 'product', selectedProduct: null })}
               >
                 商品別
               </Button>
               <Button
                 variant={viewMode === 'item' ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setViewMode('item')}
+                onClick={() => goToInventoryView({ ...currentInventoryView, viewMode: 'item' })}
               >
                 個別管理
               </Button>
@@ -1199,20 +1194,13 @@ export function Inventory() {
         
         {/* Breadcrumb Navigation */}
         <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <Button variant="ghost" size="sm" onClick={() => {
-            setViewMode('category')
-            setSelectedCategory(null)
-            setSelectedProduct(null)
-          }}>
+          <Button variant="ghost" size="sm" onClick={() => goToInventoryView(INVENTORY_TOP)}>
             トップ
           </Button>
           {selectedCategory && (
             <>
               <span>/</span>
-              <Button variant="ghost" size="sm" onClick={() => {
-                setViewMode('product')
-                setSelectedProduct(null)
-              }}>
+              <Button variant="ghost" size="sm" onClick={() => goToInventoryView(drillToCategory(selectedCategory))}>
                 {categories.find(c => c.id === selectedCategory)?.name}
               </Button>
             </>

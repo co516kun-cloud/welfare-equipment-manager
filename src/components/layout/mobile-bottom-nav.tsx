@@ -91,7 +91,10 @@ export function MobileBottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-slate-200/50 shadow-lg z-50">
       <div className="flex justify-around items-center py-2">
         {mainNavigation.map((item) => {
-          const isActive = location.pathname === item.href
+          // モバイルのトップ(/)はマイページなので、タブも光らせる（2026-09-08）
+          const isActive =
+            location.pathname === item.href ||
+            (item.href === '/mypage' && location.pathname === '/')
           let badge = null
           
           if (item.showCount && preparationCount > 0) {
