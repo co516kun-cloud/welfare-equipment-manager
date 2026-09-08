@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabaseDb } from '../lib/supabase-database'
 import { useProtectedAction, ProcessType } from '../hooks/useProtectedAction'
+import { resolveScannedItem, checkRentable } from '../lib/direct-rental'
 import {
   selectableDeliveryIds,
   isAllDeliverySelected,
@@ -879,32 +880,19 @@ export function MyPage() {
   const handleDirectRentalScanResult = async (scannedCode: string) => {
     setDirectRentalError('')
 
-    // QRコードから管理番号を抽出（QR-プレフィックスを除去）
-    const itemId = scannedCode.replace(/^QR-/i, '')
-
-    // 商品を検索
-    const productItem = items.find(item => item.id === itemId)
+    // 管理番号でも QRコードの値でも拾う（大文字小文字と QR- は無視）。
+    // 以前は管理番号の完全一致だけで、商品検索では見つかる個体が
+    // ここでは「見つかりません」になっていた
+    const productItem = resolveScannedItem(items, scannedCode)
 
     if (!productItem) {
-      setDirectRentalError(`管理番号 ${itemId} が見つかりません`)
+      setDirectRentalError(`「${scannedCode.trim()}」に該当する商品が見つかりません`)
       return
     }
 
-    // ステータスチェック（availableのみ許可）
-    if (productItem.status !== 'available') {
-      const statusText: { [key: string]: string } = {
-        'rented': '貸与中',
-        'reserved': '予約済み',
-        'ready_for_delivery': '配送準備完了',
-        'returned': '返却済み',
-        'cleaning': '消毒中',
-        'maintenance': 'メンテナンス中',
-        'demo_cancelled': 'デモキャンセル',
-        'out_of_order': '故障中',
-      'disposed': '廃棄済み',
-        'unknown': '状態不明'
-      }
-      setDirectRentalError(`この商品は現在利用できません\nステータス: ${statusText[productItem.status] || productItem.status}`)
+    const rentable = checkRentable(productItem)
+    if (!rentable.ok) {
+      setDirectRentalError(rentable.reason!)
       return
     }
 
@@ -947,6 +935,19 @@ export function MyPage() {
 
     try {
       const { productItem, product } = directRentalItem
+
+      // 読み取ってから顧客名を入力するまでの間に、他の人がその個体を
+      // 貸してしまっていることがある。実行の直前にもう一度見る。
+      // ここを見ないと、同じ1台を二重に貸したうえで前の貸与記録を
+      // 上書きしてしまう（2026-09-08 追加）
+      const latest = await supabaseDb.getProductItemById(productItem.id)
+      const stillRentable = checkRentable(latest)
+      if (!stillRentable.ok) {
+        setDirectRentalError(`${stillRentable.reason}（読み取ったあとに状態が変わりました）`)
+        await loadData()
+        return
+      }
+
       const today = new Date().toISOString().split('T')[0]
       const now = new Date().toISOString()
 
@@ -1023,7 +1024,7 @@ export function MyPage() {
       // 成功
       setShowDirectRentalDialog(false)
       setDirectRentalItem(null)
-      loadData()
+      await loadData()
       alert(`${directRentalForm.customerName.trim()}様への貸与が開始されました\n管理番号: ${productItem.id}`)
 
     } catch (error) {
@@ -2265,6 +2266,11 @@ export function MyPage() {
                     id="directRentalInputMobile"
                     value={directRentalManualId}
                     onChange={(e) => setDirectRentalManualId(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && directRentalManualId.trim()) {
+                        handleDirectRentalScanResult(directRentalManualId.trim())
+                      }
+                    }}
                     placeholder="例: WC-001, QR-WC-001"
                     className="text-center"
                   />
@@ -2425,6 +2431,18 @@ export function MyPage() {
           {selectedUser === currentUser ? `マイページ - ${currentUser}` : `${selectedUser}さんの商品管理`}
         </h1>
         <div className="flex gap-2 w-full sm:w-auto">
+          {/* ダイレクト貸与（2026-09-08 追加）
+              入力ダイアログは前から PC 側にも描画されていたのに、それを開くボタンが
+              モバイルのフローティングボタンにしか無く、PC からはこの機能に
+              一切たどり着けなかった */}
+          <Button
+            variant="outline"
+            onClick={handleOpenDirectRentalScan}
+            className="flex-1 sm:flex-none bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-700"
+          >
+            <span className="mr-2">🔍</span>
+            ダイレクト貸与
+          </Button>
           <Button variant="outline" onClick={handleForceReload} className="flex-1 sm:flex-none bg-red-50 border-red-200 hover:bg-red-100">
             <span className="mr-2">🔄</span>
             データリセット
@@ -2844,6 +2862,11 @@ export function MyPage() {
                   id="directRentalInput"
                   value={directRentalManualId}
                   onChange={(e) => setDirectRentalManualId(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && directRentalManualId.trim()) {
+                      handleDirectRentalScanResult(directRentalManualId.trim())
+                    }
+                  }}
                   placeholder="例: WC-001, QR-WC-001"
                   className="text-center"
                 />

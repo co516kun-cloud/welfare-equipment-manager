@@ -115,9 +115,19 @@ describe('既存の動きを壊していない', () => {
 describe('画面表示への反映', () => {
   it.each([
     'pages/inventory.tsx', 'pages/history.tsx', 'pages/item-detail.tsx',
-    'pages/search.tsx', 'pages/scan.tsx', 'pages/mypage.tsx', 'pages/preparation.tsx',
+    'pages/search.tsx', 'pages/scan.tsx', 'pages/preparation.tsx',
   ])('%s に廃棄の表示がある', (f) => {
     expect(src(f)).toMatch(/disposed/)
+  })
+
+  // mypage.tsx は 2026-09-08 に自前のステータス表をやめ、共通の表を使うようになった。
+  // 文字列 'disposed' を直接持たなくなったので、参照経路の方を見る。
+  // ここを「文字列があること」に戻すと、各画面が自前の表を持つ形へ逆戻りする。
+  it('pages/mypage.tsx は共通のステータス表を使う', () => {
+    const s = src('pages/mypage.tsx')
+    expect(s).toMatch(/from '\.\.\/lib\/direct-rental'/)
+    // その共通モジュールが item-status の表を使っていること
+    expect(src('lib/direct-rental.ts')).toMatch(/from '\.\/item-status'/)
   })
 
   it('廃棄は故障中と別の見た目にする（赤にしない）', () => {
