@@ -1661,6 +1661,18 @@ export function MyPage() {
                                   onClick={() => toggleDeliveryItem(item.id)}
                                 >
                                   <div className="flex items-start justify-between">
+                                    {/* 一括処理用のチェックボックス。
+                                        2026-09-08 まで「開いた中」にしか無く、モバイルで個別に選ぶには
+                                        商品を1件ずつ開く必要があった。行のまま選べるように前へ出した。
+                                        stopPropagation が無いと、チェックと同時にアコーディオンが開閉する */}
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedItems.has(item.id)}
+                                      onChange={() => handleSelectItem(item.id)}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="w-5 h-5 mt-0.5 mr-3 shrink-0"
+                                      aria-label={`${item.name} を一括処理に選ぶ`}
+                                    />
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center space-x-2">
                                         <span className="text-sm">{itemExpanded ? '📖' : '📄'}</span>
@@ -1719,20 +1731,7 @@ export function MyPage() {
                                       {isOwnItem ? (
                                         // 自分の商品の場合
                                         <div className="space-y-2">
-                                          {/* チェックボックス */}
-                                          <div className="flex items-center justify-center mb-2">
-                                            <input
-                                              type="checkbox"
-                                              checked={selectedItems.has(item.id)}
-                                              onChange={() => handleSelectItem(item.id)}
-                                              className="w-4 h-4 mr-2"
-                                              id={`checkbox-mobile-${item.id}`}
-                                            />
-                                            <label htmlFor={`checkbox-mobile-${item.id}`} className="text-xs text-gray-600">
-                                              一括処理用
-                                            </label>
-                                          </div>
-                                          
+                                          {/* チェックボックスは折りたたみ行の方に出している（重複させない） */}
                                           <div className="flex space-x-2">
                                             <Button 
                                               size="sm" 
@@ -1765,22 +1764,8 @@ export function MyPage() {
                                       ) : (
                                         // 他の営業マンの商品の場合
                                         <div className="space-y-2">
-                                          {/* 一括代理配送用のチェックボックス。
-                                              2026-09-08 まで代理配送のときだけここに無く、
-                                              上の一括ボタンは出ているのに個別に選べなかった */}
-                                          <div className="flex items-center justify-center mb-2">
-                                            <input
-                                              type="checkbox"
-                                              checked={selectedItems.has(item.id)}
-                                              onChange={() => handleSelectItem(item.id)}
-                                              className="w-4 h-4 mr-2"
-                                              id={`checkbox-mobile-${item.id}`}
-                                            />
-                                            <label htmlFor={`checkbox-mobile-${item.id}`} className="text-xs text-gray-600">
-                                              一括代理配送用
-                                            </label>
-                                          </div>
-
+                                          {/* チェックボックスは折りたたみ行の方に出している（重複させない）。
+                                              代理配送のときだけ選べない、という状態はそこで解消した */}
                                           <div className="flex space-x-2">
                                             <Button 
                                               size="sm" 

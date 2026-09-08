@@ -63,6 +63,11 @@ const mockProductItems: ProductItem[] = [
   { id: 'WK-001', product_id: 'PRD-3', status: 'available', condition: 'good', location: '倉庫C-1', qr_code: 'WK-001' },
   { id: 'WK-002', product_id: 'PRD-3', status: 'ready_for_delivery', condition: 'good', location: '倉庫', qr_code: 'WK-002', customer_name: 'デモ利用者B' },
   { id: 'WK-003', product_id: 'PRD-3', status: 'unknown', condition: 'unknown', location: '不明', qr_code: 'WK-003' },
+  // 一括配送を複数件で試すための2台目（田中太郎の担当）
+  { id: 'WC-005', product_id: 'PRD-1', status: 'ready_for_delivery', condition: 'good', location: '倉庫', qr_code: 'WC-005', customer_name: 'デモ利用者B' },
+  // 代理配送（他の担当者の商品を自分が配送する）を試すための2台
+  { id: 'BD-004', product_id: 'PRD-2', status: 'ready_for_delivery', condition: 'good', location: '倉庫', qr_code: 'BD-004', customer_name: 'デモ利用者E' },
+  { id: 'WK-004', product_id: 'PRD-3', status: 'ready_for_delivery', condition: 'good', location: '倉庫', qr_code: 'WK-004', customer_name: 'デモ利用者E' },
 ]
 
 const mockUsers: User[] = [
@@ -126,6 +131,34 @@ const mockOrders: Order[] = [
     items: [
       {
         id: 'OI-DEMO-3', product_id: 'PRD-3', quantity: 1, assigned_item_ids: ['WK-002'],
+        approval_status: 'not_required', item_processing_status: 'ready', needs_approval: false,
+      },
+      {
+        id: 'OI-DEMO-3B', product_id: 'PRD-1', quantity: 1, assigned_item_ids: ['WC-005'],
+        approval_status: 'not_required', item_processing_status: 'ready', needs_approval: false,
+      },
+    ],
+  } as Order,
+  // 代理配送の確認用。担当は佐藤花子なので、田中太郎でログインすると
+  // マイページの担当者プルダウンから「佐藤花子」を選んだときだけ出る
+  {
+    id: 'ORD-DEMO-4',
+    customer_name: 'デモ利用者E',
+    order_date: today,
+    required_date: soon,
+    assigned_to: '佐藤花子',
+    carried_by: '',
+    status: 'approved',
+    notes: '代理配送のデモ発注（担当は佐藤花子）',
+    created_by: '佐藤花子',
+    needs_approval: false,
+    items: [
+      {
+        id: 'OI-DEMO-4', product_id: 'PRD-2', quantity: 1, assigned_item_ids: ['BD-004'],
+        approval_status: 'not_required', item_processing_status: 'ready', needs_approval: false,
+      },
+      {
+        id: 'OI-DEMO-4B', product_id: 'PRD-3', quantity: 1, assigned_item_ids: ['WK-004'],
         approval_status: 'not_required', item_processing_status: 'ready', needs_approval: false,
       },
     ],
