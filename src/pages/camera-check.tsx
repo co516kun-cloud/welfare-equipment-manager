@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button'
 import { useGoBack } from '../hooks/useGoBack'
 import { diagnoseCamera, readCameraEnv, type CameraDiagnosis } from '../lib/camera-diagnosis'
+import { calculateScanRegion, SCAN_RATE_PER_SECOND } from '../lib/scan-region'
 
 /**
  * カメラ診断ページ（2026-09-09）
@@ -33,6 +34,13 @@ export function CameraCheck() {
   const [diagnosis, setDiagnosis] = useState<CameraDiagnosis | null>(null)
   const [running, setRunning] = useState(false)
   const [ua, setUa] = useState('')
+
+  // 実際に読めるかを見る（田口さん「カメラは動くのに全く無反応」への対応）
+  const liveVideoRef = useRef<HTMLVideoElement>(null)
+  const liveScannerRef = useRef<{ stop: () => void; destroy: () => void } | null>(null)
+  const [liveState, setLiveState] = useState<'idle' | 'starting' | 'scanning' | 'hit' | 'error'>('idle')
+  const [liveInfo, setLiveInfo] = useState('')
+  const [hits, setHits] = useState<string[]>([])
 
   const run = async () => {
     setRunning(true)
@@ -136,7 +144,63 @@ export function CameraCheck() {
     setRunning(false)
   }
 
-  useEffect(() => { run() }, [])
+  const stopLive = () => {
+    liveScannerRef.current?.stop()
+    liveScannerRef.current?.destroy()
+    liveScannerRef.current = null
+    setLiveState('idle')
+  }
+
+  const startLive = async () => {
+    stopLive()
+    setHits([])
+    setLiveInfo('')
+    setLiveState('starting')
+    try {
+      const { default: QrScanner } = await import('qr-scanner')
+      const video = liveVideoRef.current
+      if (!video) throw new Error('映像の置き場がありません')
+
+      const scanner = new QrScanner(
+        video,
+        (result: { data: string }) => {
+          setHits(prev => (prev.includes(result.data) ? prev : [...prev, result.data]))
+          setLiveState('hit')
+        },
+        {
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          preferredCamera: 'environment',
+          maxScansPerSecond: SCAN_RATE_PER_SECOND,
+          calculateScanRegion,
+          onDecodeError: () => { /* 読めない間は毎フレーム呼ばれる。正常 */ },
+        }
+      )
+      liveScannerRef.current = scanner as unknown as { stop: () => void; destroy: () => void }
+      await scanner.start()
+      setLiveState('scanning')
+
+      // 映像の大きさと読み取り範囲を出す（0×0 なら読めなくて当然）
+      setTimeout(() => {
+        const v = liveVideoRef.current
+        if (!v) return
+        const r = calculateScanRegion(v)
+        setLiveInfo(
+          `映像 ${v.videoWidth}×${v.videoHeight} / 読み取り範囲 ${r.width}×${r.height}` +
+          ` → ${r.downScaledWidth}px / ${SCAN_RATE_PER_SECOND}回per秒`
+        )
+      }, 1500)
+    } catch (e) {
+      setLiveState('error')
+      setLiveInfo(String(e))
+    }
+  }
+
+  useEffect(() => {
+    // 開いたときに一度だけ調べる。片付けは離れるとき
+    run()
+    return () => stopLive()
+  }, [])
 
   const allOk = checks.length > 0 && checks.every(c => c.state !== 'ng')
 
@@ -194,8 +258,54 @@ export function CameraCheck() {
         </div>
       )}
 
+      {/* ここからが本題: 実際に QRコードを読めるか */}
+      <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">読み取りテスト</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            「カメラは映るのに、かざしても何も起きない」場合はここで確かめます。
+            開始したら、商品のQRコードを画面に映してください。
+          </p>
+        </div>
+
+        <video
+          ref={liveVideoRef}
+          className={`w-full rounded-lg bg-black ${liveState === 'idle' ? 'hidden' : ''}`}
+          playsInline
+          muted
+        />
+
+        {liveInfo && <p className="text-xs text-muted-foreground break-words">{liveInfo}</p>}
+
+        {liveState === 'scanning' && (
+          <p className="text-sm text-muted-foreground">
+            読み取り中… QRコードを映してください（まだ1件も読めていません）
+          </p>
+        )}
+        {hits.length > 0 && (
+          <div className="p-3 rounded-lg bg-success/10 border border-success/20">
+            <p className="text-sm font-semibold">読み取れました（{hits.length}件）</p>
+            <ul className="text-sm mt-1 space-y-0.5">
+              {hits.map(h => <li key={h} className="break-all">・{h}</li>)}
+            </ul>
+          </div>
+        )}
+        {liveState === 'error' && (
+          <p className="text-sm text-destructive break-words">開始できません: {liveInfo}</p>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={startLive} disabled={liveState === 'starting'}>
+            {liveState === 'idle' || liveState === 'error' ? '読み取りテストを開始' : 'やり直す'}
+          </Button>
+          {liveState !== 'idle' && (
+            <Button variant="outline" onClick={stopLive}>止める</Button>
+          )}
+        </div>
+      </div>
+
       <div className="flex gap-2">
-        <Button onClick={run} disabled={running}>
+        <Button variant="outline" onClick={run} disabled={running}>
           {running ? '確認中…' : 'もう一度確認する'}
         </Button>
       </div>

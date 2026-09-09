@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import QrScanner from 'qr-scanner'
 import { diagnoseCamera, readCameraEnv, type CameraDiagnosis } from '../lib/camera-diagnosis'
+import { calculateScanRegion, SCAN_RATE_PER_SECOND } from '../lib/scan-region'
 import { Button } from './ui/button'
 
 interface QRCameraScannerProps {
@@ -131,7 +132,16 @@ export function QRCameraScanner({
             highlightScanRegion: true,
             highlightCodeOutline: true,
             preferredCamera: facingMode,
-            maxScansPerSecond: continuousMode ? 5 : 1, // 非連続モードでは1回/秒に制限
+
+            // 2026-09-09 まで、連続モードで5回/秒・単発モードで1回/秒に絞っていた
+            // （ライブラリの既定は25回/秒）。ピント合わせの遅い端末では
+            // たまたま撮れた数枚が全部ボケていて一度も読めない、が起きる。
+            // 二重処理は下の「1回読めたら止める」で防いでいるので、絞る必要は無い。
+            maxScansPerSecond: SCAN_RATE_PER_SECOND,
+
+            // 既定は「中央の 2/3・400px に縮小」。端末のカメラアプリは
+            // 全画面を等倍で見るので、そちらでは読めるのにここでは読めない、が起きる
+            calculateScanRegion,
           }
         )
 
