@@ -24,6 +24,7 @@ import Notifications from './pages/notifications'
 import { LabelQueuePage } from './pages/label-queue'
 import { ProductAnalysis } from './pages/product-analysis'
 import { WorkManagement } from './pages/work-management'
+import { CameraCheck } from './pages/camera-check'
 import { NotFound } from './pages/not-found'
 // 🔴 2026-09-07 削除: /manual-import /csv-import /import の3画面。
 //   いずれも supabaseDb.clearAllData()（全11テーブル全行削除）に到達する経路を持っていた。
@@ -140,6 +141,8 @@ function App() {
           <Route path="label-queue" element={<LabelQueuePage />} />
           <Route path="product-analysis" element={<ProductAnalysis />} />
           <Route path="work-management" element={<WorkManagement />} />
+          {/* カメラが使えない端末の切り分け用（2026-09-09） */}
+          <Route path="camera-check" element={<CameraCheck />} />
           {/* 未定義パスの受け皿。廃止したページのブックマークもここに来る */}
           <Route path="*" element={<NotFound />} />
         </Route>

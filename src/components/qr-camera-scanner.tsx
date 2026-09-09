@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import QrScanner from 'qr-scanner'
+import { diagnoseCamera, readCameraEnv, type CameraDiagnosis } from '../lib/camera-diagnosis'
 import { Button } from './ui/button'
 
 interface QRCameraScannerProps {
@@ -23,6 +24,8 @@ export function QRCameraScanner({
   const onErrorRef = useRef(onError)
   const [hasCamera, setHasCamera] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
+  // 何が原因で使えないのかを画面に出すための診断結果（2026-09-09）
+  const [diagnosis, setDiagnosis] = useState<CameraDiagnosis | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
   // 「再試行」で初期化をやり直すための番号。増やすと下の useEffect が走り直す
@@ -65,15 +68,29 @@ export function QRCameraScanner({
       try {
         const hasCamera = await QrScanner.hasCamera()
         setHasCamera(hasCamera)
-        
+
         if (!hasCamera) {
-          setCameraError('カメラが見つかりません')
-          onErrorRef.current?.('カメラが見つかりません')
+          // hasCamera は enumerateDevices を見るだけなので、
+          // 「機器が無い」のか「許可が無くて見えない」のかを区別できない。
+          // 環境から推測して、次にやることまで出す（2026-09-09）
+          let count = 0
+          try {
+            const devices = await navigator.mediaDevices?.enumerateDevices?.()
+            count = devices ? devices.filter(d => d.kind === 'videoinput').length : 0
+          } catch { /* 数えられなくても診断は続ける */ }
+
+          const d = diagnoseCamera('Camera not found.', readCameraEnv(count))
+          console.error('[camera]', d.cause, d.technical)
+          setDiagnosis(d)
+          setCameraError(d.title)
+          onErrorRef.current?.(d.title)
         }
       } catch (error) {
         console.error('Camera check failed:', error)
-        setCameraError('カメラの確認に失敗しました')
-        onErrorRef.current?.('カメラの確認に失敗しました')
+        const d = diagnoseCamera(error, readCameraEnv())
+        setDiagnosis(d)
+        setCameraError(d.title)
+        onErrorRef.current?.(d.title)
       }
     }
 
@@ -88,6 +105,7 @@ export function QRCameraScanner({
       try {
         setIsScanning(true)
         setCameraError(null)
+        setDiagnosis(null)
 
         const qrScanner = new QrScanner(
           videoRef.current!,
@@ -123,9 +141,30 @@ export function QRCameraScanner({
         
       } catch (error) {
         console.error('QR Scanner initialization failed:', error)
-        const errorMessage = error instanceof Error ? error.message : 'カメラの初期化に失敗しました'
-        setCameraError(errorMessage)
-        onErrorRef.current?.(errorMessage)
+
+        // qr-scanner は getUserMedia のエラーを catch(){} で捨て、文字列
+        // 'Camera not found.' だけを投げてくる。本当の原因（許可されていない・
+        // 他アプリが使用中など）を知るために、自分でもう一度だけ呼んで確かめる。
+        // これが無いと、何が起きても同じ1文言になって原因が追えない（2026-09-09）
+        let realError: unknown = error
+        let videoInputCount = -1
+        try {
+          const devices = await navigator.mediaDevices?.enumerateDevices?.()
+          videoInputCount = devices ? devices.filter(d => d.kind === 'videoinput').length : -1
+        } catch { /* 数えられなくても診断は続ける */ }
+        try {
+          const probe = await navigator.mediaDevices?.getUserMedia?.({ video: true, audio: false })
+          // 取れてしまった場合は掴んだままにしない
+          probe?.getTracks().forEach(t => t.stop())
+        } catch (probeError) {
+          realError = probeError
+        }
+
+        const d = diagnoseCamera(realError, readCameraEnv(videoInputCount))
+        console.error('[camera]', d.cause, d.technical)
+        setDiagnosis(d)
+        setCameraError(d.title)
+        onErrorRef.current?.(d.title)
         setIsScanning(false)
       }
     }
@@ -169,39 +208,50 @@ export function QRCameraScanner({
     }
   }
 
-  if (!hasCamera) {
+  /**
+   * 原因と、次にやることを出す（2026-09-09）
+   * 以前は「カメラが利用できません／手動入力をお使いください」だけで、
+   * 許可されていないのか機器が無いのかが誰にも分からなかった。
+   */
+  const renderProblem = (fallbackTitle: string) => {
+    const d = diagnosis
     return (
       <div className={`bg-slate-800 rounded-lg flex items-center justify-center ${className}`}>
-        <div className="text-center text-white p-8">
-          <div className="text-4xl mb-4">📱</div>
-          <p className="text-lg mb-2">カメラが利用できません</p>
-          <p className="text-sm text-white/70">
-            手動入力をお使いください
-          </p>
+        <div className="text-white p-6 max-w-md w-full">
+          <div className="text-center mb-3">
+            <div className="text-4xl mb-2">📷</div>
+            <p className="text-base font-semibold">{d?.title ?? fallbackTitle}</p>
+          </div>
+
+          {d && d.actions.length > 0 && (
+            <ol className="text-sm text-white/80 space-y-1.5 list-decimal list-inside mb-4">
+              {d.actions.map((a, i) => <li key={i}>{a}</li>)}
+            </ol>
+          )}
+          {!d && (
+            <p className="text-sm text-white/70 text-center mb-4">手入力をお使いください</p>
+          )}
+
+          <div className="flex justify-center gap-2">
+            <Button variant="outline" size="sm" onClick={resetCamera} className="text-white border-white/30">
+              再試行
+            </Button>
+          </div>
+
+          {d && (
+            // 問い合わせのときにこれを見せてもらえれば原因が分かる
+            <details className="mt-4">
+              <summary className="text-xs text-white/50 cursor-pointer">技術情報</summary>
+              <p className="text-xs text-white/50 mt-1 break-all">{d.cause} / {d.technical}</p>
+            </details>
+          )}
         </div>
       </div>
     )
   }
 
-  if (cameraError) {
-    return (
-      <div className={`bg-slate-800 rounded-lg flex items-center justify-center ${className}`}>
-        <div className="text-center text-white p-8">
-          <div className="text-4xl mb-4">⚠️</div>
-          <p className="text-lg mb-2">カメラエラー</p>
-          <p className="text-sm text-white/70 mb-4">{cameraError}</p>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={resetCamera}
-            className="text-white border-white/30"
-          >
-            再試行
-          </Button>
-        </div>
-      </div>
-    )
-  }
+  if (!hasCamera) return renderProblem('カメラが利用できません')
+  if (cameraError) return renderProblem('カメラエラー')
 
   return (
     <div className={`relative bg-slate-800 rounded-lg overflow-hidden ${className}`}>

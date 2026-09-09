@@ -68,7 +68,8 @@ await ctx.addInitScript(() => {
 // デモでは必ず失敗するものは数えない（モードの仕様）。
 // カメラはヘッドレスのブラウザに存在しないので、QRスキャン系の
 // 「カメラが見つかりません」は環境の話であって不具合ではない。
-const EXPECTED = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket|Weather API key|Failed to load resource|カメラが見つかりません|Camera error|getUserMedia/
+// [camera] は 2026-09-09 に足した診断ログ。原因を残すためのもので不具合ではない。
+const EXPECTED = /dummy\.supabase\.co|ERR_NAME_NOT_RESOLVED|WebSocket|Weather API key|Failed to load resource|カメラが見つかりません|Camera error|getUserMedia|\[camera\]/
 
 let totalClicks = 0
 const problems = []

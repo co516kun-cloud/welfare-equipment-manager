@@ -13,6 +13,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 
+/**
+ * 2026-09-09: 表示が「カメラエラー」の一言から、原因と対処を出す形に変わった。
+ * 文言そのものは環境で変わる（許可が無い / HTTPS でない / 機器が無い）ので、
+ * 「エラー状態になっていること」を再試行ボタンと案内文で確かめる。
+ */
+const errorShown = () => screen.getByRole('button', { name: /再試行/ })
+
+/**
+ * 「カメラを開こうとして失敗した」状態になるまで待つ。
+ * 再試行ボタンだけで待つと、カメラの有無チェックで失敗した場合にも
+ * 通ってしまい、start() が呼ばれる前に次の検査へ進んでしまう。
+ */
+const waitForStartFailed = async (startFn: typeof startMock) => {
+  await waitFor(() => expect(startFn).toHaveBeenCalled())
+  await waitFor(() => expect(errorShown()).toBeTruthy())
+}
+
 const startMock = vi.fn()
 const stopMock = vi.fn()
 const destroyMock = vi.fn()
@@ -52,17 +69,17 @@ describe('カメラエラー後の「再試行」', () => {
     startMock.mockRejectedValue('Camera not found.')
     render(<QRCameraScanner onScanResult={() => {}} />)
 
-    await waitFor(() => expect(screen.getByText('カメラエラー')).toBeTruthy())
-    expect(screen.getByRole('button', { name: /再試行/ })).toBeTruthy()
+    await waitForStartFailed(startMock)
+    // 原因が分からなくても、次にやること（手入力）は必ず出す
+    expect(await screen.findByText(/手入力/)).toBeTruthy()
   })
 
   it('「再試行」を押すとカメラを開き直す', async () => {
     startMock.mockRejectedValueOnce('Camera not found.')
     render(<QRCameraScanner onScanResult={() => {}} />)
 
-    await waitFor(() => expect(screen.getByText('カメラエラー')).toBeTruthy())
+    await waitForStartFailed(startMock)
     const firstAttempts = startMock.mock.calls.length
-    expect(firstAttempts).toBeGreaterThan(0)
 
     startMock.mockResolvedValue(undefined)
     fireEvent.click(screen.getByRole('button', { name: /再試行/ }))
@@ -82,7 +99,7 @@ describe('カメラエラー後の「再試行」', () => {
   it('再試行に成功したらスキャンが再開する', async () => {
     startMock.mockRejectedValueOnce('Camera not found.')
     render(<QRCameraScanner onScanResult={() => {}} />)
-    await waitFor(() => expect(screen.getByText('カメラエラー')).toBeTruthy())
+    await waitForStartFailed(startMock)
 
     startMock.mockResolvedValue(undefined)
     fireEvent.click(screen.getByRole('button', { name: /再試行/ }))
@@ -91,7 +108,8 @@ describe('カメラエラー後の「再試行」', () => {
     })
 
     await waitFor(() => {
-      expect(screen.queryByText('カメラエラー')).toBeNull()
+      // エラー表示（再試行ボタン）が消えている
+      expect(screen.queryByRole('button', { name: /再試行/ })).toBeNull()
       // スキャナが作り直されている（＝本当に開き直した）
       expect(constructedTimes.length).toBeGreaterThan(1)
       expect(screen.getByText(/スキャン中/)).toBeTruthy()
