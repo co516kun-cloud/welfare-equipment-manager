@@ -4,6 +4,18 @@ import { supabaseDb } from '../lib/supabase-database'
 import { supabase } from '../lib/supabase'
 import { calculateInventorySummary, getAvailableStock, calculateReservations } from '../lib/inventory-utils'
 import type { InventorySummary, ReservationInfo } from '../lib/inventory-utils'
+import {
+  applyRealtimeEvent,
+  type RealtimeTable,
+  type RealtimeEventType,
+} from '../lib/realtime-sync'
+
+/**
+ * Realtime のチャンネル参照。
+ * 以前は window.__realtimeChannel に置いていたが、グローバルを汚すうえ
+ * 別のタブ・別のストアと衝突し得るのでモジュール内に閉じた（2026-09-08）。
+ */
+let realtimeChannel: ReturnType<typeof supabase.channel> | null = null
 
 interface InventoryState {
   // Data
@@ -366,8 +378,13 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       console.error('❌ Database save failed, rolling back...', error)
       
       // 4. エラー時：ロールバック（元のステータスとnotesに戻す）
-      const rolledBackItem = { ...targetItem, status: originalStatus }
-      const rolledBackItems = items.map(i => i.id === itemId ? rolledBackItem : i)
+      //
+      // ⚠️ ここは開始時点の items をそのまま書き戻していた（2026-09-08 修正）。
+      //    保存を待っている間に Realtime で届いた他の個体の更新まで
+      //    巻き戻してしまう。いまの状態を読み直し、該当の1件だけ戻す。
+      const rolledBackItems = get().items.map(i =>
+        i.id === itemId ? { ...i, status: originalStatus } : i
+      )
       set({ items: rolledBackItems })
       get().clearItemsCache()
       console.log('🔙 Rolled back to original status:', originalStatus)
@@ -648,27 +665,44 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   },
 
   enableRealtimeSync: () => {
-    const channel = supabase
-      .channel('product-items-sync')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'product_items' },
-        (payload) => {
-          const updated = payload.new as ProductItem
-          const items = get().items
-          const newItems = items.map(item =>
-            item.id === updated.id ? { ...item, ...updated } : item
-          )
-          set({ items: newItems })
-          get().clearItemsCache()
-          console.log(`🔄 Realtime: ${updated.id} → ${updated.status}`)
-        }
+    // 二重購読を防ぐ（App.tsx の effect が張り直すことがある）
+    if (realtimeChannel) return
+
+    /** 届いた1行をマージする。差分が無ければ何もしない（無駄な再描画を避ける） */
+    const merge = (table: RealtimeTable, eventType: RealtimeEventType, payload: {
+      new?: Record<string, unknown>
+      old?: Record<string, unknown>
+    }) => {
+      const { items, orders } = get()
+      const next = applyRealtimeEvent(
+        { items, orders },
+        table,
+        eventType,
+        payload.new ?? {},
+        payload.old
       )
+      if (!next) return
+      set({ items: next.items, orders: next.orders })
+      if (next.items !== items) get().clearItemsCache()
+      console.log(`🔄 Realtime: ${table} ${eventType}`)
+    }
+
+    // ⚠️ テーブルが supabase_realtime の publication に入っていないと、
+    //    購読は SUBSCRIBED になるのにイベントが1件も来ない。
+    //    追加は sql/enable-realtime-orders.sql（本番へは田口さんが手で流す）
+    const channel = supabase
+      .channel('inventory-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_items' },
+        p => merge('product_items', p.eventType as RealtimeEventType, p))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' },
+        p => merge('orders', p.eventType as RealtimeEventType, p))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' },
+        p => merge('order_items', p.eventType as RealtimeEventType, p))
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime sync connected')
-        } else if (status === 'CHANNEL_ERROR') {
-          console.warn('⚠️ Realtime connection error, retrying in 5s...')
+          console.log('✅ Realtime sync connected (product_items / orders / order_items)')
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn(`⚠️ Realtime ${status}, retrying in 5s...`)
           setTimeout(() => {
             get().disableRealtimeSync()
             get().enableRealtimeSync()
@@ -676,15 +710,13 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         }
       })
 
-    // チャンネル参照を保持（クリーンアップ用）
-    ;(window as any).__realtimeChannel = channel
+    realtimeChannel = channel
   },
 
   disableRealtimeSync: () => {
-    const channel = (window as any).__realtimeChannel
-    if (channel) {
-      supabase.removeChannel(channel)
-      ;(window as any).__realtimeChannel = null
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel)
+      realtimeChannel = null
       console.log('🔌 Realtime sync disconnected')
     }
   },
