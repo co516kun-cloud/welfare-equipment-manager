@@ -7,7 +7,10 @@
     /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w scripts/print-agent/install-task.ps1)"
 
   やること:
-    1. タスクスケジューラに "WelfareLabelPrintAgent" を登録（ログオン時・非表示・失敗時3回再試行）
+    1. タスクスケジューラに "WelfareLabelPrintAgent" を登録（ログオン時＋10分ごと・非表示・失敗時3回再試行）
+       🔴 バッテリ条件を外す（2026-09-11）。ノートPC なので電源を抜いた瞬間に Windows がタスクを止め、
+          次のログオンまで戻らなかった（9/10 09:41 に黙って止まり、ラベルが 10 件溜まった）。
+          10分ごとのトリガーは「死んでいたら上げ直す」ため。動いている間は IgnoreNew で無視される。
     2. そのまま今すぐ起動する
   外し方:
     Unregister-ScheduledTask -TaskName WelfareLabelPrintAgent -Confirm:$false
@@ -27,13 +30,19 @@ if (-not (Test-Path $launcher)) { throw "launch.ps1 が見つかりません: $l
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
   -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$launcher`" -Distro $Distro"
 
-$trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$triggers = @(
+  (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
+  # 死んでいたら10分以内に上げ直す（動いている間は MultipleInstances=IgnoreNew で何もしない）
+  (New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650))
+)
 $settings = New-ScheduledTaskSettingsSet `
   -ExecutionTimeLimit ([TimeSpan]::Zero) `
   -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
+  -MultipleInstances IgnoreNew `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
   -StartWhenAvailable -Hidden
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
 Write-Host "OK: $TaskName を登録して起動しました"
