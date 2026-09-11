@@ -9,6 +9,14 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+# 二重起動を防ぐ（2026-09-11）。10分ごとの上げ直しトリガーと手動起動が重なっても、エージェントは常に1本。
+# fd 9 は exec で node に引き継がれるので、鍵はエージェントが生きている間ずっと保持される。
+exec 9>"$HOME/.print-agent-run.lock"
+if ! flock -n 9; then
+  echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ') already running, exit" >> "$HOME/print-agent.log"
+  exit 0
+fi
+
 # nvm 経由の node を使う（Task Scheduler から呼ばれると PATH が素の状態）
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1091

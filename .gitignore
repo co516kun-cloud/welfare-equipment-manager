@@ -43,3 +43,6 @@ dist-ssr
 
 # デモモードのスクリーンショット出力
 demo-shots/
+
+# 生成物（install-task.ps1 が書く・PC 固有のパス入り）
+scripts/print-agent/launch.vbs
