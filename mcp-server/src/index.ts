@@ -47,13 +47,64 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 const MCP_EMAIL = process.env.MCP_USER_EMAIL;
 const MCP_PASS = process.env.MCP_USER_PASSWORD;
 async function signInIfConfigured() {
+  // 🔴 ログインできなければ止まる（2026-09-14・K005）。
+  //   以前は失敗しても anon のまま動き続け、RLS で全部 0 件になるので、どのツールも
+  //   「その個体は存在しません」と**もっともらしい嘘**を返していた（パスワード変更・起動時の回線断で起きる）。
+  //   止まれば呼ぶ側に「在庫サーバーが起動しない」と正しく伝わる。起きた直後の回線断に備えて3回まで試す。
   if (!MCP_EMAIL || !MCP_PASS) {
-    console.error("[auth] MCP_USER_EMAIL / MCP_USER_PASSWORD が未設定。anon のままなので RLS で 0 件になります");
-    return;
+    console.error("[auth] 🔴 MCP_USER_EMAIL / MCP_USER_PASSWORD が未設定。anon では RLS で 0 件になるので起動しない");
+    process.exit(1);
   }
-  const { error } = await supabase.auth.signInWithPassword({ email: MCP_EMAIL, password: MCP_PASS });
-  if (error) console.error("[auth] ログイン失敗:", error.message);
-  else console.error("[auth] ログイン成功:", MCP_EMAIL);
+  let last = "";
+  for (const wait of [0, 3000, 10000]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    const { error } = await supabase.auth.signInWithPassword({ email: MCP_EMAIL, password: MCP_PASS });
+    if (!error) { console.error("[auth] ログイン成功:", MCP_EMAIL); return; }
+    last = error.message;
+    console.error("[auth] ログイン失敗:", last);
+  }
+  console.error("[auth] 🔴 3回ともログインできないので起動しない:", last);
+  process.exit(1);
+}
+
+// ============================================================
+// 在庫を書く力の関門（2026-09-14・K005 提案1）
+// ============================================================
+// 🔴 これまで「1回に触ってよい個体は4件まで」は L6 の音声→在庫の包み紙（~/.soundcore-poll/mcp-guard.js）にしか無く、
+//   Slack（L4）と、音声の「タスク」経路の実行係（2026-09-01 に自分でこのサーバーを起動して KB-017 を動かした）は素通りだった。
+//   **サーバーの中で数えれば、どこから起動しても同じ壁に当たる。**数えるのは個体の数で、書き込みの回数ではない
+//   （1台を 返却→消毒→メンテ→入庫 と流すのは1個体）。
+//
+//   WELFARE_MAX_ITEMS     1プロセス（＝1回の依頼）で触れる個体数。未設定は 4。"0" は上限なし
+//                         （田口さんの対話セッション＝act/.mcp.json だけが 0。自動の経路は付けない＝既定の4）
+//   WELFARE_PERFORMED_BY  設定されていれば、履歴の実行者名をこれに固定する（モデルが渡す名前より優先）。
+//                         L4 は Slack の発言者をアプリのユーザー名に直して入れる
+//                         （ゆりえさんの依頼が「田口」で残っていた。8/31〜9/4 に7件）。
+const MAX_ITEMS_RAW = process.env.WELFARE_MAX_ITEMS;
+const MAX_ITEMS = MAX_ITEMS_RAW === undefined || MAX_ITEMS_RAW === "" ? 4 : Number(MAX_ITEMS_RAW);
+const FORCED_PERFORMER = (process.env.WELFARE_PERFORMED_BY || "").trim();
+const touchedItems = new Set<string>();
+
+function performer(given?: string): string {
+  return FORCED_PERFORMER || (given && given.trim()) || "MCP";
+}
+
+/** 書き込みの前に呼ぶ。止めるときは返す文面、通すときは null */
+function guardItem(tool: string, key: string): string | null {
+  if (!Number.isFinite(MAX_ITEMS) || MAX_ITEMS <= 0) return null;
+  if (touchedItems.has(key)) return null;
+  if (touchedItems.size >= MAX_ITEMS) {
+    const list = [...touchedItems].join(", ");
+    console.error(`[guard] GUARD result=ng 止めた=${tool} 個体=${key} これまで=${touchedItems.size}件(${list}) 上限=${MAX_ITEMS}`);
+    return (
+      `🔴 安全のため止めました。1回の依頼で触ってよい個体は ${MAX_ITEMS} 件までです。\n` +
+      `すでに ${touchedItems.size} 件（${list}）を触っており、${key} は ${touchedItems.size + 1} 件目です。\n\n` +
+      `**これ以上は実行できません。**ここで作業をやめ、触った ${touchedItems.size} 件と止められた分を報告してください。\n` +
+      `田口さんの承認があれば、上限を上げて実行し直せます。`
+    );
+  }
+  touchedItems.add(key);
+  return null;
 }
 
 const server = new McpServer({
@@ -574,7 +625,9 @@ server.tool(
       .describe("ラベルを**印刷まで**するか。**既定 true**（田口さん指示・2026-08-18）。要らない時だけ false"),
   },
   async (a) => {
-    const performedBy = a.performed_by ?? "MCP";
+    const blocked = guardItem("create_product_item", `new:${a.id}`);
+    if (blocked) return { content: [{ type: "text", text: blocked }], isError: true };
+    const performedBy = performer(a.performed_by);
     const status = a.status ?? "available";
 
     const { data: dup } = await supabase
@@ -678,7 +731,9 @@ server.tool(
       .describe("ラベルを**印刷まで**するか。**既定は action に「入庫」を含む時 true**（田口さん指示・2026-08-18）"),
   },
   async (a) => {
-    const performedBy = a.performed_by ?? "MCP";
+    const blocked = guardItem("update_item_status", a.item_id);
+    if (blocked) return { content: [{ type: "text", text: blocked }], isError: true };
+    const performedBy = performer(a.performed_by);
 
     const { data: current, error: cErr } = await supabase
       .from("product_items")
@@ -797,7 +852,9 @@ server.tool(
     print_label: z.boolean().optional().describe("ラベルを印刷まで行くか。既定は操作名に「入庫」を含む時 true"),
   },
   async (a) => {
-    const performedBy = a.performed_by ?? "MCP";
+    const blocked = guardItem("scan_action", a.item_id);
+    if (blocked) return { content: [{ type: "text", text: blocked }], isError: true };
+    const performedBy = performer(a.performed_by);
     const { data: item, error: iErr } = await supabase
       .from("product_items").select("*").eq("id", a.item_id).maybeSingle();
     if (iErr) return { content: [{ type: "text", text: `Error: ${iErr.message}` }] };
@@ -1072,7 +1129,7 @@ server.tool(
     performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
   },
   async ({ item_id, limit, performed_by }) => {
-    const by = performed_by ?? "MCP";
+    const by = performer(performed_by);
     let q = supabase
       .from("label_print_queue")
       .select("id, item_id, management_id, product_name, condition_notes")
