@@ -168,6 +168,12 @@ async function ensureSignedIn(): Promise<boolean> {
  * スプーラが空なら「送った分は全部出た」と見なして completed にする。
  * ⚠️ 対象は printed_by = 自分 の行だけ。他プロセス（ブラウザ拡張・MCP）の行は触らない。
  */
+// 🔴 掴んでから3分たっていない行は触らない（2026-09-14・K005 A8）。
+//   15秒ごとの見回りが、掴んだ直後（status=printing）でまだ PowerShell の中にいる行を
+//   「スプーラが空＝出た」と判定して completed にしていた（9/11 RO-026: 07:38:47 に完了扱い → 07:39:05 に印刷）。
+//   印刷スクリプトは12秒で返るので、3分あれば「本当に置き去り」だけが残る。
+const RECONCILE_AFTER_MS = 3 * 60 * 1000
+
 async function reconcileOwnPrinting(): Promise<void> {
   const n = await spoolerJobCount()
   if (n === null || n > 0) return
@@ -176,6 +182,7 @@ async function reconcileOwnPrinting(): Promise<void> {
     .update({ status: 'completed', printed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('status', 'printing')
     .eq('printed_by', AGENT_NAME)
+    .lt('updated_at', new Date(Date.now() - RECONCILE_AFTER_MS).toISOString())
     .select('management_id')
   if (error) {
     log(`reconcile 失敗: ${error.message}`)

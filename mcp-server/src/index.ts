@@ -1060,10 +1060,13 @@ async function reconcilePrinting(excludeId?: string): Promise<void> {
     );
     const n = Number.parseInt(stdout.trim(), 10);
     if (!Number.isFinite(n) || n > 0) return; // まだ待ちがいる間は触らない
+    // 🔴 掴まれてから3分たっていない行は触らない（2026-09-14・K005 A8）。
+    //   印刷エージェント（事務所PC の常駐）が掴んだ直後の行まで、ここが completed にしていた。
     let q = supabase
       .from("label_print_queue")
       .update({ status: "completed", printed_at: new Date().toISOString() })
-      .eq("status", "printing");
+      .eq("status", "printing")
+      .lt("updated_at", new Date(Date.now() - 3 * 60 * 1000).toISOString());
     if (excludeId) q = q.neq("id", excludeId); // いま掴んだ行はこれから刷るので触らない
     await q;
   } catch {
