@@ -11,6 +11,7 @@ import { loadLayeredEnv, defaultSecretsPath } from "./env.js";
 //   src/lib/item-status.ts が正。2026-08-20 に「同じ switch が2箇所にあってずれた」
 //   事故を直したファイルなので、ここで写し直すと元の木阿弥になる。
 import { getAvailableActions, recordName, STATUS_LABEL } from "./shared/item-status.js";
+import type { ItemAction } from "./shared/item-status.js";
 
 // .env は ~/secrets/welfare-equipment-manager/.env を優先し、リポジトリ直下は補助（2026-09-04、env.ts 参照）。
 // 以前は直下しか読んでいなかった。直下は public リポの作業ツリー内で /mnt/c 上（WSL 側から誰でも読める）。
@@ -839,9 +840,105 @@ server.tool(
 //   ⑤ 状態メモはメンテナンス・修理完了のときだけ保存する
 //   ⑥ 入庫はラベルを印刷まで行く
 //   ここは src/components/scan-action-dialog.tsx の handleActionSubmit と同じ挙動。
+/**
+ * 1歩だけ動かす。scan_action と run_flow がこれを共有する（2026-09-18・K006）。
+ *
+ * 🔴 なぜ切り出したか: 一気通貫を足すとき、同じ手順をもう1つ書けば必ずずれる。
+ *   8/20 に遷移表が2箇所に分かれてずれた事故があり、そのとき表は1本にした。
+ *   **表だけでなく、表の歩き方も1本にする。**
+ *
+ * 返り: 進めたら ok=true。DB の更新に失敗したら ok=false（履歴も書かない）。
+ */
+async function applyStep(
+  cur: any,
+  action: ItemAction,
+  o: {
+    condition?: string;
+    conditionNotes?: string;
+    location?: string;
+    performedBy: string;
+    /** 一気通貫の途中なら、履歴の notes に残す印（法令記録を後から読み分けるため） */
+    flowNote?: string;
+  }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  from: string;
+  finalStatus: string;
+  record: string;
+  rentalLine: string;
+  histErr: string | null;
+  notes: string | null;
+  patch: Record<string, any>;
+}> {
+  const from = cur.status as string;
+
+  // ④ 要修理なら故障中へ倒す。ただし廃棄が優先（アプリと同じ）
+  const newCondition = (o.condition ?? cur.condition) as string;
+  const finalStatus = (action.nextStatus === "disposed" || newCondition !== "needs_repair")
+    ? action.nextStatus : "out_of_order";
+
+  // ⑤ 状態メモはメンテナンス完了・修理完了のときだけ
+  const savesNotes = ["maintenance", "repair"].includes(action.key);
+  const notes = savesNotes ? (o.conditionNotes ?? cur.condition_notes ?? null) : (cur.condition_notes ?? null);
+
+  const patch: Record<string, any> = {
+    status: finalStatus,
+    condition: newCondition,
+    location: o.location ?? cur.location,
+    condition_notes: notes,
+    updated_at: new Date().toISOString(),
+  };
+
+  // ③ 返却は貸与日数を足して、貸与先と開始日を消す
+  let rentalLine = "";
+  if (action.key === "return") {
+    if (cur.loan_start_date) {
+      const start = new Date(cur.loan_start_date); start.setHours(0, 0, 0, 0);
+      const end = new Date(); end.setHours(0, 0, 0, 0);
+      const days = Math.ceil(Math.abs(end.getTime() - start.getTime()) / 86400000);
+      patch.total_rental_days = (cur.total_rental_days || 0) + days;
+      rentalLine = `\n貸与 ${days}日を加算（累計 ${patch.total_rental_days}日）`;
+    }
+    patch.customer_name = null;
+    patch.loan_start_date = null;
+  }
+
+  const { error } = await supabase.from("product_items").update(patch).eq("id", cur.id);
+  if (error) {
+    return { ok: false, error: error.message, from, finalStatus, record: "", rentalLine, histErr: null, notes, patch };
+  }
+
+  // ② 履歴の操作名は固定。要修理で倒れた時だけアプリと同じく「故障中へ変更」
+  const record = newCondition === "needs_repair" && finalStatus === "out_of_order"
+    ? "故障中へ変更" : recordName(action);
+  // 🔴 返却で消すものを、消す前に履歴へ残す（2026-09-02・実際に失って直した）。
+  //
+  //   それまでは返却時に customerName に null を渡していた（アプリと同じ作り）。
+  //   その結果、誤って返却処理を流した個体（AU-003）の**貸与先と貸与開始日が
+  //   完全に消え、履歴のどこにも残らなかった。**復元の道が無くなる。
+  //
+  //   「誰にいつ貸していたか」は**消す前にしか書けない。消す側が残す。**
+  const clearedNote = action.key === "return"
+    ? [`貸与先 ${cur.customer_name || "（記録なし）"}`,
+       cur.loan_start_date ? `貸与開始 ${cur.loan_start_date}` : null,
+       rentalLine ? rentalLine.replace(/^\n/, "") : null].filter(Boolean).join(" / ")
+    : null;
+  const baseNote = clearedNote ?? (savesNotes ? (o.conditionNotes ?? null) : null);
+  const histErr = await writeHistory({
+    itemId: cur.id, action: record, fromStatus: from, toStatus: finalStatus, performedBy: o.performedBy,
+    location: patch.location, condition: newCondition,
+    // 返却でも**消す前の貸与先を残す。**null を入れると辿れなくなる
+    customerName: cur.customer_name ?? null,
+    notes: [o.flowNote, baseNote].filter(Boolean).join(" / ") || null,
+  });
+
+  return { ok: true, from, finalStatus, record, rentalLine, histErr, notes, patch };
+}
+
 server.tool(
   "scan_action",
-  "QRスキャン画面と同じ流れで個体を動かす。返却・消毒・メンテ・入庫はこちらを使う（update_item_status は流れを通らない）",
+  "QRスキャン画面と同じ流れで個体を1歩だけ動かす。返却・消毒・メンテ・入庫はこちらを使う（update_item_status は流れを通らない）。続けて何歩も進めるなら run_flow",
   {
     item_id: z.string().describe("個別管理番号（例: SL-128）"),
     action_key: z.string().describe("操作キー。list_scan_actions で確認してから渡す（return / clean / maintenance / storage 等）"),
@@ -870,74 +967,145 @@ server.tool(
         `いまできるのは ${actions.length ? actions.map((x) => `${x.key}(${x.label})`).join(" / ") : "なし"}` }] };
     }
 
-    // ④ 要修理なら故障中へ倒す。ただし廃棄が優先（アプリと同じ）
-    const newCondition = (a.condition ?? cur.condition) as string;
-    const finalStatus = (action.nextStatus === "disposed" || newCondition !== "needs_repair")
-      ? action.nextStatus : "out_of_order";
-
-    // ⑤ 状態メモはメンテナンス完了・修理完了のときだけ
-    const savesNotes = ["maintenance", "repair"].includes(action.key);
-    const notes = savesNotes ? (a.condition_notes ?? cur.condition_notes ?? null) : (cur.condition_notes ?? null);
-
-    const patch: Record<string, any> = {
-      status: finalStatus,
-      condition: newCondition,
-      location: a.location ?? cur.location,
-      condition_notes: notes,
-      updated_at: new Date().toISOString(),
-    };
-
-    // ③ 返却は貸与日数を足して、貸与先と開始日を消す
-    let rentalLine = "";
-    if (action.key === "return") {
-      if (cur.loan_start_date) {
-        const start = new Date(cur.loan_start_date); start.setHours(0, 0, 0, 0);
-        const end = new Date(); end.setHours(0, 0, 0, 0);
-        const days = Math.ceil(Math.abs(end.getTime() - start.getTime()) / 86400000);
-        patch.total_rental_days = (cur.total_rental_days || 0) + days;
-        rentalLine = `\n貸与 ${days}日を加算（累計 ${patch.total_rental_days}日）`;
-      }
-      patch.customer_name = null;
-      patch.loan_start_date = null;
-    }
-
-    const { error } = await supabase.from("product_items").update(patch).eq("id", a.item_id);
-    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
-
-    // ② 履歴の操作名は固定。要修理で倒れた時だけアプリと同じく「故障中へ変更」
-    const record = newCondition === "needs_repair" && finalStatus === "out_of_order"
-      ? "故障中へ変更" : recordName(action);
-    // 🔴 返却で消すものを、消す前に履歴へ残す（2026-09-02・実際に失って直した）。
-    //
-    //   それまでは返却時に customerName に null を渡していた（アプリと同じ作り）。
-    //   その結果、誤って返却処理を流した個体（AU-003）の**貸与先と貸与開始日が
-    //   完全に消え、履歴のどこにも残らなかった。**復元の道が無くなる。
-    //
-    //   「誰にいつ貸していたか」は**消す前にしか書けない。消す側が残す。**
-    const clearedNote = action.key === "return"
-      ? [`貸与先 ${cur.customer_name || "（記録なし）"}`,
-         cur.loan_start_date ? `貸与開始 ${cur.loan_start_date}` : null,
-         rentalLine ? rentalLine.replace(/^\n/, "") : null].filter(Boolean).join(" / ")
-      : null;
-    const histErr = await writeHistory({
-      itemId: a.item_id, action: record, fromStatus: from, toStatus: finalStatus, performedBy,
-      location: patch.location, condition: newCondition,
-      // 返却でも**消す前の貸与先を残す。**null を入れると辿れなくなる
-      customerName: cur.customer_name ?? null,
-      notes: clearedNote ?? (savesNotes ? (a.condition_notes ?? null) : null),
+    const r = await applyStep(cur, action, {
+      condition: a.condition, conditionNotes: a.condition_notes, location: a.location, performedBy,
     });
+    if (!r.ok) return { content: [{ type: "text", text: `Error: ${r.error}` }] };
 
     // ⑥ 入庫はラベルまで（田口さん 2026-08-31「新規登録と入庫処理をした場合はラベルは常に印刷」）
     let labelLine = "";
-    if (a.print_label ?? /入庫/.test(record)) {
-      labelLine = "\n" + (await queueAndPrint({ itemId: a.item_id, conditionNotes: notes, by: performedBy }));
+    if (a.print_label ?? /入庫/.test(r.record)) {
+      labelLine = "\n" + (await queueAndPrint({ itemId: a.item_id, conditionNotes: r.notes ?? undefined, by: performedBy }));
     }
 
     return { content: [{ type: "text", text:
-      `${record}: ${a.item_id} ${from} → ${finalStatus}` +
-      (finalStatus !== action.nextStatus ? `（要修理のため ${action.nextStatus} ではなく故障中へ）` : "") +
-      rentalLine +
-      (histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました") +
+      `${r.record}: ${a.item_id} ${from} → ${r.finalStatus}` +
+      (r.finalStatus !== action.nextStatus ? `（要修理のため ${action.nextStatus} ではなく故障中へ）` : "") +
+      r.rentalLine +
+      (r.histErr ? `\n⚠️ 本体は更新済みだが履歴の記録に失敗: ${r.histErr}` : "\n履歴も1行残しました") +
+      labelLine }] };
+  }
+);
+
+// --- 流れに沿って続けて動かす（一気通貫・2026-09-18・K006） ---
+//
+// 🔴 なぜ要るか: 田口さんは同じ1台に「消毒処理」「メンテナンス処理」「入庫処理」を
+//   別々に言っていた（8/13〜9/15 の33日で在庫の依頼 約105件。その多くがこの形）。
+//   9/2 の録音で本人が「消毒処理、メンテナンス処理、入庫処理まで一気通貫で」と言っている。
+//   **言い方はもう決まっていて、仕組みが追いついていなかった。**
+//
+// 🔴 引いた線（K006 §2）:
+//   ① 遷移表はいまの1本のまま。その上を歩くだけ。行けない歩は作らない
+//   ② 廃棄は通さない（戻せない操作を「ついで」で通さない）
+//   ③ `from` の申告と実際が違えば**1歩も動かさない**（勝手に手前から始めない）
+//   ④ 履歴の notes に「一気通貫」の印を残す。消毒記録は法令上の保存義務がある記録で、
+//      4歩ぶんが同じ時刻に並ぶ。**1回の申告でまとめて進めたと後から読めるようにする**
+//   ⑤ 関門は個体の数で数えるので、1台を4歩動かしても1件（K005 の上限4件はそのまま効く）
+//   ⑥ 返事に商品名を必ず付ける。番号だけだと聞き違いに気づけない。
+//      ⚠️ 2026-09-18 に Deepgram を外して候補が1つになったので、
+//         **実在する別の番号に化けた時に機械で止まる仕掛けは無い。**ここが唯一の受け皿。
+const FLOW_ORDER = ["rented", "returned", "cleaning", "maintenance", "available"] as const;
+/** いまの場所 → 次の1歩の操作キー。表そのものは getAvailableActions が正で、ここは順路だけ */
+const FLOW_STEP: Record<string, string> = {
+  rented: "return", returned: "clean", cleaning: "maintenance", maintenance: "storage",
+};
+
+server.tool(
+  "run_flow",
+  "1台を流れに沿って続けて動かす（貸与中→返却→消毒→メンテ→入庫＋ラベル）。「入庫まで」「一気通貫で」と言われたらこれ。1歩だけなら scan_action",
+  {
+    item_id: z.string().describe("個別管理番号（例: AU-123）"),
+    to: z.enum(["returned", "cleaning", "maintenance", "available"])
+      .describe("どこまで進めるか。returned=返却済み / cleaning=消毒済み / maintenance=メンテナンス済み / available=利用可能（入庫まで）"),
+    from: z.enum(["rented", "returned", "cleaning", "maintenance"]).optional()
+      .describe("依頼者が「ここから」と言った状態。実際と違えば1歩も動かさずに聞き返す"),
+    condition: z.enum(ITEM_CONDITION).optional().describe("状態も変える場合。needs_repair なら故障中へ倒れて止まる"),
+    condition_notes: z.string().optional().describe("状態メモ（メンテナンス完了の歩で保存される）"),
+    location: z.string().optional().describe("保管場所も変える場合"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+    print_label: z.boolean().optional().describe("ラベルまで行くか。既定は入庫の歩を通った時 true"),
+  },
+  async (a) => {
+    const blocked = guardItem("run_flow", a.item_id);
+    if (blocked) return { content: [{ type: "text", text: blocked }], isError: true };
+    const performedBy = performer(a.performed_by);
+
+    const { data: item, error: iErr } = await supabase
+      .from("product_items").select("*, products(name)").eq("id", a.item_id).maybeSingle();
+    if (iErr) return { content: [{ type: "text", text: `Error: ${iErr.message}` }] };
+    if (!item) return { content: [{ type: "text", text: `中止: ${a.item_id} が見つかりません（1歩も動かしていません）` }] };
+
+    let cur = item as any;
+    const name = cur.products?.name ? `${cur.products.name}（${a.item_id}）` : a.item_id;
+    const startStatus = cur.status as string;
+    const label = (s: string) => (STATUS_LABEL as any)[s] ?? s;
+
+    // ③ 申告と実際が違えば動かさない
+    if (a.from && a.from !== startStatus) {
+      const nextKey = FLOW_STEP[startStatus];
+      const nextAction = nextKey ? getAvailableActions(startStatus).find((x) => x.key === nextKey) : null;
+      return { content: [{ type: "text", text:
+        `${name}: ${label(startStatus)}のまま動かしていません。\n` +
+        `${label(a.from)}からと聞きましたが、いまは**${label(startStatus)}**です。` +
+        (nextAction ? `ここからだと「${nextAction.label}」から始まります。進めますか？` : "ここから流れに乗せる道がありません。") }] };
+    }
+
+    const iFrom = FLOW_ORDER.indexOf(startStatus as any);
+    const iTo = FLOW_ORDER.indexOf(a.to as any);
+    if (iFrom < 0) {
+      return { content: [{ type: "text", text:
+        `${name}: ${label(startStatus)}のまま動かしていません。この状態は流れ（貸与中→返却→消毒→メンテ→入庫）の上にありません。` +
+        `list_scan_actions で今できることを見てください。` }] };
+    }
+    if (iTo <= iFrom) {
+      return { content: [{ type: "text", text:
+        `${name}: すでに${label(startStatus)}です。${label(a.to)}へは戻れません（履歴は追記のみで巻き戻しません）。動かしていません。` }] };
+    }
+
+    const total = iTo - iFrom;
+    const done: string[] = [];
+    let stopped: string | null = null;
+    let sawStorage = false;
+    let lastNotes: string | null = null;
+
+    for (let n = 0; n < total; n++) {
+      const key = FLOW_STEP[cur.status];
+      const actions = getAvailableActions(cur.status);
+      const action = key ? actions.find((x) => x.key === key) : null;
+      if (!action) {
+        stopped = `「${label(cur.status)}」から先へ進む道がありません（できるのは ${actions.map((x) => x.label).join(" / ") || "なし"}）`;
+        break;
+      }
+      const r = await applyStep(cur, action, {
+        condition: a.condition, conditionNotes: a.condition_notes, location: a.location, performedBy,
+        flowNote: `一気通貫（${label(startStatus)}→${label(a.to)} の ${n + 1}/${total} 歩目）`,
+      });
+      if (!r.ok) { stopped = `${action.label} の書き込みに失敗: ${r.error}`; break; }
+      done.push(r.record + (r.histErr ? "（⚠️履歴の記録に失敗）" : "") + r.rentalLine.replace(/\n/g, " "));
+      lastNotes = r.notes;
+      if (action.key === "storage") sawStorage = true;
+      if (r.finalStatus !== action.nextStatus) {
+        // 要修理で故障中へ倒れた。ここで止める（流れの外へ出たので歩けない）
+        cur = { ...cur, ...r.patch, status: r.finalStatus };
+        stopped = `要修理のため**故障中**へ倒れました。ここで止めています`;
+        break;
+      }
+      cur = { ...cur, ...r.patch, status: r.finalStatus };
+    }
+
+    // ⑥ 入庫の歩を通ったらラベルまで
+    let labelLine = "";
+    if (a.print_label ?? sawStorage) {
+      labelLine = "\n" + (await queueAndPrint({ itemId: a.item_id, conditionNotes: lastNotes ?? undefined, by: performedBy }));
+    }
+
+    const head = done.length
+      ? `${name}: ${label(startStatus)} → ${label(cur.status)}`
+      : `${name}: ${label(startStatus)}のまま動かしていません`;
+    return { content: [{ type: "text", text:
+      head +
+      (done.length ? `\n  ${done.join(" → ")}（${done.length}段階）` : "") +
+      (stopped ? `\n🔴 ${stopped}` : "") +
       labelLine }] };
   }
 );
