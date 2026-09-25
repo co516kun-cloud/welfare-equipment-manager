@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useInventoryStore } from '../stores/useInventoryStore'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth, logout } from '../hooks/useAuth'
 import { useEffect, useState } from 'react'
 import { Button } from '../components/ui/button'
 
@@ -164,6 +164,16 @@ export function Menu() {
       navigate('/mypage', { replace: true })
     }
   }, [isMobile, navigate])
+
+  // 下部の「ログアウト」ボタン。以前は onClick が無く、押しても何も起きなかった（2026-09-25 修正）
+  const handleLogout = async () => {
+    try {
+      await logout()
+      // ログアウト後は useAuth の状態変化でログイン画面に戻る
+    } catch (error) {
+      console.error('Logout failed:', error)
+    }
+  }
 
   // 認証ユーザーから現在のユーザー名を取得
   const getCurrentUserName = () => {
@@ -489,7 +499,7 @@ export function Menu() {
                 <p className="text-xs text-slate-700 dark:text-slate-300">Powered by Modern Web Technology</p>
               </div>
             </div>
-            <button className="px-3 py-1.5 bg-gradient-to-r from-rose-400 to-pink-400 text-white font-semibold rounded-lg hover:from-rose-500 hover:to-pink-500 transition-all duration-300 hover:shadow-md border border-rose-300 text-sm">
+            <button type="button" onClick={handleLogout} className="px-3 py-1.5 bg-gradient-to-r from-rose-400 to-pink-400 text-white font-semibold rounded-lg hover:from-rose-500 hover:to-pink-500 transition-all duration-300 hover:shadow-md border border-rose-300 text-sm">
               <span className="mr-1">🚪</span>
               ログアウト
             </button>
