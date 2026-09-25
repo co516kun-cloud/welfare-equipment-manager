@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
+// ⚠️ createClient より先に読み込むこと。再設定メールのリンクから戻ったときの URL を、
+//    auth-js が書き換える前に控えておく（詳しくは auth-redirect.ts の先頭）
+import './auth-redirect'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY

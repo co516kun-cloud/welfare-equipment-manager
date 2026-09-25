@@ -81,6 +81,7 @@ export function Header() {
     { name: '履歴管理', href: '/history', icon: '📈' },
     { name: 'デモ管理', href: '/demo', icon: '🎯' },
     { name: '預かり物', href: '/deposits', icon: '📦' },
+    { name: 'パスワード変更', href: '/account', icon: '🔑' },
   ]
 
   // メニュー項目をタップした時の処理
@@ -268,6 +269,7 @@ export function Header() {
                             {item.name === '履歴管理' && '取引履歴・分析'}
                             {item.name === 'デモ管理' && 'デモ商品管理'}
                             {item.name === '預かり物' && '預かり物管理'}
+                            {item.name === 'パスワード変更' && '自分のパスワードを変える'}
                           </p>
                         </div>
                         <div className="ml-auto opacity-40 group-hover:opacity-100 transition-opacity">
@@ -341,9 +343,14 @@ export function Header() {
           </Button>
           {user && (
             <>
-              <span className="text-sm text-muted-foreground">
+              {/* ユーザー名を押すとパスワード変更へ（2026-09-25） */}
+              <Link
+                to="/account"
+                title="パスワード変更"
+                className="text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-4"
+              >
                 {user.user_metadata?.name || user.email?.split('@')[0] || user.email}
-              </span>
+              </Link>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 ログアウト
               </Button>

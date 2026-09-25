@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Layout } from './components/layout/layout'
 import { Login } from './pages/login'
@@ -26,6 +26,8 @@ import { ProductAnalysis } from './pages/product-analysis'
 import { WorkManagement } from './pages/work-management'
 import { CameraCheck } from './pages/camera-check'
 import { NotFound } from './pages/not-found'
+import { Account } from './pages/account'
+import { ResetPassword } from './pages/reset-password'
 // 🔴 2026-09-07 削除: /manual-import /csv-import /import の3画面。
 //   いずれも supabaseDb.clearAllData()（全11テーブル全行削除）に到達する経路を持っていた。
 //   /manual-import は UI リンクこそ無かったが Route が生きており、vercel.json の SPA rewrite で
@@ -39,7 +41,14 @@ function App() {
   
   // フックを条件分岐の前に呼ぶ（Hooks順序の問題を解決）
   const authResult = useAuth()
-  const { user, loading } = hasSupabaseConfig ? authResult : { user: null, loading: false }
+  const { user, loading, isPasswordRecovery } = hasSupabaseConfig
+    ? authResult
+    : { user: null, loading: false, isPasswordRecovery: false }
+
+  // パスワード再設定メールのリンクから入ったときは、新しいパスワードを決めるまで
+  // 普段の画面を出さない（2026-09-25）。決め終わったら recoveryFinished で抜ける
+  const [recoveryFinished, setRecoveryFinished] = useState(false)
+  const inPasswordRecovery = Boolean(user) && Boolean(isPasswordRecovery) && !recoveryFinished
   
   // データ初期化のための状態
   const [dataInitialized, setDataInitialized] = useState(false)
@@ -52,7 +61,8 @@ function App() {
   useEffect(() => {
     const initializeApp = async () => {
       // 認証されているユーザーがいて、まだデータ初期化が完了していない場合のみ実行
-      if (user && hasSupabaseConfig && !dataInitialized && !dataLoading) {
+      // 再設定の途中では読み込まない（約2000件。設定画面には要らない）
+      if (user && hasSupabaseConfig && !inPasswordRecovery && !dataInitialized && !dataLoading) {
         setDataLoading(true)
 
         try {
@@ -72,7 +82,7 @@ function App() {
     }
 
     initializeApp()
-  }, [user, hasSupabaseConfig, dataInitialized, dataLoading, loadInitialData])
+  }, [user, hasSupabaseConfig, inPasswordRecovery, dataInitialized, dataLoading, loadInitialData])
 
   // データ初期化完了後にRealtime同期を開始
   useEffect(() => {
@@ -117,6 +127,10 @@ function App() {
     return <Login />
   }
 
+  if (inPasswordRecovery) {
+    return <ResetPassword email={user.email ?? ''} onDone={() => setRecoveryFinished(true)} />
+  }
+
   return (
     <BrowserRouter>
       <Routes>
@@ -143,6 +157,10 @@ function App() {
           <Route path="work-management" element={<WorkManagement />} />
           {/* カメラが使えない端末の切り分け用（2026-09-09） */}
           <Route path="camera-check" element={<CameraCheck />} />
+          {/* パスワード変更（2026-09-25）。入口は PC ヘッダーのユーザー名と、スマホのドロワー */}
+          <Route path="account" element={<Account />} />
+          {/* 再設定メールのリンクの戻り先。設定が済んだあとや、普段に開いたときはトップへ */}
+          <Route path="reset-password" element={<Navigate to="/" replace />} />
           {/* 未定義パスの受け皿。廃止したページのブックマークもここに来る */}
           <Route path="*" element={<NotFound />} />
         </Route>
