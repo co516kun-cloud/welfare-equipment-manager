@@ -19,6 +19,7 @@
  *   node scripts/backfill-used-intake.mjs                       # 見るだけ（既定 --since 2026-08-01）
  *   node scripts/backfill-used-intake.mjs --since 2026-09-01    # 期間を変えて見る
  *   node scripts/backfill-used-intake.mjs --apply               # 実際に足す
+ *   node scripts/backfill-used-intake.mjs --exclude TR-001,AU-305   # 新品だった台を外す（状態メモの書き忘れ）
  *
  * 認証情報は印刷エージェントと同じ経路（~/secrets/... の .env）から読む。値は表示しない。
  * 顧客名は読まない・出さない。
@@ -36,6 +37,8 @@ const args = process.argv.slice(2)
 const APPLY = args.includes('--apply')
 const sinceIdx = args.indexOf('--since')
 const SINCE = sinceIdx >= 0 ? args[sinceIdx + 1] : '2026-08-01'
+const exIdx = args.indexOf('--exclude')
+const EXCLUDE = new Set(exIdx >= 0 ? (args[exIdx + 1] || '').split(',').map(s => s.trim()).filter(Boolean) : [])
 if (!/^\d{4}-\d{2}-\d{2}$/.test(SINCE || '')) {
   console.error('--since は YYYY-MM-DD で指定してください')
   process.exit(1)
@@ -95,8 +98,9 @@ const doneSet = new Set(done.map(d => d.item_id))
 
 // 3. 振り分け
 const targets = []
-const skipped = { 新品: 0, 足し済み: 0, 在庫以外で登録: 0, 個体なし: 0 }
+const skipped = { 新品: 0, 足し済み: 0, 在庫以外で登録: 0, 個体なし: 0, 指定で除外: 0 }
 for (const r of regs) {
+  if (EXCLUDE.has(r.item_id)) { skipped.指定で除外++; continue }
   const item = itemMap.get(r.item_id)
   if (!item) { skipped.個体なし++; continue }
   if (r.to_status !== 'available') { skipped.在庫以外で登録++; continue }
@@ -118,7 +122,7 @@ for (const t of targets) {
 }
 
 console.log(`\n${SINCE} 以降の新規登録 ${regs.length}件 → 中古として履歴を足す対象 ${targets.length}台`)
-console.log(`対象外: 新品 ${skipped.新品} / 足し済み ${skipped.足し済み} / 在庫以外で登録 ${skipped.在庫以外で登録} / 個体なし ${skipped.個体なし}\n`)
+console.log(`対象外: 新品 ${skipped.新品} / 足し済み ${skipped.足し済み} / 在庫以外で登録 ${skipped.在庫以外で登録} / 個体なし ${skipped.個体なし} / 指定で除外 ${skipped.指定で除外}\n`)
 for (const [m, row] of [...byMonth].sort()) {
   console.log(`  ${m}: ` + [...row].map(([c, n]) => `${c} ${n}台`).join(' / '))
 }
