@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
-import { getAvailableActions, STATUS_LABEL, needsConfirm, recordName, type ItemStatus } from '../item-status'
+import { getAvailableActions, STATUS_LABEL, needsConfirm, recordName, DISPOSAL_REASONS, type ItemStatus } from '../item-status'
 
 const ALL: ItemStatus[] = [
   'available', 'reserved', 'ready_for_delivery', 'rented', 'returned',
@@ -22,6 +22,8 @@ describe('廃棄ステータス', () => {
     ['returned', '消毒の場面'],
     ['cleaning', 'メンテナンスの場面'],
     ['maintenance', '入庫処理の場面'],
+    // 2026-10-23「在庫に入ってる分をスキャンしたとき、直接貸与と同時に廃棄もできるように」
+    ['available', '在庫の場面'],
   ])('%s（%s）で廃棄を選べる', (status) => {
     const keys = getAvailableActions(status).map(a => a.key)
     expect(keys).toContain('dispose')
@@ -98,6 +100,17 @@ describe('既存の動きを壊していない', () => {
     ['out_of_order', 'repair'],
   ])('%s の主動線 %s が残っている', (status, key) => {
     expect(getAvailableActions(status).map(a => a.key)).toContain(key)
+  })
+
+  it('available は発注があってもなくても廃棄を選べる', () => {
+    for (const hasAvailableOrders of [true, false]) {
+      expect(getAvailableActions('available', { hasAvailableOrders }).map(a => a.key)).toContain('dispose')
+    }
+  })
+
+  it('廃棄には理由の選択を求める', () => {
+    expect(DISPOSAL_REASONS.length).toBeGreaterThan(0)
+    expect(src('components/scan-action-dialog.tsx')).toMatch(/廃棄理由を選択してください/)
   })
 
   it('available は発注の有無で出し分ける', () => {

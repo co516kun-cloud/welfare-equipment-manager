@@ -221,7 +221,9 @@ export function MobileScanUI({
                       <button
                         key={action.key}
                         onClick={() => onActionSelect(action)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-lg transition-colors"
+                        className={action.danger
+                          ? 'border border-destructive text-destructive bg-white hover:bg-destructive/10 text-sm px-3 py-2 rounded-lg transition-colors'
+                          : 'bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded-lg transition-colors'}
                       >
                         {action.label}
                       </button>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL } from '../lib/item-status'
+import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL, DISPOSAL_REASONS } from '../lib/item-status'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -58,6 +58,9 @@ export function ScanActionDialog({
   //   何も起きずに黙って終わっていた（alert も出ずキューにも入らない）。
   const [labelTarget, setLabelTarget] = useState<typeof selectedItem>(null)
   const [labelConditionNotes, setLabelConditionNotes] = useState('')
+  // 廃棄理由。履歴にだけ残す（後で「何をなぜ捨てたか」を追えるように）
+  const [disposalReason, setDisposalReason] = useState('')
+  const [disposalNote, setDisposalNote] = useState('')
 
   // フォームをリセット
   const resetForm = () => {
@@ -73,6 +76,8 @@ export function ScanActionDialog({
     setShowMaintenanceChecklist(false)
     setSelectedSubcategory(null)
     setShowLabelPrintDialog(false)
+    setDisposalReason('')
+    setDisposalNote('')
   }
 
   // 写真撮影機能
@@ -128,6 +133,12 @@ export function ScanActionDialog({
     if (!action) {
       console.warn('[scan] この状態に対する操作が見つかりません:', selectedItem.status, actionType)
       alert(`この商品は現在「${STATUS_LABEL[selectedItem.status] ?? selectedItem.status}」です。\nこの状態ではその操作を実行できません。`)
+      return
+    }
+
+    const isDisposal = action.nextStatus === 'disposed'
+    if (isDisposal && !disposalReason) {
+      alert('廃棄理由を選択してください')
       return
     }
 
@@ -279,7 +290,11 @@ export function ScanActionDialog({
         {
           location: actionForm.location || selectedItem.location,
           condition: actionForm.condition || selectedItem.condition,
-          conditionNotes: shouldSaveConditionNotes ? actionForm.conditionNotes : undefined,
+          conditionNotes: shouldSaveConditionNotes
+            ? actionForm.conditionNotes
+            : isDisposal
+              ? `廃棄理由: ${disposalReason}${disposalNote ? `（${disposalNote}）` : ''}`
+              : undefined,
           customerName: actionType === 'assign_to_order' ?
             orders.find(o => o.id === actionForm.orderId)?.customer_name : undefined,
           photos: actionType === 'maintenance' ? actionForm.photos : undefined,
@@ -289,7 +304,8 @@ export function ScanActionDialog({
             conditionChanged: newCondition === 'needs_repair',
             originalNextStatus: action.nextStatus,
             photoCount: actionType === 'maintenance' ? actionForm.photos.length : 0,
-            maintenanceChecklist: finalChecklistData
+            maintenanceChecklist: finalChecklistData,
+            ...(isDisposal && { disposalReason, disposalNote: disposalNote || undefined })
           }
         }
       )
@@ -376,6 +392,7 @@ export function ScanActionDialog({
             {actionType === 'storage' && '入庫処理'}
             {actionType === 'assign_to_order' && '発注に割り当て'}
             {actionType === 'repair' && '修理完了処理'}
+            {actionType === 'dispose' && '廃棄処理'}
           </DialogTitle>
           <DialogDescription>
             {selectedItem?.product?.name} #{selectedItem?.id} の処理を行います
@@ -430,6 +447,38 @@ export function ScanActionDialog({
             </div>
           )}
           
+          {actionType === 'dispose' && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/5 text-sm">
+                <p className="font-medium text-destructive">この商品を「廃棄済み」にします</p>
+                <p className="text-muted-foreground mt-1">
+                  在庫数から外れます。間違えた場合は、もう一度スキャンして「廃棄を取り消す」で戻せます。
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="disposalReason">廃棄理由（必須）</Label>
+                <Select
+                  id="disposalReason"
+                  value={disposalReason}
+                  onChange={(e) => setDisposalReason(e.target.value)}
+                >
+                  <option value="">理由を選択</option>
+                  {DISPOSAL_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="disposalNote">詳細メモ（任意）</Label>
+                <Input
+                  id="disposalNote"
+                  type="text"
+                  value={disposalNote}
+                  onChange={(e) => setDisposalNote(e.target.value)}
+                  placeholder="例: フレームにクラック、修理不可"
+                />
+              </div>
+            </div>
+          )}
+
           {(actionType === 'maintenance' || actionType === 'demo_cancel_storage' || actionType === 'repair') && (
             <div>
               <Label htmlFor="condition">商品状態</Label>
@@ -558,8 +607,11 @@ export function ScanActionDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               キャンセル
             </Button>
-            <Button onClick={handleActionSubmit}>
-              処理実行
+            <Button
+              variant={actionType === 'dispose' ? 'destructive' : 'default'}
+              onClick={handleActionSubmit}
+            >
+              {actionType === 'dispose' ? '廃棄する' : '処理実行'}
             </Button>
           </div>
         </div>

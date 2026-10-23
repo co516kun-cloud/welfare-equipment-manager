@@ -161,7 +161,36 @@ export const maintenanceChecklistConfig: ChecklistConfig[] = [
           { id: 'rubber_deterioration', name: 'ゴム枠の劣化の確認' },
           { id: 'red_plate', name: 'プレート（赤）の差し込み確認' }
         ]
+      },
+      {
+        // ガートル台（商品ID 40101）は特殊寝台付属品として登録されている
+        id: 'gartle_stand',
+        name: 'ガートル台',
+        items: [
+          { id: 'scratches_rust', name: 'キズ、サビの確認' },
+          { id: 'pole_crack', name: '支柱・点滴棒の曲がり、クラックの確認' },
+          { id: 'hook_deformation', name: 'フック（吊り下げ部）の変形・破損確認' },
+          { id: 'height_knob', name: '高さ調整・固定ノブの締まり確認（下がってこないか）' },
+          { id: 'caster_check', name: 'キャスターの回転・摩耗確認（ゴミ、髪の毛の巻き込み）' },
+          { id: 'caster_stopper', name: 'キャスターストッパーの作動確認（付いているもの）' },
+          { id: 'base_wobble', name: 'ベースのぐらつき、ネジの緩み確認' },
+          { id: 'repair_marks', name: '補修跡の確認（目立つもの）' }
+        ]
       }
+    ]
+  },
+  {
+    // ダイヤスロープ（シンエイテクノ、ゴム製の段差解消スロープ）
+    categoryId: 'slope',
+    categoryName: 'スロープ',
+    items: [
+      { id: 'surface_crack', name: '表面のキズ、ひび割れ、欠けの確認' },
+      { id: 'surface_wear', name: '表面のすべり止め（凹凸）の摩耗確認' },
+      { id: 'rubber_hardening', name: 'ゴムの硬化・反り・ねじれの確認' },
+      { id: 'edge_peeling', name: '端部（薄い先端側）のめくれ、欠けの確認' },
+      { id: 'bottom_surface', name: '裏面の汚れ、すべり止めの劣化確認' },
+      { id: 'discoloration', name: '変色の確認' },
+      { id: 'odor', name: '異臭の確認' }
     ]
   }
 ]

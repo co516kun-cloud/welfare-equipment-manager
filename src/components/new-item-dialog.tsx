@@ -6,6 +6,7 @@ import { Select } from './ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 import { supabaseDb } from '../lib/supabase-database'
 import { useInventoryStore } from '../stores/useInventoryStore'
+import { needsUsedIntake, usedIntakeSteps, USED_INTAKE_NOTE } from '../lib/item-status'
 import type { ProductItem, ProductCategory, Product } from '../types'
 
 interface NewItemDialogProps {
@@ -142,23 +143,40 @@ export function NewItemDialog({
       // 商品情報を取得（ラベル印刷用）
       const product = products.find(p => p.id === productId)
 
+      // 「新品」と書いていなければ中古。返却品に番号を振り直したものなので、
+      // 実際にやった 消毒→メンテ→入庫 も履歴に残す（消毒作業管理の数に入れるため）。
+      // 判定と3行の中身は item-status.ts の needsUsedIntake / usedIntakeSteps が正
+      const isUsed = needsUsedIntake(newItemForm.conditionNotes)
+
       // 履歴を記録
       await supabaseDb.createItemHistory(
         newItem.id,
         '新規登録',
-        'available',
-        'available',
+        isUsed ? '' : 'available',
+        isUsed ? 'returned' : 'available',
         currentUser,
         {
           location: newItem.location,
           condition: newItem.condition,
           conditionNotes: newItemForm.conditionNotes,
+          notes: isUsed ? USED_INTAKE_NOTE : undefined,
           metadata: {
             registrationType: registrationType,
-            productId: productId
+            productId: productId,
+            usedIntake: isUsed
           }
         }
       )
+      if (isUsed) {
+        for (const step of usedIntakeSteps()) {
+          await supabaseDb.createItemHistory(newItem.id, step.action, step.from, step.to, currentUser, {
+            location: newItem.location,
+            condition: newItem.condition,
+            notes: USED_INTAKE_NOTE,
+            metadata: { usedIntake: true }
+          })
+        }
+      }
 
       // ラベル印刷を指示（チェックが入っている場合）
       // 実際の印刷は事務所PCの印刷エージェントが label_print_queue を拾って行う
@@ -180,9 +198,10 @@ export function NewItemDialog({
       }
 
       // 成功メッセージ
-      const successMessage = addToLabelQueue
+      const usedLine = isUsed ? '\n中古として、消毒・メンテナンス・入庫の履歴も残しました' : ''
+      const successMessage = (addToLabelQueue
         ? `管理番号 ${newItem.id} を登録しました。ラベルは事務所PCのプリンタから出ます`
-        : `管理番号 ${newItem.id} を登録しました`
+        : `管理番号 ${newItem.id} を登録しました`) + usedLine
       alert(successMessage)
       
       // ダイアログを閉じてリロード
@@ -406,8 +425,13 @@ export function NewItemDialog({
                 id="conditionNotes"
                 value={newItemForm.conditionNotes}
                 onChange={(e) => setNewItemForm(prev => ({ ...prev, conditionNotes: e.target.value }))}
-                placeholder="商品の状態についての特記事項（例: 小傷あり、動作確認済み）"
+                placeholder="商品の状態についての特記事項（例: 新品、小傷あり）"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                {needsUsedIntake(newItemForm.conditionNotes)
+                  ? '「新品」と書かない場合は中古として、消毒・メンテナンス・入庫の履歴も一緒に残します'
+                  : '新品として登録します（消毒などの履歴は残しません）'}
+              </p>
             </div>
 
             <div className="flex items-center space-x-2">

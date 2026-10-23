@@ -10,7 +10,7 @@ import { loadLayeredEnv, defaultSecretsPath } from "./env.js";
 // 🔴 QRスキャン画面と**同じ遷移表**。手で写さない（scripts/sync-shared.mjs が生成する）。
 //   src/lib/item-status.ts が正。2026-08-20 に「同じ switch が2箇所にあってずれた」
 //   事故を直したファイルなので、ここで写し直すと元の木阿弥になる。
-import { getAvailableActions, recordName, STATUS_LABEL } from "./shared/item-status.js";
+import { getAvailableActions, recordName, STATUS_LABEL, needsUsedIntake, usedIntakeSteps, USED_INTAKE_NOTE } from "./shared/item-status.js";
 import type { ItemAction } from "./shared/item-status.js";
 
 // .env は ~/secrets/welfare-equipment-manager/.env を優先し、リポジトリ直下は補助（2026-09-04、env.ts 参照）。
@@ -618,7 +618,9 @@ server.tool(
     status: z.enum(ITEM_STATUS).optional().describe("初期ステータス（既定: available）"),
     condition: z.enum(ITEM_CONDITION).optional().describe("状態（既定: good）"),
     qr_code: z.string().optional().describe("QRコード（既定: id と同じ）"),
-    condition_notes: z.string().optional().describe("状態メモ"),
+    condition_notes: z.string().optional().describe(
+      "状態メモ。**新品なら必ず「新品」と入れる。**「新品」が無いと中古として扱い、消毒→メンテ→入庫の履歴も一緒に残す"
+    ),
     performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
     print_label: z
       .boolean()
@@ -667,18 +669,34 @@ server.tool(
     });
     if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
 
+    // 🔴 「新品」と書いていなければ中古（2026-10-23・判定は shared/item-status.ts の needsUsedIntake）。
+    //   返却品に番号を振り直したものなので、実際にやった 消毒→メンテ→入庫 も履歴に残す。
+    //   残さないと消毒作業管理の「今月の消毒」に数えられない。
+    //   在庫（available）として登録する時だけ。貸与中などで直接登録する時は流れの外なので足さない。
+    const isUsed = status === "available" && needsUsedIntake(a.condition_notes);
+
     const histErr = await writeHistory({
       itemId: a.id,
       action: "新規登録",
       // ⚠️ item_histories.from_status は NOT NULL（2026-08-18 実測）。
       //    新規登録には「前の状態」が無いので空文字を入れる。null だと insert が落ちる。
       fromStatus: "",
-      toStatus: status,
+      toStatus: isUsed ? "returned" : status,
       performedBy,
       location: a.location,
       condition: a.condition ?? "good",
-      notes: a.condition_notes ?? null,
+      notes: [isUsed ? USED_INTAKE_NOTE : null, a.condition_notes ?? null].filter(Boolean).join(" / ") || null,
     });
+    const intakeErrs: string[] = [];
+    if (isUsed) {
+      for (const step of usedIntakeSteps()) {
+        const err = await writeHistory({
+          itemId: a.id, action: step.action, fromStatus: step.from, toStatus: step.to, performedBy,
+          location: a.location, condition: a.condition ?? "good", notes: USED_INTAKE_NOTE,
+        });
+        if (err) intakeErrs.push(`${step.action}: ${err}`);
+      }
+    }
 
     // 新規登録は既定でラベルを**印刷まで**する（田口さん指示・2026-08-18）
     let labelLine = "";
@@ -700,6 +718,11 @@ server.tool(
           text:
             `登録しました: ${a.id}（${(product as any).name ?? a.product_id}）status=${status} 場所=${a.location}` +
             (histErr ? `\n⚠️ 本体は登録済みだが履歴の記録に失敗: ${histErr}` : "\n履歴も1行残しました") +
+            (isUsed
+              ? intakeErrs.length
+                ? `\n⚠️ 中古として 消毒→メンテ→入庫 の履歴を足そうとしたが失敗: ${intakeErrs.join(" / ")}`
+                : "\n中古として（状態メモに「新品」が無いため）消毒→メンテ→入庫 の履歴も残しました"
+              : "") +
             labelLine,
         },
       ],

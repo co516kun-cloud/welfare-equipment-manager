@@ -102,9 +102,10 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
       ]
 
     case 'available':
+      // 在庫の棚卸しで傷みを見つけたとき、その場で廃棄に回せるようにする（2026-10-23）
       return ctx.hasAvailableOrders
-        ? [{ key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }]
-        : [{ key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }]
+        ? [{ key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }, DISPOSE]
+        : [{ key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }, DISPOSE]
 
     case 'ready_for_delivery':
       // 配送待ちのまま止まった個体を救出する経路。以前はここが空だった。
@@ -147,4 +148,43 @@ export function recordName(action: ItemAction): string {
 /** 廃棄など、実行前に確認を挟むべき操作か */
 export function needsConfirm(action: ItemAction | undefined): boolean {
   return Boolean(action?.danger)
+}
+
+/** 廃棄理由の選択肢。履歴の conditionNotes / metadata.disposalReason に残る */
+export const DISPOSAL_REASONS = [
+  '破損・故障（修理不可）',
+  '劣化・耐用年数',
+  '衛生上の理由（汚れ・臭い・カビ）',
+  '部品の欠品',
+  'その他',
+] as const
+
+/**
+ * 🔴 中古で新規登録した個体は、消毒→メンテ→入庫の履歴まで残す（2026-10-23・田口さん依頼）
+ *
+ * 返却されてきた物に後から番号を振って登録することがある（マットレスで多かった）。
+ * 実際には 消毒・メンテをしているのに履歴が「新規登録」1行だけになり、
+ * 消毒作業管理（work-management.tsx）の「今月の消毒」に数えられていなかった。
+ *
+ * 新品かどうかは状態メモに「新品」と書いてあるかだけで決める。商品の種類は問わない
+ * （田口さん確定:「新品登録する際は『新品』って入れるから、そうじゃないやつは全部」）。
+ * アプリの新規登録画面と MCP の create_product_item が同じこの判定を使う。
+ */
+export function needsUsedIntake(conditionNotes?: string | null): boolean {
+  return !(conditionNotes ?? '').includes('新品')
+}
+
+/** 中古で新規登録したときに残す履歴の目印。後から普通の返却分と読み分けるため */
+export const USED_INTAKE_NOTE = '新規登録（中古）'
+
+/**
+ * 中古で新規登録したときに 新規登録 の後へ足す3行。
+ * 操作名は遷移表の記録名をそのまま使う（消毒作業管理はこの名前で数えている）。
+ */
+export function usedIntakeSteps(): { action: string; from: ItemStatus; to: ItemStatus }[] {
+  const steps: [ItemStatus, string][] = [['returned', 'clean'], ['cleaning', 'maintenance'], ['maintenance', 'storage']]
+  return steps.map(([from, key]) => {
+    const a = getAvailableActions(from).find(x => x.key === key)!
+    return { action: recordName(a), from, to: a.nextStatus }
+  })
 }

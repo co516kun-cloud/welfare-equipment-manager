@@ -437,7 +437,11 @@ function ScanComponent() {
                     <Button
                       key={action.key}
                       size="sm"
-                      className="bg-primary hover:bg-primary/90"
+                      // 廃棄は他の操作と見分けがつくよう枠線だけの赤にする（誤タップ防止）
+                      variant={action.danger ? 'outline' : 'default'}
+                      className={action.danger
+                        ? 'border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive'
+                        : 'bg-primary hover:bg-primary/90'}
                       onClick={() => handleActionSelect(action)}
                     >
                       {action.label}
