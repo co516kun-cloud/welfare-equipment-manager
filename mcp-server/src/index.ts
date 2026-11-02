@@ -10,7 +10,7 @@ import { loadLayeredEnv, defaultSecretsPath } from "./env.js";
 // 🔴 QRスキャン画面と**同じ遷移表**。手で写さない（scripts/sync-shared.mjs が生成する）。
 //   src/lib/item-status.ts が正。2026-08-20 に「同じ switch が2箇所にあってずれた」
 //   事故を直したファイルなので、ここで写し直すと元の木阿弥になる。
-import { getAvailableActions, recordName, STATUS_LABEL, needsUsedIntake, usedIntakeSteps, USED_INTAKE_NOTE } from "./shared/item-status.js";
+import { getAvailableActions, recordName, STATUS_LABEL, needsUsedIntake, usedIntakeSteps, USED_INTAKE_NOTE, leavesInventory } from "./shared/item-status.js";
 import type { ItemAction } from "./shared/item-status.js";
 
 // .env は ~/secrets/welfare-equipment-manager/.env を優先し、リポジトリ直下は補助（2026-09-04、env.ts 参照）。
@@ -882,6 +882,8 @@ async function applyStep(
     performedBy: string;
     /** 一気通貫の途中なら、履歴の notes に残す印（法令記録を後から読み分けるため） */
     flowNote?: string;
+    /** 寄贈先（施設名 or 利用者名）。donate のときは必須。呼ぶ側で確かめる */
+    donatedTo?: string;
   }
 ): Promise<{
   ok: boolean;
@@ -898,7 +900,8 @@ async function applyStep(
 
   // ④ 要修理なら故障中へ倒す。ただし廃棄が優先（アプリと同じ）
   const newCondition = (o.condition ?? cur.condition) as string;
-  const finalStatus = (action.nextStatus === "disposed" || newCondition !== "needs_repair")
+  //   寄贈も同じ扱い（2026-11-02）。判定はアプリと共有の leavesInventory
+  const finalStatus = (leavesInventory(action.nextStatus) || newCondition !== "needs_repair")
     ? action.nextStatus : "out_of_order";
 
   // ⑤ 状態メモはメンテナンス完了・修理完了のときだけ
@@ -927,6 +930,10 @@ async function applyStep(
     patch.loan_start_date = null;
   }
 
+  // 寄贈は行き先を台に持たせる。取り消しで消す（アプリと同じ）
+  if (action.key === "donate") patch.customer_name = o.donatedTo ?? null;
+  if (action.key === "undonate") patch.customer_name = null;
+
   const { error } = await supabase.from("product_items").update(patch).eq("id", cur.id);
   if (error) {
     return { ok: false, error: error.message, from, finalStatus, record: "", rentalLine, histErr: null, notes, patch };
@@ -947,12 +954,15 @@ async function applyStep(
        cur.loan_start_date ? `貸与開始 ${cur.loan_start_date}` : null,
        rentalLine ? rentalLine.replace(/^\n/, "") : null].filter(Boolean).join(" / ")
     : null;
-  const baseNote = clearedNote ?? (savesNotes ? (o.conditionNotes ?? null) : null);
+  const donationNote = action.key === "donate"
+    ? `寄贈先: ${o.donatedTo} / 担当: ${o.performedBy}`
+    : action.key === "undonate" ? `取り消した寄贈先: ${cur.customer_name || "（記録なし）"}` : null;
+  const baseNote = clearedNote ?? donationNote ?? (savesNotes ? (o.conditionNotes ?? null) : null);
   const histErr = await writeHistory({
     itemId: cur.id, action: record, fromStatus: from, toStatus: finalStatus, performedBy: o.performedBy,
     location: patch.location, condition: newCondition,
     // 返却でも**消す前の貸与先を残す。**null を入れると辿れなくなる
-    customerName: cur.customer_name ?? null,
+    customerName: action.key === "donate" ? (o.donatedTo ?? null) : (cur.customer_name ?? null),
     notes: [o.flowNote, baseNote].filter(Boolean).join(" / ") || null,
   });
 
@@ -968,7 +978,8 @@ server.tool(
     condition: z.enum(ITEM_CONDITION).optional().describe("状態も変える場合。needs_repair なら故障中へ倒れる"),
     condition_notes: z.string().optional().describe("状態メモ。メンテナンス完了・修理完了のときだけ保存される"),
     location: z.string().optional().describe("保管場所も変える場合"),
-    performed_by: z.string().optional().describe("実行者名（既定: MCP）"),
+    performed_by: z.string().optional().describe("実行者名（既定: MCP）。寄贈では担当者として残る"),
+    donated_to: z.string().optional().describe("寄贈先（施設名 or 利用者名）。action_key=donate のとき必須"),
     print_label: z.boolean().optional().describe("ラベルを印刷まで行くか。既定は操作名に「入庫」を含む時 true"),
   },
   async (a) => {
@@ -990,8 +1001,15 @@ server.tool(
         `いまできるのは ${actions.length ? actions.map((x) => `${x.key}(${x.label})`).join(" / ") : "なし"}` }] };
     }
 
+    // 寄贈は寄贈先と担当者が分かっているときだけ通す（2026-11-02・アプリは両方必須）
+    const donatedTo = a.donated_to?.trim();
+    if (action.key === "donate" && (!donatedTo || !a.performed_by?.trim())) {
+      return { content: [{ type: "text", text:
+        `中止: 寄贈には寄贈先（donated_to）と担当者（performed_by）の両方が要ります。誰がどこへ寄贈したかを確かめてください` }] };
+    }
+
     const r = await applyStep(cur, action, {
-      condition: a.condition, conditionNotes: a.condition_notes, location: a.location, performedBy,
+      condition: a.condition, conditionNotes: a.condition_notes, location: a.location, performedBy, donatedTo,
     });
     if (!r.ok) return { content: [{ type: "text", text: `Error: ${r.error}` }] };
 

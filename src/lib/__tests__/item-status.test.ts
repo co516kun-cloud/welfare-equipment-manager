@@ -5,7 +5,7 @@ import { getAvailableActions, STATUS_LABEL, needsConfirm, recordName, DISPOSAL_R
 
 const ALL: ItemStatus[] = [
   'available', 'reserved', 'ready_for_delivery', 'rented', 'returned',
-  'cleaning', 'maintenance', 'demo_cancelled', 'out_of_order', 'unknown', 'disposed',
+  'cleaning', 'maintenance', 'demo_cancelled', 'out_of_order', 'unknown', 'disposed', 'donated',
 ]
 
 const src = (p: string) => readFileSync(resolve(__dirname, '../..', p), 'utf8')
@@ -45,8 +45,9 @@ describe('廃棄ステータス', () => {
   it('廃棄は「要修理」に上書きされない', () => {
     // 以前は condition==='needs_repair' なら無条件に out_of_order へ倒していたため、
     // 壊れた個体を廃棄しようとすると故障中になっていた。
+    // 2026-11-02 から寄贈と共通の leavesInventory で判定する
     const s = src('components/scan-action-dialog.tsx')
-    expect(s).toMatch(/action\.nextStatus === 'disposed'/)
+    expect(s).toMatch(/leavesInventory\(action\.nextStatus\) \|\| newCondition !== 'needs_repair'/)
   })
 })
 

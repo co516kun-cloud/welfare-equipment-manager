@@ -192,6 +192,7 @@ function ScanComponent() {
       case 'demo_cancelled': return 'bg-info text-info-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
       case 'disposed': return 'bg-muted text-muted-foreground'
+      case 'donated': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
   }
@@ -206,6 +207,7 @@ function ScanComponent() {
       case 'demo_cancelled': return 'デモキャンセル'
       case 'out_of_order': return '故障中'
       case 'disposed': return '廃棄済み'
+      case 'donated': return '寄贈済み'
       default: return status
     }
   }

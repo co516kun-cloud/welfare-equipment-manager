@@ -246,6 +246,7 @@ export function Preparation() {
           'demo_cancelled': 'デモキャンセル',
           'out_of_order': '故障中',
       'disposed': '廃棄済み',
+      'donated': '寄贈済み',
           'unknown': '状態不明'
         }[scannedItem.status] || scannedItem.status
         
@@ -505,6 +506,7 @@ export function Preparation() {
         'demo_cancelled': 'デモキャンセル',
         'out_of_order': '故障中',
       'disposed': '廃棄済み',
+      'donated': '寄贈済み',
         'unknown': '状態不明'
       }[productItem.status] || productItem.status
       

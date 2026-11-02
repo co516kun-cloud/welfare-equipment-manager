@@ -19,6 +19,7 @@ export const STATUS_LABEL: Record<ItemStatus, string> = {
   out_of_order: '故障中',
   unknown: '状態不明',
   disposed: '廃棄済み',
+  donated: '寄贈済み',
 }
 
 export interface ItemAction {
@@ -57,6 +58,7 @@ export interface ActionContext {
  */
 export function getAvailableActions(status: string, ctx: ActionContext = {}): ItemAction[] {
   const DISPOSE: ItemAction = { key: 'dispose', label: '廃棄', nextStatus: 'disposed', danger: true }
+  const DONATE: ItemAction = { key: 'donate', label: '寄贈', nextStatus: 'donated', danger: true }
 
   switch (status as ItemStatus) {
     case 'rented':
@@ -103,9 +105,10 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
 
     case 'available':
       // 在庫の棚卸しで傷みを見つけたとき、その場で廃棄に回せるようにする（2026-10-23）
+      // 施設・利用者への寄贈も入庫済みの台からだけ出す（2026-11-02・田口さん依頼）
       return ctx.hasAvailableOrders
-        ? [{ key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }, DISPOSE]
-        : [{ key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }, DISPOSE]
+        ? [{ key: 'assign_to_order', label: '発注に割り当て', nextStatus: 'rented' }, DONATE, DISPOSE]
+        : [{ key: 'rent_directly', label: '直接貸与', nextStatus: 'rented' }, DONATE, DISPOSE]
 
     case 'ready_for_delivery':
       // 配送待ちのまま止まった個体を救出する経路。以前はここが空だった。
@@ -135,6 +138,10 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
       // 誤タップの取り消し用。廃棄そのものは残すが、戻す道は必ず用意する。
       return [{ key: 'undispose', label: '廃棄を取り消す（状態不明へ）', nextStatus: 'unknown' }]
 
+    case 'donated':
+      // 誤タップの取り消し用。寄贈は利用可能からしか入らないので、戻り先も利用可能
+      return [{ key: 'undonate', label: '寄贈を取り消す（利用可能へ）', record: '寄贈取り消し', nextStatus: 'available' }]
+
     default:
       return []
   }
@@ -143,6 +150,15 @@ export function getAvailableActions(status: string, ctx: ActionContext = {}): It
 /** 履歴に残す操作名。ラベルを変えても集計が途切れないようにする */
 export function recordName(action: ItemAction): string {
   return action.record || action.label
+}
+
+/**
+ * 在庫から外れる行き先（廃棄・寄贈）か。
+ * 「要修理なら故障中へ倒す」より優先する。壊れていても廃棄・寄贈は廃棄・寄贈のまま。
+ * アプリ（scan-action-dialog）と MCP（applyStep）が同じこの判定を使う。
+ */
+export function leavesInventory(status: string): boolean {
+  return status === 'disposed' || status === 'donated'
 }
 
 /** 廃棄など、実行前に確認を挟むべき操作か */

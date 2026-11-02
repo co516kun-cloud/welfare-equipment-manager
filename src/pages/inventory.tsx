@@ -155,6 +155,7 @@ export function Inventory() {
       case 'demo_cancelled': return 'bg-info text-info-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
       case 'disposed': return 'bg-muted text-muted-foreground'
+      case 'donated': return 'bg-muted text-muted-foreground'
       case 'unknown': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
@@ -171,6 +172,7 @@ export function Inventory() {
       case 'demo_cancelled': return 'デモキャンセル'
       case 'out_of_order': return '故障中'
       case 'disposed': return '廃棄済み'
+      case 'donated': return '寄贈済み'
       case 'unknown': return '不明'
       default: return status
     }
@@ -1263,6 +1265,7 @@ export function Inventory() {
                 <option value="demo_cancelled">デモキャンセル</option>
                 <option value="out_of_order">故障中</option>
                 <option value="disposed">廃棄済み</option>
+                <option value="donated">寄贈済み</option>
                 <option value="unknown">不明</option>
               </Select>
             </div>

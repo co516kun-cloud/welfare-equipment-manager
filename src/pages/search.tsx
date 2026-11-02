@@ -519,6 +519,7 @@ export function Search() {
       case 'maintenance': return 'bg-warning text-warning-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
       case 'disposed': return 'bg-muted text-muted-foreground'
+      case 'donated': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
   }
@@ -535,6 +536,7 @@ export function Search() {
       case 'maintenance': return 'メンテナンス中'
       case 'out_of_order': return '故障中'
       case 'disposed': return '廃棄済み'
+      case 'donated': return '寄贈済み'
       default: return status
     }
   }
@@ -653,6 +655,7 @@ export function Search() {
                 <option value="maintenance">メンテナンス中</option>
                 <option value="out_of_order">故障中</option>
                 <option value="disposed">廃棄済み</option>
+                <option value="donated">寄贈済み</option>
               </Select>
             </div>
             
@@ -872,9 +875,9 @@ export function Search() {
                       </div>
                       {item.customer_name && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">顧客:</span>
+                          <span className="text-muted-foreground">{item.status === 'donated' ? '寄贈先:' : '顧客:'}</span>
                           <span className="text-foreground">
-                            {item.customer_name}様
+                            {item.customer_name}{item.status === 'donated' ? '' : '様'}
                           </span>
                         </div>
                       )}
@@ -980,6 +983,7 @@ export function Search() {
                   <option value="demo_cancelled">デモキャンセル</option>
                   <option value="out_of_order">故障中</option>
                 <option value="disposed">廃棄済み</option>
+                <option value="donated">寄贈済み</option>
                   <option value="unknown">不明</option>
                 </Select>
               </div>

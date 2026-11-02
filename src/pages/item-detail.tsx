@@ -247,6 +247,7 @@ export function ItemDetail() {
       case 'demo_cancelled': return 'bg-info text-info-foreground'
       case 'out_of_order': return 'bg-destructive text-destructive-foreground'
       case 'disposed': return 'bg-muted text-muted-foreground'
+      case 'donated': return 'bg-muted text-muted-foreground'
       default: return 'bg-secondary text-secondary-foreground'
     }
   }
@@ -261,6 +262,7 @@ export function ItemDetail() {
       case 'demo_cancelled': return 'デモキャンセル'
       case 'out_of_order': return '故障中'
       case 'disposed': return '廃棄済み'
+      case 'donated': return '寄贈済み'
       default: return status
     }
   }
@@ -545,6 +547,13 @@ export function ItemDetail() {
                   {getConditionText(item.condition)}
                 </span>
               </div>
+              {/* 寄贈先（2026-11-02）。寄贈済みの台は customer_name に行き先を持つ */}
+              {item.status === 'donated' && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">寄贈先</p>
+                  <p className="font-medium text-foreground">{item.customer_name || '（記録なし）'}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -841,6 +850,7 @@ export function ItemDetail() {
                 <option value="maintenance">メンテナンス中</option>
                 <option value="out_of_order">故障中</option>
                 <option value="disposed">廃棄済み</option>
+                <option value="donated">寄贈済み</option>
                 <option value="unknown">不明</option>
               </Select>
             </div>

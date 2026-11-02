@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL, DISPOSAL_REASONS } from '../lib/item-status'
+import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL, DISPOSAL_REASONS, leavesInventory } from '../lib/item-status'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -38,7 +38,7 @@ export function ScanActionDialog({
   getCurrentUserName,
   orders
 }: ScanActionDialogProps) {
-  const { items } = useInventoryStore()
+  const { items, users } = useInventoryStore()
   const [actionForm, setActionForm] = useState({
     condition: '',
     location: '',
@@ -61,6 +61,10 @@ export function ScanActionDialog({
   // 廃棄理由。履歴にだけ残す（後で「何をなぜ捨てたか」を追えるように）
   const [disposalReason, setDisposalReason] = useState('')
   const [disposalNote, setDisposalNote] = useState('')
+  // 寄贈（2026-11-02）。残すのは担当者と寄贈先（施設名 or 利用者名）だけ（田口さん確定）
+  //   担当者は発注と同じく users からプルダウンで選ぶ。ログイン中の人とは別に記録する
+  const [donationAssignee, setDonationAssignee] = useState('')
+  const [donationRecipient, setDonationRecipient] = useState('')
 
   // フォームをリセット
   const resetForm = () => {
@@ -78,6 +82,8 @@ export function ScanActionDialog({
     setShowLabelPrintDialog(false)
     setDisposalReason('')
     setDisposalNote('')
+    setDonationAssignee('')
+    setDonationRecipient('')
   }
 
   // 写真撮影機能
@@ -141,6 +147,14 @@ export function ScanActionDialog({
       alert('廃棄理由を選択してください')
       return
     }
+
+    const isDonation = action.key === 'donate'
+    const recipient = donationRecipient.trim()
+    if (isDonation && (!donationAssignee || !recipient)) {
+      alert('担当者と寄贈先を入力してください')
+      return
+    }
+    const isUndonation = action.key === 'undonate'
 
     // 廃棄など戻すのが面倒な操作は、実行前に1枚挟む（誤タップ防止）
     if (needsConfirm(action)) {
@@ -219,7 +233,8 @@ export function ScanActionDialog({
       // 🔴 廃棄は「要修理」より優先する（2026-08-20）
       //   以前は condition='needs_repair' なら無条件に out_of_order へ倒していたため、
       //   壊れているから廃棄したい個体が、廃棄ではなく故障中になっていた。
-      const finalStatus = (action.nextStatus === 'disposed' || newCondition !== 'needs_repair')
+      //   寄贈も同じ扱い（2026-11-02）。判定は item-status.ts の leavesInventory
+      const finalStatus = (leavesInventory(action.nextStatus) || newCondition !== 'needs_repair')
         ? action.nextStatus as ProductItem['status']
         : 'out_of_order' as ProductItem['status']
 
@@ -244,6 +259,10 @@ export function ScanActionDialog({
         updatedItem.customer_name = undefined
         updatedItem.loan_start_date = undefined
       }
+
+      // 寄贈は行き先を台に持たせる（詳細画面で「どこへ行ったか」が見える）。取り消しで消す
+      if (isDonation) updatedItem.customer_name = recipient
+      if (isUndonation) updatedItem.customer_name = undefined
 
       // データベースに保存（1回の保存で全フィールドを更新）
       await supabaseDb.saveProductItem(updatedItem)
@@ -286,7 +305,8 @@ export function ScanActionDialog({
         newCondition === 'needs_repair' ? '故障中へ変更' : recordName(action),
         selectedItem.status,
         finalStatus,
-        getCurrentUserName(),
+        // 寄贈は選んだ担当者を実行者として残す（押した人は metadata.recordedBy）
+        isDonation ? donationAssignee : getCurrentUserName(),
         {
           location: actionForm.location || selectedItem.location,
           condition: actionForm.condition || selectedItem.condition,
@@ -295,8 +315,15 @@ export function ScanActionDialog({
             : isDisposal
               ? `廃棄理由: ${disposalReason}${disposalNote ? `（${disposalNote}）` : ''}`
               : undefined,
-          customerName: actionType === 'assign_to_order' ?
-            orders.find(o => o.id === actionForm.orderId)?.customer_name : undefined,
+          customerName: actionType === 'assign_to_order'
+            ? orders.find(o => o.id === actionForm.orderId)?.customer_name
+            : isDonation
+              ? recipient
+              // 取り消しでは消す前の寄贈先を残す（消す側が残す。返却と同じ考え方）
+              : isUndonation ? selectedItem.customer_name : undefined,
+          notes: isDonation
+            ? `寄贈先: ${recipient} / 担当: ${donationAssignee}`
+            : isUndonation ? `取り消した寄贈先: ${selectedItem.customer_name || '（記録なし）'}` : undefined,
           photos: actionType === 'maintenance' ? actionForm.photos : undefined,
           metadata: {
             ...historyMetadata,
@@ -305,7 +332,8 @@ export function ScanActionDialog({
             originalNextStatus: action.nextStatus,
             photoCount: actionType === 'maintenance' ? actionForm.photos.length : 0,
             maintenanceChecklist: finalChecklistData,
-            ...(isDisposal && { disposalReason, disposalNote: disposalNote || undefined })
+            ...(isDisposal && { disposalReason, disposalNote: disposalNote || undefined }),
+            ...(isDonation && { donatedTo: recipient, assignee: donationAssignee, recordedBy: getCurrentUserName() })
           }
         }
       )
@@ -393,6 +421,8 @@ export function ScanActionDialog({
             {actionType === 'assign_to_order' && '発注に割り当て'}
             {actionType === 'repair' && '修理完了処理'}
             {actionType === 'dispose' && '廃棄処理'}
+            {actionType === 'donate' && '寄贈処理'}
+            {actionType === 'undonate' && '寄贈の取り消し'}
           </DialogTitle>
           <DialogDescription>
             {selectedItem?.product?.name} #{selectedItem?.id} の処理を行います
@@ -447,6 +477,48 @@ export function ScanActionDialog({
             </div>
           )}
           
+          {actionType === 'donate' && (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
+                <p className="font-medium text-foreground">この商品を「寄贈済み」にします</p>
+                <p className="text-muted-foreground mt-1">
+                  在庫数から外れます。間違えた場合は、もう一度スキャンして「寄贈を取り消す」で利用可能に戻せます。
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="donationAssignee">担当者（必須）</Label>
+                <Select
+                  id="donationAssignee"
+                  value={donationAssignee}
+                  onChange={(e) => setDonationAssignee(e.target.value)}
+                >
+                  <option value="">担当者を選択してください</option>
+                  {users.map(user => (
+                    <option key={user.id} value={user.name}>
+                      {user.name} ({user.department})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="donationRecipient">寄贈先（必須）</Label>
+                <Input
+                  id="donationRecipient"
+                  type="text"
+                  value={donationRecipient}
+                  onChange={(e) => setDonationRecipient(e.target.value)}
+                  placeholder="施設名 または 利用者名"
+                />
+              </div>
+            </div>
+          )}
+
+          {actionType === 'undonate' && selectedItem?.customer_name && (
+            <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
+              寄贈先「{selectedItem.customer_name}」への寄贈を取り消し、利用可能に戻します。
+            </div>
+          )}
+
           {actionType === 'dispose' && (
             <div className="space-y-3">
               <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/5 text-sm">
@@ -611,7 +683,7 @@ export function ScanActionDialog({
               variant={actionType === 'dispose' ? 'destructive' : 'default'}
               onClick={handleActionSubmit}
             >
-              {actionType === 'dispose' ? '廃棄する' : '処理実行'}
+              {actionType === 'dispose' ? '廃棄する' : actionType === 'donate' ? '寄贈する' : '処理実行'}
             </Button>
           </div>
         </div>

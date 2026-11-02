@@ -205,6 +205,64 @@ async function scenarioScan(context) {
   await page.close()
 }
 
+/** 寄贈: 利用可能 → 寄贈済み → 取り消しで利用可能（2026-11-02） */
+async function scenarioDonate(context) {
+  const name = '入庫済みの台を施設に寄贈して、取り消す'
+  console.log(`\n=== ${name} ===`)
+  const page = await open(context, '/scan')
+  const ID = 'WC-001'
+
+  const before = await readItem(page, ID)
+  record(name, `開始時 ${ID} は利用可能`, before?.status === 'available', `status=${before?.status}`)
+
+  const input = page.getByPlaceholder(/QRコードを入力/).first()
+  await input.fill(ID)
+  await input.press('Enter')
+  await page.waitForTimeout(600)
+  await page.getByRole('button', { name: '寄贈', exact: true }).first().click()
+  await page.waitForTimeout(500)
+
+  // 担当者を選ばずに押すと止まる（必須）
+  await page.getByRole('button', { name: '寄贈する' }).first().click()
+  await page.waitForTimeout(500)
+  record(name, '担当者・寄贈先が空なら進まない', (await readItem(page, ID))?.status === 'available')
+
+  // 担当者は発注と同じプルダウン（users 一覧）
+  const assignee = page.locator('#donationAssignee').first()
+  const options = await assignee.locator('option').allInnerTexts()
+  record(name, '担当者のプルダウンに users が並ぶ', options.some(o => o.includes('佐藤花子')), options.join(' / '))
+  await assignee.selectOption('佐藤花子')
+  await page.locator('#donationRecipient').first().fill('デモ特養ひだまり')
+  await page.getByRole('button', { name: '寄贈する' }).first().click()
+  await page.waitForTimeout(1200)
+
+  const donated = await readItem(page, ID)
+  record(name, '寄贈済みになる', donated?.status === 'donated', `status=${donated?.status}`)
+  record(name, '台に寄贈先が残る', donated?.customer_name === 'デモ特養ひだまり', `customer_name=${donated?.customer_name}`)
+
+  const h = (await readHistories(page, ID)).find(x => x.action === '寄贈')
+  record(name, '履歴「寄贈」の実行者が選んだ担当者', h?.performed_by === '佐藤花子', `performed_by=${h?.performed_by}`)
+  record(name, '履歴の備考に寄贈先', /寄贈先: デモ特養ひだまり/.test(h?.notes ?? ''), `notes=${h?.notes}`)
+
+  await dismissOpenDialogs(page)
+  await page.screenshot({ path: path.join(OUT, 'donate.png') })
+
+  // 取り消し
+  try {
+    await scanAndAct(page, ID, /寄贈を取り消す/)
+    const back = await readItem(page, ID)
+    record(name, '取り消すと利用可能に戻る', back?.status === 'available', `status=${back?.status}`)
+    record(name, '取り消しで寄贈先が消える', !back?.customer_name, `customer_name=${back?.customer_name ?? '(なし)'}`)
+    const u = (await readHistories(page, ID)).find(x => x.action === '寄贈取り消し')
+    record(name, '取り消しの履歴に元の寄贈先が残る', /デモ特養ひだまり/.test(u?.notes ?? ''), `notes=${u?.notes}`)
+  } catch (e) {
+    record(name, '取り消しを押す', false, e.message.split('\n')[0])
+  }
+
+  record(name, 'JSエラーが出ていない', page.__errors.length === 0, page.__errors.slice(0, 2).join(' / '))
+  await page.close()
+}
+
 /** 発注の承認 */
 async function scenarioApproval(context) {
   const name = '承認待ちの発注を承認する'
@@ -255,6 +313,7 @@ async function scenarioScreens(context) {
 
 const SCENARIOS = {
   scan: scenarioScan,
+  donate: scenarioDonate,
   approval: scenarioApproval,
   screens: scenarioScreens,
 }
