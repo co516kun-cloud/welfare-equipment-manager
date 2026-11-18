@@ -24,6 +24,9 @@ import type {
   DepositItem,
   LabelPrintQueue,
 } from '../types'
+import { isAdminUser } from './admin'
+import { canEraseItem } from './item-status'
+import { ERASE_ERROR, type EraseResult } from './erase-product-item'
 
 const STORAGE_KEYS = {
   CATEGORIES: 'mock_categories',
@@ -181,6 +184,19 @@ function write(key: string, value: unknown): void {
 }
 
 /** 配列の中の該当IDを差し替える。無ければ末尾に足す */
+/**
+ * デモモードのログイン中ユーザー（useAuth.ts が読む localStorage の auth_user）。
+ * 本番の Supabase User と同じ形（email / user_metadata / app_metadata）で入っている前提。壊れていれば null
+ */
+function readDemoAuthUser(): { email?: string; app_metadata?: Record<string, unknown> } | null {
+  try {
+    const raw = localStorage.getItem('auth_user')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 function upsertById<T extends { id: string }>(list: T[], entity: T): T[] {
   const i = list.findIndex(e => e.id === entity.id)
   if (i >= 0) {
@@ -291,6 +307,52 @@ export class MockDatabase {
 
   async deleteProductItem(id: string): Promise<void> {
     write(STORAGE_KEYS.PRODUCT_ITEMS, (await this.getProductItems()).filter(i => i.id !== id))
+  }
+
+  /**
+   * 個体の完全消去（管理者限定。2026-11-18）。
+   * 本番の DB 関数 erase_product_item（sql/add-erase-product-item.sql）と同じ順番で判定し、
+   * 同じコード文字列を投げる。日本語への変換は supabase-database.ts 側（toEraseErrorMessage）。
+   * モックに準備タスクの保存は無いので preparation_tasks は常に 0。
+   */
+  async eraseProductItem(id: string): Promise<EraseResult> {
+    // 1. 管理者だけ（localStorage の auth_user を本番の User と同じ形で見る）
+    if (!isAdminUser(readDemoAuthUser())) throw new Error(ERASE_ERROR.NOT_ADMIN)
+
+    // 2. 個体があるか
+    const item = (await this.getProductItems()).find(i => i.id === id)
+    if (!item) throw new Error(ERASE_ERROR.NOT_FOUND)
+
+    // 3. 顧客に結び付いたステータスは断る
+    if (!canEraseItem(item.status)) throw new Error(ERASE_ERROR.IN_USE)
+
+    // 4. 進行中の発注（発注も明細も取り消されておらず、配送も済んでいない）に割り当てられていれば断る
+    const assignedToLiveOrder = (await this.getOrders()).some(order =>
+      order.status !== 'cancelled' &&
+      order.items.some(oi =>
+        oi.item_processing_status !== 'delivered' &&
+        oi.item_processing_status !== 'cancelled' &&
+        (oi.assigned_item_ids ?? []).includes(id)
+      )
+    )
+    if (assignedToLiveOrder) throw new Error(ERASE_ERROR.ASSIGNED)
+
+    // 5〜8. 履歴 → 印刷キュー → 本体
+    const histories = await this.getItemHistories()
+    const remainingHistories = histories.filter(h => h.item_id !== id)
+    write(STORAGE_KEYS.ITEM_HISTORIES, remainingHistories)
+
+    const queue = await this.getLabelPrintQueue()
+    const remainingQueue = queue.filter(q => q.item_id !== id)
+    write(STORAGE_KEYS.LABEL_QUEUE, remainingQueue)
+
+    write(STORAGE_KEYS.PRODUCT_ITEMS, (await this.getProductItems()).filter(i => i.id !== id))
+
+    return {
+      histories: histories.length - remainingHistories.length,
+      label_queue: queue.length - remainingQueue.length,
+      preparation_tasks: 0,
+    }
   }
 
   /** 差分同期用。モックでは全件返す（更新時刻を持たないため） */

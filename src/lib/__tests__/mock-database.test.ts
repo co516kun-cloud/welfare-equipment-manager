@@ -16,6 +16,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mockDb } from '../mock-database'
+import type { Order } from '../../types'
 
 beforeEach(() => {
   localStorage.clear()
@@ -164,5 +165,81 @@ describe('発注', () => {
     const after = await mockDb.getOrderById(target.id)
     expect(after?.status).toBe('approved')
     expect(after?.approved_by).toBe('テスト太郎')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// 個体の完全消去（管理者限定。2026-11-18）
+// DB 関数 erase_product_item と同じ順番・同じエラーコードで動くことを固定する。
+// 設計書: docs/superpowers/specs/2026-11-18-erase-product-item-design.md
+// ─────────────────────────────────────────────────────────────
+
+/** デモモードのログイン状態を作る（useAuth.ts が localStorage の auth_user を読む） */
+function loginAs(role?: 'admin') {
+  localStorage.setItem('auth_user', JSON.stringify({
+    id: 'USER-1', email: 'tanaka@example.com', user_metadata: { name: '田中太郎' },
+    ...(role ? { app_metadata: { role } } : {}),
+  }))
+}
+
+describe('個体の完全消去（管理者限定）', () => {
+  it('管理者なら本体・履歴・印刷キューが消え、他の個体の履歴は残る', async () => {
+    loginAs('admin')
+    await mockDb.createItemHistory('WC-001', '新規登録', 'unknown', 'available', '田中太郎')
+    await mockDb.createItemHistory('WC-001', '消毒完了', 'returned', 'cleaning', '田中太郎')
+    await mockDb.createItemHistory('WC-002', '新規登録', 'unknown', 'available', '田中太郎')
+    await mockDb.addLabelPrintQueue({ item_id: 'WC-001', product_name: 'デモ車いす', management_id: 'WC-001', condition_notes: '', status: 'pending', created_by: '田中太郎' })
+
+    const result = await mockDb.eraseProductItem('WC-001')
+
+    expect(result).toEqual({ histories: 2, label_queue: 1, preparation_tasks: 0 })
+    expect(await mockDb.getProductItemById('WC-001')).toBeNull()
+    expect(await mockDb.getItemHistoriesByItemId('WC-001')).toEqual([])
+    expect((await mockDb.getLabelPrintQueue()).filter(q => q.item_id === 'WC-001')).toEqual([])
+    expect((await mockDb.getItemHistoriesByItemId('WC-002')).length).toBe(1)
+  })
+
+  it('管理者でなければ ERASE_NOT_ADMIN で何も消えない', async () => {
+    loginAs()
+    await expect(mockDb.eraseProductItem('WC-001')).rejects.toThrow('ERASE_NOT_ADMIN')
+    expect(await mockDb.getProductItemById('WC-001')).not.toBeNull()
+  })
+
+  it('無い ID は ERASE_NOT_FOUND', async () => {
+    loginAs('admin')
+    await expect(mockDb.eraseProductItem('NOPE-999')).rejects.toThrow('ERASE_NOT_FOUND')
+  })
+
+  it('貸与中は ERASE_IN_USE で何も消えない', async () => {
+    loginAs('admin')
+    await expect(mockDb.eraseProductItem('WC-003')).rejects.toThrow('ERASE_IN_USE')
+    expect(await mockDb.getProductItemById('WC-003')).not.toBeNull()
+  })
+
+  it('進行中の発注に割り当て済みなら ERASE_ASSIGNED。null 混じりの配列でも見逃さない', async () => {
+    loginAs('admin')
+    const order = (await mockDb.getOrderById('ORD-DEMO-2')) as Order
+    order.items[0].assigned_item_ids = [null as unknown as string, 'WC-001']
+    await mockDb.saveOrder(order)
+    await expect(mockDb.eraseProductItem('WC-001')).rejects.toThrow('ERASE_ASSIGNED')
+  })
+
+  it.each([
+    ['明細が配送済み', { item_processing_status: 'delivered' as const }, {}],
+    ['明細が取り消し済み', { item_processing_status: 'cancelled' as const }, {}],
+    ['発注そのものが取り消し済み', {}, { status: 'cancelled' as const }],
+  ])('%s の割り当てなら消せる', async (_label, itemPatch, orderPatch) => {
+    loginAs('admin')
+    const order = (await mockDb.getOrderById('ORD-DEMO-2')) as Order
+    order.items[0] = { ...order.items[0], assigned_item_ids: ['WC-001'], ...itemPatch }
+    await mockDb.saveOrder({ ...order, ...orderPatch })
+    await expect(mockDb.eraseProductItem('WC-001')).resolves.toBeTruthy()
+  })
+
+  it('貸与の履歴がある利用可能の台は消せる（止めない、が仕様）', async () => {
+    loginAs('admin')
+    await mockDb.createItemHistory('WC-001', '直接貸与', 'available', 'rented', '田中太郎')
+    await mockDb.createItemHistory('WC-001', '返却', 'rented', 'returned', '田中太郎')
+    await expect(mockDb.eraseProductItem('WC-001')).resolves.toEqual({ histories: 2, label_queue: 0, preparation_tasks: 0 })
   })
 })
