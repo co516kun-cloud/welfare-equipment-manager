@@ -11,6 +11,8 @@ import { getChecklistConfig } from '../lib/maintenance-checklist-config'
 import { calculateRentalDays } from '../lib/utils'
 import { useAuth } from '../hooks/useAuth'
 import { useInventoryStore } from '../stores/useInventoryStore'
+import { isAdminUser } from '../lib/admin'
+import { canEraseItem, isRentalRecord } from '../lib/item-status'
 import type { ProductItem, Product, ItemHistory } from '../types'
 
 export function ItemDetail() {
@@ -20,7 +22,7 @@ export function ItemDetail() {
   // 以前は経路にかかわらず /inventory 固定で、検索結果が毎回消えていた
   const goBack = useGoBack('/inventory')
   const { user } = useAuth()
-  const { users, updateItemStatus } = useInventoryStore()
+  const { users, updateItemStatus, removeItemLocally } = useInventoryStore()
   
   const [item, setItem] = useState<ProductItem | null>(null)
   const [product, setProduct] = useState<Product | null>(null)
@@ -36,6 +38,11 @@ export function ItemDetail() {
   // 編集関連
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null)
+  // 完全消去（管理者操作。2026-11-18）
+  const [showEraseDialog, setShowEraseDialog] = useState(false)
+  const [eraseConfirmText, setEraseConfirmText] = useState('')
+  const [erasing, setErasing] = useState(false)
+  const [eraseError, setEraseError] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({
     status: '',
     condition: '',
@@ -234,6 +241,47 @@ export function ItemDetail() {
     } catch (error) {
       console.error('履歴削除エラー:', error)
       alert('履歴の削除に失敗しました')
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 完全消去（管理者操作。2026-11-18・田口さん依頼）
+  //
+  // 登録ミス・重複で作った個体を、履歴・印刷キューごと DB から跡形なく消す。
+  // 消す処理は DB 関数 erase_product_item（supabaseDb.eraseProductItem が呼ぶ）にあり、
+  // 管理者かどうか・消せるかどうかの最終判定もそこで行う。画面は
+  //  - 管理者（app_metadata.role='admin'）にだけ枠を出す
+  //  - 貸与中など消せないステータスではボタンを非活性にして理由を出す
+  //  - 管理番号を打ち込ませてから実行し、失敗の理由はダイアログの中に出す
+  //  - 貸与の記録があれば赤字で警告する（止めはしない。田口さんの決定）
+  // 設計書: docs/superpowers/specs/2026-11-18-erase-product-item-design.md
+  // ─────────────────────────────────────────────────────────────
+  const isAdmin = isAdminUser(user)
+  const canErase = item ? canEraseItem(item.status) : false
+  const rentalRecordCount = histories.filter(isRentalRecord).length
+  const confirmMatches = item ? eraseConfirmText.trim() === item.id : false
+
+  const openEraseDialog = () => {
+    setEraseConfirmText('')
+    setEraseError(null)
+    setShowEraseDialog(true)
+  }
+
+  const handleErase = async () => {
+    if (!item || erasing) return
+    setErasing(true)
+    setEraseError(null)
+    try {
+      const result = await supabaseDb.eraseProductItem(item.id)
+      removeItemLocally(item.id)
+      setShowEraseDialog(false)
+      alert(`${item.id} を消去しました（履歴 ${result.histories} 件）`)
+      goBack()
+    } catch (error) {
+      // supabaseDb 側で日本語化済み。ダイアログは閉じず、入力もそのまま残す
+      setEraseError(error instanceof Error ? error.message : '消去に失敗しました')
+    } finally {
+      setErasing(false)
     }
   }
 
@@ -819,9 +867,86 @@ export function ItemDetail() {
               </Button>
             </div>
           </div>
+
+          {/* 管理者操作（完全消去）。管理者にだけ出す */}
+          {isAdmin && (
+            <div className="bg-card rounded-xl border border-destructive/40 p-6 shadow-sm">
+              <h2 className="text-lg font-semibold text-destructive mb-2">管理者操作</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                この個体を DB から完全に消します。履歴・写真・ラベル印刷キューも消え、元に戻せません。登録ミス・重複の掃除にだけ使ってください。
+              </p>
+              <Button
+                variant="destructive"
+                className="w-full justify-start"
+                disabled={!canErase}
+                onClick={openEraseDialog}
+              >
+                <span className="mr-2" aria-hidden="true">🗑</span>
+                この個体を完全に消去
+              </Button>
+              {!canErase && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {getStatusText(item.status)}のため消去できません。先に返却や取り消しを済ませてください
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       
+      {/* 完全消去の確認ダイアログ（管理者操作）。消去中は閉じられない */}
+      <Dialog open={showEraseDialog} onOpenChange={(open) => { if (!erasing) setShowEraseDialog(open) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>本当に完全消去しますか？</DialogTitle>
+            <DialogDescription>この操作は元に戻せません。</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm">
+            <dl className="grid grid-cols-[6rem_1fr] gap-y-1">
+              <dt className="text-muted-foreground">商品名</dt>
+              <dd className="font-medium">{product.name}</dd>
+              <dt className="text-muted-foreground">管理番号</dt>
+              <dd className="font-mono font-medium">{item.id}</dd>
+              <dt className="text-muted-foreground">ステータス</dt>
+              <dd>{getStatusText(item.status)}</dd>
+            </dl>
+            <p>消える履歴 {histories.length} 件（写真を含む）</p>
+            {rentalRecordCount > 0 && (
+              <p className="text-destructive font-medium">
+                この台には貸与の記録が {rentalRecordCount} 件あります。登録ミスではない可能性があります。
+              </p>
+            )}
+            <p className="text-muted-foreground">ラベル印刷キューに残っている行も消えます。</p>
+
+            <div>
+              <Label htmlFor="erase-confirm">確認のため管理番号を入力</Label>
+              <Input
+                id="erase-confirm"
+                value={eraseConfirmText}
+                onChange={(e) => setEraseConfirmText(e.target.value)}
+                placeholder={item.id}
+                autoComplete="off"
+                className="mt-1"
+              />
+            </div>
+
+            {eraseError && (
+              <p className="text-destructive" role="alert">{eraseError}</p>
+            )}
+          </div>
+
+          <div className="flex justify-end space-x-2 pt-2">
+            <Button variant="outline" onClick={() => setShowEraseDialog(false)} disabled={erasing}>
+              キャンセル
+            </Button>
+            <Button variant="destructive" onClick={handleErase} disabled={!confirmMatches || erasing}>
+              {erasing ? '消去中…' : '完全に消去する'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* 編集ダイアログ */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-md">

@@ -33,6 +33,8 @@ const DEFAULT_ROUTES = [
   '/history',
   '/search',
   '/label-queue',
+  '/item/WC-001', // 利用可能 → 管理者操作の「完全に消去」ボタンが活性
+  '/item/WC-003', // 貸与中 → ボタンが非活性で「貸与中のため消去できません」
   '/ai-features', // 廃止済み。「ページが見つかりません」が出るはず
 ]
 const routes = process.argv.slice(2).length ? process.argv.slice(2) : DEFAULT_ROUTES
@@ -78,6 +80,8 @@ await context.addInitScript(() => {
       id: 'USER-1',
       email: 'tanaka@example.com',
       user_metadata: { name: '田中太郎' },
+      // 個体詳細の「管理者操作」の枠を撮るため管理者にする。src/lib/admin.ts と同じ判定（2026-11-18）
+      app_metadata: { role: 'admin' },
     })
   )
 })
