@@ -220,3 +220,33 @@ export function usedIntakeSteps(): { action: string; from: ItemStatus; to: ItemS
     return { action: recordName(a), from, to: a.nextStatus }
   })
 }
+
+// ─────────────────────────────────────────────────────────────
+// 個体の完全消去（管理者限定。2026-11-18・田口さん依頼）
+//
+// 登録ミス・重複で作った個体を、履歴・印刷キューごと DB から消す。消す処理そのものは
+// Postgres 関数 erase_product_item（sql/add-erase-product-item.sql）にあり、ここは
+// 画面でボタンを出すか・警告を出すかを決めるための判定だけを持つ。
+// 設計書: docs/superpowers/specs/2026-11-18-erase-product-item-design.md
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 完全消去を断るステータス。顧客・発注に結び付いているので「登録ミス」ではない。
+ * 🔴 DB 関数 erase_product_item（sql/add-erase-product-item.sql）の手順 3 と同じ並び。
+ *    片方を変えたらもう片方も。
+ */
+export const ERASE_BLOCKED_STATUSES: readonly ItemStatus[] = ['rented', 'reserved', 'ready_for_delivery']
+
+/** この個体を完全消去してよいステータスか（画面のボタンの活性に使う。最終判定は DB 関数） */
+export function canEraseItem(status: ItemStatus): boolean {
+  return !ERASE_BLOCKED_STATUSES.includes(status)
+}
+
+/**
+ * 貸与の記録か（貸与中から出た・貸与中に入った履歴）。
+ * 操作名（直接貸与・貸与中にする・返却 …）ではなくステータス列で見る。操作名が増えても漏れない。
+ * 完全消去の前に件数を数えて警告するのに使う。止めはしない（田口さんの決定 2026-11-18）。
+ */
+export function isRentalRecord(history: { from_status: ItemStatus; to_status: ItemStatus }): boolean {
+  return history.from_status === 'rented' || history.to_status === 'rented'
+}
