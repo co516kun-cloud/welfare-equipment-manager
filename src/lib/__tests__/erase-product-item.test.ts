@@ -70,6 +70,13 @@ describe('消去エラーの日本語化', () => {
     expect(toEraseErrorMessage({ message: 'network down' })).toBe('消去に失敗しました（network down）')
     expect(toEraseErrorMessage(null)).toBe('消去に失敗しました（原因不明のエラー）')
   })
+  it('関数以外の「does not exist」（テーブルや列が無い）を SQL 未適用と取り違えない', () => {
+    // レビュー指摘（2026-11-18）: 広い正規表現だと relation/column の欠落まで「未適用」と案内してしまい、原因が隠れる
+    expect(toEraseErrorMessage({ code: '42P01', message: 'relation "preparation_tasks" does not exist' }))
+      .toBe('消去に失敗しました（relation "preparation_tasks" does not exist）')
+    expect(toEraseErrorMessage({ code: '42703', message: 'column "item_id" does not exist' }))
+      .toBe('消去に失敗しました（column "item_id" does not exist）')
+  })
 })
 
 describe('消去結果の整形', () => {
@@ -95,6 +102,14 @@ describe('SQL 草稿 sql/add-erase-product-item.sql', () => {
     expect(s).toMatch(/create policy "admin_delete"\s+on public\.product_items for delete to authenticated using \(public\.is_admin\(\)\)/i)
     expect(s).toMatch(/revoke all on function public\.erase_product_item\(text\) from public, anon/i)
     expect(s).toContain("'{\"role\": \"admin\"}'::jsonb")
+  })
+
+  it('preparation_tasks が本番に無くても関数が最後まで通る作りになっている', () => {
+    // レビュー指摘（2026-11-18）: アプリが書いていないテーブルなので本番に存在しない可能性がある。
+    // PL/pgSQL は作成時にテーブルの有無を見ず、最初の実行で落ちるので、有無を確かめてから消す
+    const s = sql()
+    expect(s).toMatch(/if to_regclass\('public\.preparation_tasks'\) is not null then/i)
+    expect(s).toMatch(/select to_regclass\('public\.preparation_tasks'\)/i)
   })
 
   it('消せないステータスと進行中の発注の条件が item-status.ts と揃っている', () => {

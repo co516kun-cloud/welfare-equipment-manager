@@ -59,11 +59,13 @@ export function toEraseErrorMessage(
   for (const code of Object.values(ERASE_ERROR)) {
     if (message.includes(code)) return ERROR_MESSAGE[code]
   }
-  // PostgREST はスキーマキャッシュに関数が無いと PGRST202、Postgres 自体に無いと 42883
+  // PostgREST はスキーマキャッシュに関数が無いと PGRST202、Postgres 自体に無いと 42883。
+  // 文言で見るときは関数名まで含めて絞る。「does not exist」だけだと relation / column の欠落まで
+  // 「未適用」と案内してしまい、本当の原因が隠れる（レビュー指摘 2026-11-18）
   if (
     error?.code === 'PGRST202' ||
     error?.code === '42883' ||
-    /Could not find the function|does not exist/.test(message)
+    /function .*erase_product_item/i.test(message)
   ) {
     return FUNCTION_MISSING_MESSAGE
   }

@@ -109,9 +109,13 @@ begin
   get diagnostics v_label_queue = row_count;
 
   -- 7. 準備タスク。アプリはこのテーブルに書いていないので通常 0 件。
-  --    古い行が外部キーで本体の削除を止めるのを防ぐための保険
-  delete from preparation_tasks where item_id = p_item_id;
-  get diagnostics v_preparation_tasks = row_count;
+  --    古い行が外部キーで本体の削除を止めるのを防ぐための保険。
+  --    本番にテーブル自体が無い可能性もある（PL/pgSQL は作成時に見ず、最初の実行で落ちる）ので、
+  --    有無を確かめてから消す。無ければ飛ばす
+  if to_regclass('public.preparation_tasks') is not null then
+    execute 'delete from public.preparation_tasks where item_id = $1' using p_item_id;
+    get diagnostics v_preparation_tasks = row_count;
+  end if;
 
   -- 8. 本体
   delete from product_items where id = p_item_id;
@@ -171,3 +175,8 @@ select policyname, cmd from pg_policies where tablename = 'product_items' order 
 
 -- 田口さんだけ admin、他は空
 select email, raw_app_meta_data->>'role' as role from auth.users order by email;
+
+-- 関数が消しに行くテーブルの有無。label_print_queue は NULL でないこと（必須）。
+-- preparation_tasks は NULL（無い）でも関数は動く（手順 7 で飛ばす）
+select to_regclass('public.preparation_tasks') as preparation_tasks,
+       to_regclass('public.label_print_queue') as label_print_queue;
