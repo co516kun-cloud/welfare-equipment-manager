@@ -8,6 +8,8 @@
  *  設計書: docs/superpowers/specs/2026-11-18-erase-product-item-design.md
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { resolve } from 'path'
 import { STATUS_LABEL, ERASE_BLOCKED_STATUSES, canEraseItem, isRentalRecord, type ItemStatus } from '../item-status'
 import { isAdminUser } from '../admin'
 import { ERASE_ERROR, toEraseErrorMessage, toEraseResult } from '../erase-product-item'
@@ -74,5 +76,37 @@ describe('消去結果の整形', () => {
   it('jsonb の件数を数値に揃え、欠けていれば 0', () => {
     expect(toEraseResult({ histories: 5, label_queue: '1', preparation_tasks: 0 })).toEqual({ histories: 5, label_queue: 1, preparation_tasks: 0 })
     expect(toEraseResult(null)).toEqual({ histories: 0, label_queue: 0, preparation_tasks: 0 })
+  })
+})
+
+// SQL は Claude が本番に流せない（田口さんがダッシュボードで流す）ので、
+// 草稿の中身がアプリ側の定数と揃っていること・公開リポジトリに秘密が無いことだけをここで固定する
+describe('SQL 草稿 sql/add-erase-product-item.sql', () => {
+  const sql = () => readFileSync(resolve(__dirname, '../../..', 'sql/add-erase-product-item.sql'), 'utf8')
+
+  it('関数・ポリシー・管理者付与が揃っている', () => {
+    const s = sql()
+    expect(s).toMatch(/create or replace function public\.is_admin\(\)/i)
+    expect(s).toMatch(/create or replace function public\.erase_product_item\(p_item_id text\)/i)
+    expect(s).toMatch(/security definer/i)
+    expect(s).toMatch(/set search_path = public/i)
+    for (const code of Object.values(ERASE_ERROR)) expect(s).toContain(code)
+    expect(s).toMatch(/from pg_policies where schemaname = 'public' and tablename = 'product_items'/i)
+    expect(s).toMatch(/create policy "admin_delete"\s+on public\.product_items for delete to authenticated using \(public\.is_admin\(\)\)/i)
+    expect(s).toMatch(/revoke all on function public\.erase_product_item\(text\) from public, anon/i)
+    expect(s).toContain("'{\"role\": \"admin\"}'::jsonb")
+  })
+
+  it('消せないステータスと進行中の発注の条件が item-status.ts と揃っている', () => {
+    const s = sql()
+    expect(s).toMatch(/in \('rented', 'reserved', 'ready_for_delivery'\)/i)
+    expect(s).toMatch(/not in \('delivered', 'cancelled'\)/i)
+    expect(s).toMatch(/o\.status <> 'cancelled'/i)
+  })
+
+  it('メールアドレスはプレースホルダのまま（公開リポジトリ）', () => {
+    const s = sql()
+    expect(s).toContain('<田口さんのメールアドレス>')
+    expect(s).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)
   })
 })
