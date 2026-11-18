@@ -52,6 +52,7 @@ interface InventoryState {
   loadItemsForCategory: (categoryId: string) => Promise<void>
   loadItemsForProduct: (productId: string) => Promise<void>
   clearItemsCache: () => void
+  removeItemLocally: (itemId: string) => void
   setViewMode: (mode: 'category' | 'product' | 'item') => void
   setSelectedCategory: (categoryId: string | null) => void
   setSelectedProduct: (productId: string | null) => void
@@ -653,6 +654,24 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         categories: {},
         products: {}
       }
+    }))
+  },
+
+  /**
+   * 完全消去した個体を一覧とキャッシュから即座に除く（2026-11-18）。
+   * 完全消去の成功直後に呼ぶ。Realtime の DELETE も届くが、購読直後の 1 発目は取りこぼすことがあるので待たない。
+   * DB は触らない（消すのは DB 関数 erase_product_item の仕事）
+   */
+  removeItemLocally: (itemId: string) => {
+    const dropId = (list: ProductItem[]) => list.filter(i => i.id !== itemId)
+    const dropFromCache = (cache: Record<string, ProductItem[]>) =>
+      Object.fromEntries(Object.entries(cache).map(([key, list]) => [key, dropId(list)]))
+    set(state => ({
+      items: dropId(state.items),
+      itemsCache: {
+        categories: dropFromCache(state.itemsCache.categories),
+        products: dropFromCache(state.itemsCache.products),
+      },
     }))
   },
 
