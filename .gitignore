@@ -46,3 +46,6 @@ demo-shots/
 
 # 生成物（install-task.ps1 が書く・PC 固有のパス入り）
 scripts/print-agent/launch.vbs
+
+# superpowers の計画実行ワークスペース（台帳・ブリーフ。履歴は git に残さない）
+.superpowers/
