@@ -52,6 +52,7 @@ vi.mock('../mock-database', () => ({
     getProductItemsByCategoryId: spy('getProductItemsByCategoryId', []),
     saveProductItem: spy('saveProductItem'),
     deleteProductItem: spy('deleteProductItem'),
+    eraseProductItem: spy('eraseProductItem', { histories: 0, label_queue: 0, preparation_tasks: 0 }),
     getUsers: spy('getUsers', []),
     getUserById: spy('getUserById', null),
     saveUser: spy('saveUser'),
@@ -164,6 +165,14 @@ describe('商品マスタの追加（新規登録ダイアログ）', () => {
       description: '', manufacturer: '', model: '',
     })
     expect(calls).toContain('saveProduct')
+    expect(supabaseTouched).not.toHaveBeenCalled()
+  })
+})
+
+describe('個体の完全消去（管理者限定。2026-11-18）', () => {
+  it('eraseProductItem がモックへ行く', async () => {
+    await supabaseDb.eraseProductItem('WC-001')
+    expect(calls).toContain('eraseProductItem')
     expect(supabaseTouched).not.toHaveBeenCalled()
   })
 })

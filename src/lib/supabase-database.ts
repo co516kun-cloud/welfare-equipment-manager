@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { mockDb } from './mock-database'
+import { toEraseErrorMessage, toEraseResult, type EraseResult } from './erase-product-item'
 import type {
   Product,
   ProductItem,
@@ -384,11 +385,36 @@ export class SupabaseDatabase {
       .from('product_items')
       .delete()
       .eq('id', id)
-    
+
     if (error) {
       console.error('Error deleting product item:', error)
       throw error
     }
+  }
+
+  /**
+   * 個体の完全消去（管理者限定。2026-11-18・田口さん依頼）。
+   * 消す処理そのものは DB 関数 erase_product_item（sql/add-erase-product-item.sql）にあり、
+   * 管理者チェック → 消せるかの判定 → 履歴・印刷キュー・本体の削除を 1 トランザクションで行う。
+   * ここは rpc を 1 回呼ぶだけ。失敗は画面にそのまま出せる日本語の Error にして投げる（デモ・本番とも）。
+   * 上の deleteProductItem（1 行だけ消す旧関数）は未使用のまま残しているが、RLS で管理者以外は失敗する。
+   */
+  async eraseProductItem(id: string): Promise<EraseResult> {
+    if (isDemoMode()) {
+      try {
+        return await mockDb.eraseProductItem(id)
+      } catch (e) {
+        throw new Error(toEraseErrorMessage(e as Error))
+      }
+    }
+
+    const { data, error } = await supabase.rpc('erase_product_item', { p_item_id: id })
+
+    if (error) {
+      console.error('Error erasing product item:', error)
+      throw new Error(toEraseErrorMessage(error))
+    }
+    return toEraseResult(data)
   }
 
   // Users
