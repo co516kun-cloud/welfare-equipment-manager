@@ -65,6 +65,9 @@ export function ScanActionDialog({
   //   担当者は発注と同じく users からプルダウンで選ぶ。ログイン中の人とは別に記録する
   const [donationAssignee, setDonationAssignee] = useState('')
   const [donationRecipient, setDonationRecipient] = useState('')
+  // 処理中（2026-11-19）。実行ボタンを「処理中…」にして二度押しと途中で閉じるのを防ぐ。
+  //   以前は押してから結果が出るまで何も変わらず、写真付きのメンテナンスでは数秒無反応に見えた
+  const [isProcessing, setIsProcessing] = useState(false)
 
   // フォームをリセット
   const resetForm = () => {
@@ -130,7 +133,7 @@ export function ScanActionDialog({
 
 
   const handleActionSubmit = async () => {
-    if (!selectedItem) return
+    if (!selectedItem || isProcessing) return
 
     const action = getAvailableActions(selectedItem.status).find(a => a.key === actionType)
     // 🔴 無言で return しない（2026-08-20）
@@ -163,34 +166,35 @@ export function ScanActionDialog({
       if (!window.confirm(`${name}（${no}）を「${STATUS_LABEL[action.nextStatus]}」にします。\n\nよろしいですか？`)) return
     }
 
-    // サーバー側の最新ステータスを確認（二重処理防止）
+    setIsProcessing(true)
     try {
-      const latestItem = await supabaseDb.getProductItemById(selectedItem.id)
-      if (latestItem && latestItem.status !== selectedItem.status) {
-        alert(`この商品は既に別の処理が行われています。\n\n現在のステータス: ${latestItem.status}\n\n画面を更新します。`)
-        // ストアを最新状態に更新
-        const currentItems = useInventoryStore.getState().items
-        useInventoryStore.setState({
-          items: currentItems.map(i => i.id === latestItem.id ? latestItem : i)
-        })
-        onOpenChange(false)
-        return
+      // サーバー側の最新ステータスを確認（二重処理防止）
+      try {
+        const latestItem = await supabaseDb.getProductItemById(selectedItem.id)
+        if (latestItem && latestItem.status !== selectedItem.status) {
+          alert(`この商品は既に別の処理が行われています。\n\n現在のステータス: ${latestItem.status}\n\n画面を更新します。`)
+          // ストアを最新状態に更新
+          const currentItems = useInventoryStore.getState().items
+          useInventoryStore.setState({
+            items: currentItems.map(i => i.id === latestItem.id ? latestItem : i)
+          })
+          onOpenChange(false)
+          return
+        }
+      } catch (error) {
+        console.error('ステータス確認エラー:', error)
       }
-    } catch (error) {
-      console.error('ステータス確認エラー:', error)
-    }
 
-    // メンテナンス処理で、サブカテゴリが必要な商品の場合の検証
-    if (actionType === 'maintenance' && selectedItem.product) {
-      const categoryId = selectedItem.product.category_id || selectedItem.product.category
-      const config = getChecklistConfig(categoryId)
-      if (config?.subcategories && !selectedSubcategory) {
-        alert('点検項目の種類を選択してください')
-        return
+      // メンテナンス処理で、サブカテゴリが必要な商品の場合の検証
+      if (actionType === 'maintenance' && selectedItem.product) {
+        const categoryId = selectedItem.product.category_id || selectedItem.product.category
+        const config = getChecklistConfig(categoryId)
+        if (config?.subcategories && !selectedSubcategory) {
+          alert('点検項目の種類を選択してください')
+          return
+        }
       }
-    }
 
-    try {
       // 発注に割り当てる場合の特別処理
       if (actionType === 'assign_to_order') {
         if (!actionForm.orderId || !actionForm.orderItemId) {
@@ -353,6 +357,8 @@ export function ScanActionDialog({
     } catch (error) {
       console.error('Action execution error:', error)
       alert(`処理中にエラーが発生しました: ${error.message}`)
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -404,6 +410,8 @@ export function ScanActionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(open) => {
+      // 処理中は Esc や外側クリックで閉じない（結果が出る前に消えると、成否が分からなくなる）
+      if (!open && isProcessing) return
       onOpenChange(open)
       if (!open) {
         resetForm()
@@ -676,14 +684,15 @@ export function ScanActionDialog({
           )}
           
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
               キャンセル
             </Button>
             <Button
               variant={actionType === 'dispose' ? 'destructive' : 'default'}
               onClick={handleActionSubmit}
+              disabled={isProcessing}
             >
-              {actionType === 'dispose' ? '廃棄する' : actionType === 'donate' ? '寄贈する' : '処理実行'}
+              {isProcessing ? '処理中…' : actionType === 'dispose' ? '廃棄する' : actionType === 'donate' ? '寄贈する' : '処理実行'}
             </Button>
           </div>
         </div>
