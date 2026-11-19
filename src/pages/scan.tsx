@@ -112,6 +112,11 @@ function ScanComponent() {
   // }, [])
 
   const handleScanResult = useCallback(async (qrCode: string) => {
+    // 🔴 ダイアログが開いている間の読み取りは捨てる（2026-11-19・レビュー指摘）。
+    //   スマホは覆いの奥でカメラが読み続けるので、完了ビューや次の工程のフォームが出ている間に
+    //   棚の隣の台を読むと、フォームの対象が無言でその台に差し替わり、隣の台に履歴が付いてしまう
+    if (showActionDialog) return
+
     // 🔴 スクロール位置は「読み取る前」に控えておく（2026-09-07 修正）。
     //   末尾に復元処理はあったが、控える側が無く scrollPosition が未定義だった。
     //   setTimeout の中なのでスキャン自体は進むが、毎回 ReferenceError を投げていて
@@ -169,7 +174,7 @@ function ScanComponent() {
     setTimeout(() => {
       window.scrollTo(0, scrollPosition)
     }, 0)
-  }, [productItems, products])
+  }, [productItems, products, showActionDialog])
   
   // handleScanResultへの最新参照を保持
   const handleScanResultRef = useRef(handleScanResult)
@@ -256,9 +261,17 @@ function ScanComponent() {
   //   以前は読み取り時の写しのままだったので、単発モードでは古いステータスのボタンが残り、
   //   押すと「既に別の処理が行われています」で止まっていた。全件の再読込（loadData）は閉じたときだけ
   const handleItemUpdated = useCallback((latest: ProductItem) => {
-    setSelectedItem(prev => ({ ...latest, product: prev?.product ?? products.find(p => p.id === latest.product_id) }))
+    // ダイアログは product を結合した個体を渡してくることがある（完了ビューの「続ける」）。
+    //   画面用には使うが、店舗の行には混ぜない。列に無いキーが乗った行を saveProductItem が丸ごと upsert すると
+    //   PostgREST が落ちる（product-item-update.ts と同じ罠）。prev の product は同じ台のときだけ引き継ぐ
+    //   （レビュー指摘 2026-11-19: 別の台に差し替わった prev の product を引き継ぐと、別カテゴリの点検票で履歴が残る）
+    const { product: attached, ...row } = latest as ProductItem & { product?: Product }
+    setSelectedItem(prev => ({
+      ...row,
+      product: attached ?? (prev?.id === row.id ? prev.product : undefined) ?? products.find(p => p.id === row.product_id),
+    }))
     useInventoryStore.setState(state => ({
-      items: state.items.map(i => i.id === latest.id ? { ...i, ...latest } : i)
+      items: state.items.map(i => i.id === row.id ? { ...i, ...row } : i)
     }))
   }, [products])
 
