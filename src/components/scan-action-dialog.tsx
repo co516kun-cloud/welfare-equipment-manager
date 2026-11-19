@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL, DISPOSAL_REASONS, leavesInventory } from '../lib/item-status'
+import { useState, useEffect } from 'react'
+import { getAvailableActions as getItemActions, needsConfirm, recordName, STATUS_LABEL, DISPOSAL_REASONS, leavesInventory, canContinueAfter, getContinueActions, type ItemAction, type ItemStatus } from '../lib/item-status'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
@@ -26,6 +26,10 @@ interface ScanActionDialogProps {
   onSuccess: () => void
   getCurrentUserName: () => string
   orders: Order[]
+  /** 完了ビューで次の工程を押したとき。親はスキャン画面の handleActionSelect を渡す（2026-11-19） */
+  onContinue?: (action: ItemAction) => void
+  /** 処理が成功するたびに 1 回、手元で最も新しい個体を渡す。親は選択中の台と店舗データを最新化する */
+  onItemUpdated?: (item: ProductItem) => void
 }
 
 export function ScanActionDialog({
@@ -36,7 +40,9 @@ export function ScanActionDialog({
   availableOrders,
   onSuccess,
   getCurrentUserName,
-  orders
+  orders,
+  onContinue,
+  onItemUpdated
 }: ScanActionDialogProps) {
   const { items, users } = useInventoryStore()
   const [actionForm, setActionForm] = useState({
@@ -68,6 +74,12 @@ export function ScanActionDialog({
   // 処理中（2026-11-19）。実行ボタンを「処理中…」にして二度押しと途中で閉じるのを防ぐ。
   //   以前は押してから結果が出るまで何も変わらず、写真付きのメンテナンスでは数秒無反応に見えた
   const [isProcessing, setIsProcessing] = useState(false)
+  // 完了ビュー（2026-11-19・田口さん依頼）。成功後、倉庫の中で工程が残るステータスなら閉じずにここへ切り替え、
+  //   同じ台の次の工程を続けられるようにする。1 工程ごとにスキャンし直す手間を無くす。ダイアログは 1 枚のまま
+  const [completed, setCompleted] = useState<{ from: ItemStatus; to: ItemStatus; item: SelectedItem } | null>(null)
+  useEffect(() => {
+    if (!open) setCompleted(null)
+  }, [open])
 
   // フォームをリセット
   const resetForm = () => {
@@ -344,11 +356,22 @@ export function ScanActionDialog({
 
       // 入庫処理の場合は印刷確認ダイアログを表示
       if (actionType === 'storage') {
+        onItemUpdated?.(updatedItem)
         // 開いた時点の個体と状態メモを控える（この後 selectedItem が消えても印刷できる）
         setLabelTarget(selectedItem)
         setLabelConditionNotes(actionForm.conditionNotes || selectedItem.condition_notes || '')
         setShowLabelPrintDialog(true)
+      } else if (canContinueAfter(finalStatus)) {
+        // 続けて処理する: 閉じずに完了ビューへ。最新を 1 回取り直す（取れなければ保存した値）。
+        // 判定も表示も action.nextStatus ではなく保存した finalStatus（要修理 → 故障中）
+        const latest = (await Promise.resolve()
+          .then(() => supabaseDb.getProductItemById(selectedItem.id))
+          .catch(() => null)) ?? updatedItem
+        onItemUpdated?.(latest)
+        resetForm()
+        setCompleted({ from: selectedItem.status, to: latest.status, item: { ...latest, product: selectedItem.product } })
       } else {
+        onItemUpdated?.(updatedItem)
         resetForm()
         onOpenChange(false)
         onSuccess()
@@ -408,294 +431,335 @@ export function ScanActionDialog({
     onSuccess()
   }
 
+  // 完了ビュー: 次の工程へ。カメラが別の台を読んで selectedItem が差し替わっていても、完了した台で続ける
+  const continueWith = (action: ItemAction) => {
+    if (!completed) return
+    onItemUpdated?.(completed.item)
+    setCompleted(null)
+    onContinue?.(action)
+  }
+
+  // 完了ビュー: ここで終わる（今までどおり閉じて onSuccess。連続モードの 3 秒クリアもここから動く）
+  const stopHere = () => {
+    setCompleted(null)
+    resetForm()
+    onOpenChange(false)
+    onSuccess()
+  }
+
   return (
     <Dialog open={open} onOpenChange={(open) => {
       // 処理中は Esc や外側クリックで閉じない（結果が出る前に消えると、成否が分からなくなる）
       if (!open && isProcessing) return
+      if (!open && completed) {
+        stopHere()
+        return
+      }
       onOpenChange(open)
       if (!open) {
         resetForm()
       }
     }}>
       <DialogContent className="max-w-md scan-action-dialog">
-        <DialogHeader>
-          <DialogTitle>
-            {actionType === 'return' && '返却処理'}
-            {actionType === 'demo_cancel' && 'デモキャンセル処理'}
-            {actionType === 'demo_cancel_storage' && 'デモキャン入庫処理'}
-            {actionType === 'clean' && '消毒完了処理'}
-            {actionType === 'maintenance' && 'メンテナンス完了処理'}
-            {actionType === 'storage' && '入庫処理'}
-            {actionType === 'assign_to_order' && '発注に割り当て'}
-            {actionType === 'repair' && '修理完了処理'}
-            {actionType === 'dispose' && '廃棄処理'}
-            {actionType === 'donate' && '寄贈処理'}
-            {actionType === 'undonate' && '寄贈の取り消し'}
-          </DialogTitle>
-          <DialogDescription>
-            {selectedItem?.product?.name} #{selectedItem?.id} の処理を行います
-          </DialogDescription>
-        </DialogHeader>
+        {completed ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>処理が完了しました</DialogTitle>
+              <DialogDescription>{completed.item.product?.name} #{completed.item.id}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-center font-medium">{`${STATUS_LABEL[completed.from]} → ${STATUS_LABEL[completed.to]}`}</p>
+              <p className="text-sm text-muted-foreground">続けて処理しますか？</p>
+              <div className="space-y-2">
+                {getContinueActions(completed.to).map(a => (
+                  <Button key={a.key} className="w-full" onClick={() => continueWith(a)}>{a.label}</Button>
+                ))}
+              </div>
+              <Button variant="outline" className="w-full" onClick={stopHere}>続けない（次の台をスキャン）</Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {actionType === 'return' && '返却処理'}
+                {actionType === 'demo_cancel' && 'デモキャンセル処理'}
+                {actionType === 'demo_cancel_storage' && 'デモキャン入庫処理'}
+                {actionType === 'clean' && '消毒完了処理'}
+                {actionType === 'maintenance' && 'メンテナンス完了処理'}
+                {actionType === 'storage' && '入庫処理'}
+                {actionType === 'assign_to_order' && '発注に割り当て'}
+                {actionType === 'repair' && '修理完了処理'}
+                {actionType === 'dispose' && '廃棄処理'}
+                {actionType === 'donate' && '寄贈処理'}
+                {actionType === 'undonate' && '寄贈の取り消し'}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedItem?.product?.name} #{selectedItem?.id} の処理を行います
+              </DialogDescription>
+            </DialogHeader>
         
-        <div className="space-y-4">
-          {actionType === 'assign_to_order' && (
-            <div>
-              <Label htmlFor="orderSelection">割り当てる発注を選択</Label>
-              {availableOrders.length === 0 ? (
-                <p className="text-sm text-muted-foreground p-3 bg-accent/20 rounded">
-                  この商品に対応する承認済みの発注がありません
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {availableOrders.map(({ order, item, product }) => {
-                    const assignedCount = item.assigned_item_ids ? item.assigned_item_ids.filter(id => id !== null && id !== undefined).length : 0
-                    const remainingCount = item.quantity - assignedCount
+            <div className="space-y-4">
+              {actionType === 'assign_to_order' && (
+                <div>
+                  <Label htmlFor="orderSelection">割り当てる発注を選択</Label>
+                  {availableOrders.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-3 bg-accent/20 rounded">
+                      この商品に対応する承認済みの発注がありません
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {availableOrders.map(({ order, item, product }) => {
+                        const assignedCount = item.assigned_item_ids ? item.assigned_item_ids.filter(id => id !== null && id !== undefined).length : 0
+                        const remainingCount = item.quantity - assignedCount
                     
-                    return (
-                      <div 
-                        key={`${order.id}-${item.id}`} 
-                        className={`p-3 border border-border rounded-lg cursor-pointer hover:bg-accent/50 ${
-                          actionForm.orderId === order.id && actionForm.orderItemId === item.id 
-                            ? 'bg-primary/10 border-primary' 
-                            : ''
-                        }`}
-                        onClick={() => setActionForm(prev => ({ ...prev, orderId: order.id, orderItemId: item.id }))}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-foreground">{order.customer_name}様</p>
-                            <p className="text-sm text-muted-foreground">発注番号: {order.id}</p>
-                            <p className="text-sm text-muted-foreground">商品: {product.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              数量: {assignedCount}/{item.quantity} 
-                              {remainingCount > 0 && <span className="text-blue-600"> (残り{remainingCount}個)</span>}
-                            </p>
-                            <p className="text-sm text-muted-foreground">希望日: {order.requiredDate}</p>
+                        return (
+                          <div 
+                            key={`${order.id}-${item.id}`} 
+                            className={`p-3 border border-border rounded-lg cursor-pointer hover:bg-accent/50 ${
+                              actionForm.orderId === order.id && actionForm.orderItemId === item.id 
+                                ? 'bg-primary/10 border-primary' 
+                                : ''
+                            }`}
+                            onClick={() => setActionForm(prev => ({ ...prev, orderId: order.id, orderItemId: item.id }))}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-foreground">{order.customer_name}様</p>
+                                <p className="text-sm text-muted-foreground">発注番号: {order.id}</p>
+                                <p className="text-sm text-muted-foreground">商品: {product.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  数量: {assignedCount}/{item.quantity} 
+                                  {remainingCount > 0 && <span className="text-blue-600"> (残り{remainingCount}個)</span>}
+                                </p>
+                                <p className="text-sm text-muted-foreground">希望日: {order.requiredDate}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm text-muted-foreground">担当: {order.assignedTo}</p>
+                                <p className="text-sm text-muted-foreground">持出: {order.carriedBy}</p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">担当: {order.assignedTo}</p>
-                            <p className="text-sm text-muted-foreground">持出: {order.carriedBy}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
           
-          {actionType === 'donate' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
-                <p className="font-medium text-foreground">この商品を「寄贈済み」にします</p>
-                <p className="text-muted-foreground mt-1">
-                  在庫数から外れます。間違えた場合は、もう一度スキャンして「寄贈を取り消す」で利用可能に戻せます。
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="donationAssignee">担当者（必須）</Label>
-                <Select
-                  id="donationAssignee"
-                  value={donationAssignee}
-                  onChange={(e) => setDonationAssignee(e.target.value)}
-                >
-                  <option value="">担当者を選択してください</option>
-                  {users.map(user => (
-                    <option key={user.id} value={user.name}>
-                      {user.name} ({user.department})
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="donationRecipient">寄贈先（必須）</Label>
-                <Input
-                  id="donationRecipient"
-                  type="text"
-                  value={donationRecipient}
-                  onChange={(e) => setDonationRecipient(e.target.value)}
-                  placeholder="施設名 または 利用者名"
-                />
-              </div>
-            </div>
-          )}
-
-          {actionType === 'undonate' && selectedItem?.customer_name && (
-            <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
-              寄贈先「{selectedItem.customer_name}」への寄贈を取り消し、利用可能に戻します。
-            </div>
-          )}
-
-          {actionType === 'dispose' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/5 text-sm">
-                <p className="font-medium text-destructive">この商品を「廃棄済み」にします</p>
-                <p className="text-muted-foreground mt-1">
-                  在庫数から外れます。間違えた場合は、もう一度スキャンして「廃棄を取り消す」で戻せます。
-                </p>
-              </div>
-              <div>
-                <Label htmlFor="disposalReason">廃棄理由（必須）</Label>
-                <Select
-                  id="disposalReason"
-                  value={disposalReason}
-                  onChange={(e) => setDisposalReason(e.target.value)}
-                >
-                  <option value="">理由を選択</option>
-                  {DISPOSAL_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="disposalNote">詳細メモ（任意）</Label>
-                <Input
-                  id="disposalNote"
-                  type="text"
-                  value={disposalNote}
-                  onChange={(e) => setDisposalNote(e.target.value)}
-                  placeholder="例: フレームにクラック、修理不可"
-                />
-              </div>
-            </div>
-          )}
-
-          {(actionType === 'maintenance' || actionType === 'demo_cancel_storage' || actionType === 'repair') && (
-            <div>
-              <Label htmlFor="condition">商品状態</Label>
-              <Select
-                value={actionForm.condition}
-                onChange={(e) => setActionForm(prev => ({ ...prev, condition: e.target.value }))}
-              >
-                <option value="">状態を選択</option>
-                <option value="good">良好</option>
-                <option value="fair">普通</option>
-                <option value="caution">注意</option>
-                {actionType !== 'repair' && <option value="needs_repair">要修理</option>}
-              </Select>
-            </div>
-          )}
-          
-          {(actionType === 'maintenance' || actionType === 'repair') && (
-            <div>
-              <Label htmlFor="conditionNotes">状態メモ</Label>
-              <Input
-                id="conditionNotes"
-                type="text"
-                value={actionForm.conditionNotes}
-                onChange={(e) => setActionForm(prev => ({ ...prev, conditionNotes: e.target.value }))}
-                placeholder={
-                  actionType === 'repair' 
-                    ? '修理内容や修理後の状態を入力' 
-                    : '商品の状態について詳細を入力'
-                }
-              />
-            </div>
-          )}
-
-          {actionType === 'maintenance' && (
-            <div>
-              <Label>メンテナンス完了時の写真</Label>
-              <div className="space-y-3">
-                {/* 写真アップロードボタン */}
-                <div>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    multiple
-                    onChange={handlePhotoCapture}
-                    className="hidden"
-                    id="photo-upload"
-                  />
-                  <label
-                    htmlFor="photo-upload"
-                    className="flex items-center justify-center w-full p-4 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
-                  >
-                    <div className="text-center">
-                      <span className="text-2xl mb-2 block">📷</span>
-                      <span className="text-sm text-muted-foreground">
-                        写真を撮影または選択
-                      </span>
-                    </div>
-                  </label>
-                </div>
-
-                {/* 撮影済み写真の表示 */}
-                {actionForm.photos.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {actionForm.photos.map((photo, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={photo}
-                          alt={`メンテナンス写真 ${index + 1}`}
-                          className="w-full h-24 object-cover rounded border"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handlePhotoRemove(index)}
-                          className="absolute top-1 right-1 h-6 w-6 p-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    ))}
+              {actionType === 'donate' && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
+                    <p className="font-medium text-foreground">この商品を「寄贈済み」にします</p>
+                    <p className="text-muted-foreground mt-1">
+                      在庫数から外れます。間違えた場合は、もう一度スキャンして「寄贈を取り消す」で利用可能に戻せます。
+                    </p>
                   </div>
-                )}
+                  <div>
+                    <Label htmlFor="donationAssignee">担当者（必須）</Label>
+                    <Select
+                      id="donationAssignee"
+                      value={donationAssignee}
+                      onChange={(e) => setDonationAssignee(e.target.value)}
+                    >
+                      <option value="">担当者を選択してください</option>
+                      {users.map(user => (
+                        <option key={user.id} value={user.name}>
+                          {user.name} ({user.department})
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="donationRecipient">寄贈先（必須）</Label>
+                    <Input
+                      id="donationRecipient"
+                      type="text"
+                      value={donationRecipient}
+                      onChange={(e) => setDonationRecipient(e.target.value)}
+                      placeholder="施設名 または 利用者名"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {actionType === 'undonate' && selectedItem?.customer_name && (
+                <div className="p-3 rounded-lg border border-border bg-muted/40 text-sm">
+                  寄贈先「{selectedItem.customer_name}」への寄贈を取り消し、利用可能に戻します。
+                </div>
+              )}
+
+              {actionType === 'dispose' && (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg border border-destructive/40 bg-destructive/5 text-sm">
+                    <p className="font-medium text-destructive">この商品を「廃棄済み」にします</p>
+                    <p className="text-muted-foreground mt-1">
+                      在庫数から外れます。間違えた場合は、もう一度スキャンして「廃棄を取り消す」で戻せます。
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="disposalReason">廃棄理由（必須）</Label>
+                    <Select
+                      id="disposalReason"
+                      value={disposalReason}
+                      onChange={(e) => setDisposalReason(e.target.value)}
+                    >
+                      <option value="">理由を選択</option>
+                      {DISPOSAL_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="disposalNote">詳細メモ（任意）</Label>
+                    <Input
+                      id="disposalNote"
+                      type="text"
+                      value={disposalNote}
+                      onChange={(e) => setDisposalNote(e.target.value)}
+                      placeholder="例: フレームにクラック、修理不可"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(actionType === 'maintenance' || actionType === 'demo_cancel_storage' || actionType === 'repair') && (
+                <div>
+                  <Label htmlFor="condition">商品状態</Label>
+                  <Select
+                    value={actionForm.condition}
+                    onChange={(e) => setActionForm(prev => ({ ...prev, condition: e.target.value }))}
+                  >
+                    <option value="">状態を選択</option>
+                    <option value="good">良好</option>
+                    <option value="fair">普通</option>
+                    <option value="caution">注意</option>
+                    {actionType !== 'repair' && <option value="needs_repair">要修理</option>}
+                  </Select>
+                </div>
+              )}
+          
+              {(actionType === 'maintenance' || actionType === 'repair') && (
+                <div>
+                  <Label htmlFor="conditionNotes">状態メモ</Label>
+                  <Input
+                    id="conditionNotes"
+                    type="text"
+                    value={actionForm.conditionNotes}
+                    onChange={(e) => setActionForm(prev => ({ ...prev, conditionNotes: e.target.value }))}
+                    placeholder={
+                      actionType === 'repair' 
+                        ? '修理内容や修理後の状態を入力' 
+                        : '商品の状態について詳細を入力'
+                    }
+                  />
+                </div>
+              )}
+
+              {actionType === 'maintenance' && (
+                <div>
+                  <Label>メンテナンス完了時の写真</Label>
+                  <div className="space-y-3">
+                    {/* 写真アップロードボタン */}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        onChange={handlePhotoCapture}
+                        className="hidden"
+                        id="photo-upload"
+                      />
+                      <label
+                        htmlFor="photo-upload"
+                        className="flex items-center justify-center w-full p-4 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="text-center">
+                          <span className="text-2xl mb-2 block">📷</span>
+                          <span className="text-sm text-muted-foreground">
+                            写真を撮影または選択
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* 撮影済み写真の表示 */}
+                    {actionForm.photos.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {actionForm.photos.map((photo, index) => (
+                          <div key={index} className="relative">
+                            <img
+                              src={photo}
+                              alt={`メンテナンス写真 ${index + 1}`}
+                              className="w-full h-24 object-cover rounded border"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handlePhotoRemove(index)}
+                              className="absolute top-1 right-1 h-6 w-6 p-0"
+                            >
+                              ×
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                 
-                <p className="text-xs text-muted-foreground">
-                  メンテナンス完了後の商品状態を記録するため写真を撮影してください（任意）
-                </p>
+                    <p className="text-xs text-muted-foreground">
+                      メンテナンス完了後の商品状態を記録するため写真を撮影してください（任意）
+                    </p>
+                  </div>
+                </div>
+              )}
+          
+              {(actionType === 'storage' || actionType === 'demo_cancel_storage' || actionType === 'assign_to_order' || actionType === 'repair') && (
+                <div>
+                  <Label htmlFor="location">保管場所</Label>
+                  <Input
+                    id="location"
+                    type="text"
+                    value={actionForm.location}
+                    onChange={(e) => setActionForm(prev => ({ ...prev, location: e.target.value }))}
+                    placeholder={
+                      actionType === 'assign_to_order' 
+                        ? '送り先住所または配送先'
+                      : actionType === 'repair'
+                        ? '修理完了後の保管場所を入力'
+                      : selectedItem?.location 
+                        ? `前の場所: ${selectedItem.location}` 
+                        : '保管場所を入力'
+                    }
+                  />
+                </div>
+              )}
+          
+              {/* メンテナンス処理の場合のサブカテゴリ選択とチェックリスト */}
+              {actionType === 'maintenance' && selectedItem?.product && (
+                <SubcategorySelector
+                  productCategoryId={selectedItem.product.category_id || selectedItem.product.category || 'beds'}
+                  selectedSubcategory={selectedSubcategory}
+                  onSubcategoryChange={setSelectedSubcategory}
+                  onOpenChecklist={handleOpenChecklist}
+                  checklistResult={checklistResult}
+                />
+              )}
+          
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
+                  キャンセル
+                </Button>
+                <Button
+                  variant={actionType === 'dispose' ? 'destructive' : 'default'}
+                  onClick={handleActionSubmit}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? '処理中…' : actionType === 'dispose' ? '廃棄する' : actionType === 'donate' ? '寄贈する' : '処理実行'}
+                </Button>
               </div>
             </div>
-          )}
-          
-          {(actionType === 'storage' || actionType === 'demo_cancel_storage' || actionType === 'assign_to_order' || actionType === 'repair') && (
-            <div>
-              <Label htmlFor="location">保管場所</Label>
-              <Input
-                id="location"
-                type="text"
-                value={actionForm.location}
-                onChange={(e) => setActionForm(prev => ({ ...prev, location: e.target.value }))}
-                placeholder={
-                  actionType === 'assign_to_order' 
-                    ? '送り先住所または配送先'
-                  : actionType === 'repair'
-                    ? '修理完了後の保管場所を入力'
-                  : selectedItem?.location 
-                    ? `前の場所: ${selectedItem.location}` 
-                    : '保管場所を入力'
-                }
-              />
-            </div>
-          )}
-          
-          {/* メンテナンス処理の場合のサブカテゴリ選択とチェックリスト */}
-          {actionType === 'maintenance' && selectedItem?.product && (
-            <SubcategorySelector
-              productCategoryId={selectedItem.product.category_id || selectedItem.product.category || 'beds'}
-              selectedSubcategory={selectedSubcategory}
-              onSubcategoryChange={setSelectedSubcategory}
-              onOpenChecklist={handleOpenChecklist}
-              checklistResult={checklistResult}
-            />
-          )}
-          
-          <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
-              キャンセル
-            </Button>
-            <Button
-              variant={actionType === 'dispose' ? 'destructive' : 'default'}
-              onClick={handleActionSubmit}
-              disabled={isProcessing}
-            >
-              {isProcessing ? '処理中…' : actionType === 'dispose' ? '廃棄する' : actionType === 'donate' ? '寄贈する' : '処理実行'}
-            </Button>
-          </div>
-        </div>
+          </>
+        )}
       </DialogContent>
       
       {/* メンテナンスチェックリスト */}
