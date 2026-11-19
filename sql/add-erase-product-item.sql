@@ -19,16 +19,18 @@
 --     先にアプリが出ると、ボタンを押した瞬間「消去機能が DB 側にまだ入っていません」と出る
 -- ⚠️ 流した後:
 --   - 田口さんが一度ログインし直すと管理者として効く（app_metadata がログイン情報に乗るのはログイン時）
---   - 末尾の確認クエリ 3 つの結果を見る
+--   - 末尾の確認クエリ 4 つの結果を見る（1 つずつ流す）
 
 
 -- ============================================================
 -- 1. 管理者の付与（田口さんだけ）
 -- ============================================================
 
+-- 大文字小文字・前後の空白の違いで取りこぼさないよう lower() と trim() で比べる。
+-- 流した結果が「1 rows affected」でなければ、メールが合っていない（0 行なら誰も管理者になっていない）
 update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
-where email = '<田口さんのメールアドレス>';
+where lower(email) = lower(trim('<田口さんのメールアドレス>'));
 
 
 -- ============================================================
@@ -173,7 +175,8 @@ select proname from pg_proc where proname in ('is_admin', 'erase_product_item');
 -- product_items のポリシーが DELETE / INSERT / SELECT / UPDATE の 4 行
 select policyname, cmd from pg_policies where tablename = 'product_items' order by cmd;
 
--- 田口さんだけ admin、他は空
+-- 田口さんだけ admin、他は空。自分の行も空なら §1 のメールが合っていない（初回適用 2026-11-19 で実際に起きた）。
+-- ここに出る email をそのまま §1 に貼って、§1 だけ流し直せばよい
 select email, raw_app_meta_data->>'role' as role from auth.users order by email;
 
 -- 関数が消しに行くテーブルの有無。label_print_queue は NULL でないこと（必須）。
