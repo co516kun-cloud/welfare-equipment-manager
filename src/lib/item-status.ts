@@ -234,3 +234,24 @@ export function canEraseItem(status: ItemStatus): boolean {
 export function isRentalRecord(history: { from_status: ItemStatus; to_status: ItemStatus }): boolean {
   return history.from_status === 'rented' || history.to_status === 'rented'
 }
+
+/**
+ * スキャン後に続けて処理できるステータス（2026-11-19・田口さん依頼）。
+ * 処理ダイアログは成功後、新しいステータスがこの一覧にあるときだけ閉じずに「完了・次の工程」に切り替わる。
+ * 出すのは倉庫の中で工程が残っている状態だけ。入庫で利用可能になった直後に「直接貸与」を見せると
+ * 押し間違いの元になるので、利用可能・貸与中・配送準備完了・廃棄・寄贈は今までどおり閉じる。
+ */
+export const CONTINUABLE_STATUSES: readonly ItemStatus[] = ['returned', 'cleaning', 'maintenance', 'out_of_order', 'unknown', 'demo_cancelled']
+
+/** 処理後にこのステータスになったら「続けて処理しますか？」を出すか */
+export function canContinueAfter(status: ItemStatus): boolean {
+  return CONTINUABLE_STATUSES.includes(status)
+}
+
+/**
+ * 完了ビューに出す次の工程。遷移表と同じ並びから、確認が要る危険な操作（廃棄・寄贈）を除く。
+ * 流れ作業の勢いで取り返しのつかない操作を押させないため。必要なら読み直せば今までどおり出る
+ */
+export function getContinueActions(status: ItemStatus, ctx: ActionContext = {}): ItemAction[] {
+  return getAvailableActions(status, ctx).filter(a => !needsConfirm(a))
+}
