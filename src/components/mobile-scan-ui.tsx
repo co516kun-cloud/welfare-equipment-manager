@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { Input } from './ui/input'
 import { QRCameraScanner } from './qr-camera-scanner'
 import { ScanActionDialog } from './scan-action-dialog'
+import type { ItemAction } from '../lib/item-status'
 import type { ProductItem, Product, Order, OrderItem } from '../types'
 
 interface SelectedItem extends ProductItem {
@@ -33,6 +34,9 @@ interface MobileScanUIProps {
   onActionSuccess?: () => void
   getCurrentUserName?: () => string
   orders?: Order[]
+  /** 完了ビューの次の工程（2026-11-19）。ScanActionDialog へそのまま渡す */
+  onContinue?: (action: ItemAction) => void
+  onItemUpdated?: (item: ProductItem) => void
 }
 
 export function MobileScanUI({ 
@@ -53,7 +57,9 @@ export function MobileScanUI({
   availableOrders = [],
   onActionSuccess,
   getCurrentUserName,
-  orders = []
+  orders = [],
+  onContinue,
+  onItemUpdated
 }: MobileScanUIProps) {
   const [localQrInput, setLocalQrInput] = useState('')
   const [useCameraScanner, setUseCameraScanner] = useState(true)
@@ -248,6 +254,8 @@ export function MobileScanUI({
             onSuccess={onActionSuccess}
             getCurrentUserName={getCurrentUserName}
             orders={orders}
+            onContinue={onContinue}
+            onItemUpdated={onItemUpdated}
           />
         </div>
       )}

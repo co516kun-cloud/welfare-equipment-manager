@@ -252,6 +252,16 @@ function ScanComponent() {
     setShowActionDialog(true)
   }, [selectedItem, orders, products])
 
+  // 処理が成功するたびにダイアログから最新の個体を受け取り、選択中の台と店舗データを最新化する（2026-11-19）。
+  //   以前は読み取り時の写しのままだったので、単発モードでは古いステータスのボタンが残り、
+  //   押すと「既に別の処理が行われています」で止まっていた。全件の再読込（loadData）は閉じたときだけ
+  const handleItemUpdated = useCallback((latest: ProductItem) => {
+    setSelectedItem(prev => ({ ...latest, product: prev?.product ?? products.find(p => p.id === latest.product_id) }))
+    useInventoryStore.setState(state => ({
+      items: state.items.map(i => i.id === latest.id ? { ...i, ...latest } : i)
+    }))
+  }, [products])
+
   // アクション処理完了時のコールバック
   const handleActionSuccess = async () => {
     // データを再取得
@@ -504,6 +514,8 @@ function ScanComponent() {
           onActionSuccess={handleActionSuccess}
           getCurrentUserName={getCurrentUserName}
           orders={orders}
+          onContinue={handleActionSelect}
+          onItemUpdated={handleItemUpdated}
         />
       ) : (
         <>
@@ -518,6 +530,8 @@ function ScanComponent() {
             onSuccess={handleActionSuccess}
             getCurrentUserName={getCurrentUserName}
             orders={orders}
+            onContinue={handleActionSelect}
+            onItemUpdated={handleItemUpdated}
           />
         </>
       )}
